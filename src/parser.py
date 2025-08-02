@@ -3,6 +3,36 @@ from bs4 import BeautifulSoup
 import re
 from datetime import datetime
 
+def get_article_text(url: str) -> str | None:
+    """
+    Получает полный текст статьи по URL.
+    """
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36'
+    }
+    try:
+        response = requests.get(url, headers=headers, timeout=15)
+        response.raise_for_status()
+        response.encoding = 'windows-1251'
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Ищем основной контейнер с текстом новости
+        article_body = soup.find('div', class_='news_text')
+        
+        if article_body:
+            # Собираем все текстовые блоки, игнорируя лишнее
+            text_parts = [p.text for p in article_body.find_all('p')]
+            return "\n".join(text_parts).strip()
+        else:
+            return None
+            
+    except requests.exceptions.RequestException as e:
+        print(f"Ошибка при загрузке текста статьи {url}: {e}")
+        return None
+    except Exception as e:
+        print(f"Произошла ошибка при парсинге текста статьи {url}: {e}")
+        return None
+
 def get_articles_from_page(page=1):
     """
     Парсит страницу новостей и возвращает последние статьи с заголовком, ссылкой и временем.
