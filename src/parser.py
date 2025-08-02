@@ -1,63 +1,59 @@
 import requests
 from bs4 import BeautifulSoup
+import re
+from datetime import datetime
 
-def get_full_article_text(url):
+def get_articles_from_page(page=1):
     """
-    Загружает полный текст статьи по URL.
+    Парсит страницу новостей и возвращает последние статьи с заголовком, ссылкой и временем.
     """
-    try:
-        response = requests.get(url)
-        response.raise_for_status()  # Проверка на ошибки HTTP
-        soup = BeautifulSoup(response.content, 'html.parser')
-        news_text_div = soup.find('body')
-        if news_text_div:
-            # Извлечение текста и очистка от лишних пробелов
-            text = ' '.join(news_text_div.stripped_strings)
-            return text
-        else:
-            return "Текст статьи не найден."
-    except requests.exceptions.RequestException as e:
-        return f"Ошибка при загрузке страницы: {e}"
-    except Exception as e:
-        return f"Произошла ошибка: {e}"
-
-def get_latest_articles():
-    """
-    Парсит страницу новостей и возвращает последние статьи с полным текстом.
-    """
-    list_url = "https://warandpeace.ru/ru/news/"
+    if page == 1:
+        list_url = "https://warandpeace.ru/ru/news/"
+    else:
+        list_url = f"https://warandpeace.ru/ru/news/_/_/page={page}/"
+    
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36'
     }
     try:
         response = requests.get(list_url, headers=headers)
         response.raise_for_status()
-        soup = BeautifulSoup(response.content, 'html.parser')
+        response.encoding = 'windows-1251'
+        soup = BeautifulSoup(response.text, 'html.parser')
         articles_data = []
-        found_articles = 0
-        for item in soup.find_all('a'):
-            link = item.get('href')
-            if link and '/ru/news/' in link and not link.endswith('/ru/news/'):
-                # Убедимся, что ссылка полная
+
+        for table in soup.find_all('table'):
+            title_tag = table.find('a', class_='a_header_article')
+            time_tag = table.find('td', class_='topic_info_top')
+
+            if title_tag and time_tag:
+                title = title_tag.text.strip()
+                link = title_tag['href']
                 if not link.startswith('http'):
                     link = f"https://warandpeace.ru{link}"
-                
-                title = item.text.strip()
-                if not title:
-                    continue # Пропускаем ссылки без текста
 
-                print(f"Обрабатывается: {title}")
-                full_text = get_full_article_text(link)
-                articles_data.append({
-                    'title': title,
-                    'link': link,
-                    'full_text': full_text
-                })
-                found_articles += 1
-                if found_articles >= 5:
-                    break
+                time_text = time_tag.text.strip()
+                time_match = re.search(r'(\d{2}\.\d{2}\.\d{2}) (\d{2}:\d{2})', time_text)
+                if time_match:
+                    date_str = time_match.group(1)
+                    time_str = time_match.group(2)
+                else:
+                    date_str = '??.??.??'
+                    time_str = '??:??'
+
+                if title and link:
+                    # To avoid duplicates from the same page
+                    if not any(d['link'] == link for d in articles_data):
+                        articles_data.append({
+                            'date': date_str,
+                            'time': time_str,
+                            'title': title,
+                            'link': link
+                        })
         return articles_data
     except requests.exceptions.RequestException as e:
+        if e.response and e.response.status_code == 404:
+            return [] # Page not found, stop pagination
         print(f"Ошибка при загрузке страницы новостей: {e}")
         return []
     except Exception as e:
@@ -65,13 +61,58 @@ def get_latest_articles():
         return []
 
 if __name__ == "__main__":
-    latest_articles = get_latest_articles()
-    if latest_articles:
-        for article in latest_articles:
-            print("\n---")
-            print(f"Заголовок: {article['title']}")
-            print(f"Ссылка: {article['link']}")
-            print(f"Текст: {article['full_text'][:200]}...") # Выводим первые 200 символов для краткости
-    else:
-        print("Не удалось получить статьи.")
-    print("\nПарсер завершил работу.")
+    all_articles = []
+    page = 1
+    
+    # Collect articles from pages until we have at least two days of news
+    # or we run out of pages.
+    dates_found = set()
+    while True:
+        articles_on_page = get_articles_from_page(page)
+        if not articles_on_page:
+            break
+        
+        all_articles.extend(articles_on_page)
+        
+        for article in articles_on_page:
+            dates_found.add(article['date'])
+        
+        if len(dates_found) > 2:
+            break
+            
+        page += 1
+
+    # Remove duplicates
+    unique_articles = []
+    seen_links = set()
+    for article in all_articles:
+        if article['link'] not in seen_links:
+            unique_articles.append(article)
+            seen_links.add(article['link'])
+            
+    # Get the latest two dates
+    all_dates = sorted(list(set(a['date'] for a in unique_articles)), 
+                       key=lambda d: datetime.strptime(d, '%d.%m.%y'), 
+                       reverse=True)
+    
+    dates_to_print = all_dates[:2]
+    
+    # Group articles by date
+    articles_by_date = {}
+    for date_str in dates_to_print:
+        articles_by_date[date_str] = []
+
+    for article in unique_articles:
+        if article['date'] in articles_by_date:
+            articles_by_date[article['date']].append(article)
+
+    # Print articles
+    for date_str in dates_to_print:
+        print(date_str)
+        # sort articles by time
+        sorted_articles = sorted(articles_by_date[date_str], key=lambda x: x['time'], reverse=True)
+        for article in sorted_articles:
+            print(f"{article.get('time', '??:??')}  \t{article['title']}")
+        print()
+
+    print("Парсер завершил работу.")
