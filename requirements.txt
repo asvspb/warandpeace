@@ -4,3 +4,4 @@ beautifulsoup4
 feedparser
 python-dotenv
 huggingface-hub
+google-generativeai
