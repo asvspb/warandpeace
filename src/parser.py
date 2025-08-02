@@ -13,22 +13,19 @@ def get_article_text(url: str) -> str | None:
         r.raise_for_status()
         r.html.encoding = 'windows-1251'
         
-        # Ищем все элементы, подходящие под общий селектор
         article_elements = r.html.find('td.topic_text')
         
         article_body = None
-        # Ищем тот элемент, в котором НЕТ ссылки-заголовка
         for element in article_elements:
             if not element.find('a.a_header_article', first=True):
                 article_body = element
                 break
 
         if article_body:
-            # Очищаем текст от возможных остатков HTML и лишних пробелов
             clean_text = '\n'.join(line.strip() for line in article_body.text.split('\n') if line.strip())
             return clean_text
         else:
-            print("Не удалось найти текст статьи с помощью уточненного селектора.")
+            print(f"Не удалось найти текст статьи для {url}")
             return None
             
     except Exception as e:
