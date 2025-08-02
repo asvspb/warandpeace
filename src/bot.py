@@ -4,7 +4,7 @@ from telegram import Bot
 from telegram.constants import ParseMode
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID
 from parser import get_articles_from_page, get_article_text
-from summarizer import summarize_text_local # 1. ИСПРАВЛЕН ИМПОРТ
+from summarizer import summarize_text_local
 
 # Настройка логирования
 logging.basicConfig(
@@ -34,7 +34,6 @@ async def check_and_post_news():
     bot = Bot(token=TELEGRAM_BOT_TOKEN)
     posted_links = load_posted_links()
     
-    # 2. ИСПРАВЛЕН ВЫЗОВ: все блокирующие функции вынесены в отдельные потоки
     articles = await asyncio.to_thread(get_articles_from_page, 1)
     if not articles:
         logger.info("Не удалось получить список статей.")
@@ -42,7 +41,7 @@ async def check_and_post_news():
 
     logger.info(f"Найдено {len(articles)} статей на странице. Начинаю обработку...")
 
-    for article in reversed(articles):
+    for article in list(reversed(articles))[:5]:
         if article['link'] not in posted_links:
             logger.info(f"Найдена новая статья: {article['title']}")
             
@@ -58,7 +57,7 @@ async def check_and_post_news():
                 logger.warning(f"Не удалось суммировать статью: {article['title']}")
                 continue
 
-            message = f"<b>{article['title']}</b>\n\n{summary}\n\n<a href='{article['link']}'>Источник</a>"
+            message = f"{summary}\n{TELEGRAM_CHANNEL_ID}"
             
             try:
                 await bot.send_message(
@@ -91,6 +90,9 @@ async def main():
 
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        # --- ТЕСТОВЫЙ РЕЖИМ: Запускаем проверку только один раз ---
+        print("--- ЗАПУСК БОТА В ТЕСТОВОМ РЕЖИМЕ (ОДИН ПРОХОД) ---")
+        asyncio.run(check_and_post_news())
+        print("--- ТЕСТОВЫЙ ПРОХОД ЗАВЕРШЕН ---")
     except KeyboardInterrupt:
         logger.info("Бот остановлен вручную.")

@@ -1,29 +1,33 @@
 import google.generativeai as genai
 import os
+import requests
 
-# Пытаемся импортировать ключ из конфига
+# Пытаемся импортировать ключи из конфига
 try:
-    from src.config import AI_API_KEY
+    from src.config import AI_API_KEY, OPENROUTER_API_KEY
 except (ModuleNotFoundError, ImportError):
-    print("Переменная AI_API_KEY не найдена в src/config.py")
-    # Пытаемся получить ключ из переменных окружения как запасной вариант
+    print("Переменные AI_API_KEY или OPENROUTER_API_KEY не найдены в src/config.py")
+    # Пытаемся получить ключи из переменных окружения как запасной вариант
     AI_API_KEY = os.getenv("AI_API_KEY")
+    OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 # --- 1. Конфигурация Gemini ---
+gemini_model = None
 if AI_API_KEY:
     try:
         genai.configure(api_key=AI_API_KEY)
         print("SDK Google Gemini успешно сконфигурирован.")
         # --- 2. Создание модели ---
         # Используем Gemini 1.5 Flash - быстрая и мощная модель
-        model = genai.GenerativeModel('gemini-1.5-flash-latest')
-        print(f"Модель '{model.model_name}' готова к работе.")
+        gemini_model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        print(f"Модель '{gemini_model.model_name}' готова к работе.")
     except Exception as e:
         print(f"Ошибка при конфигурации Gemini или создании модели: {e}")
-        model = None
 else:
     print("Ключ AI_API_KEY не найден. Суммаризация через Gemini не будет работать.")
-    model = None
+
+OPENROUTER_API_BASE = "https://openrouter.ai/api/v1/chat/completions"
+OPENROUTER_MODEL = "google/gemini-flash-1.5"
 
 def create_summarization_prompt(full_text: str) -> str:
     """
@@ -39,13 +43,8 @@ def create_summarization_prompt(full_text: str) -> str:
 
 def summarize_text_local(full_text: str) -> str | None:
     """
-    Суммирует текст с помощью Google Gemini API.
-    (Имя функции сохранено для совместимости с парсером).
+    Суммирует текст, сначала пытаясь использовать Google Gemini API, затем OpenRouter.
     """
-    if not model:
-        print("Ошибка: Модель Gemini не была инициализирована.")
-        return None
-
     cleaned_text = full_text.strip()
     if not cleaned_text:
         print("Ошибка: Передан пустой текст для суммирования.")
@@ -53,23 +52,54 @@ def summarize_text_local(full_text: str) -> str | None:
 
     prompt = create_summarization_prompt(cleaned_text)
 
-    try:
-        print("Отправка запроса к Gemini API...")
-        response = model.generate_content(prompt)
-        
-        if response.text:
-            print("Резюме успешно получено.")
-            return response.text.strip()
-        else:
-            # Обработка случая, когда ответ пустой или заблокирован
-            print("API вернул пустой ответ. Возможно, сработали фильтры безопасности.")
-            if response.prompt_feedback:
-                print(f"Причина блокировки: {response.prompt_feedback}")
-            return None
+    # Попытка суммирования через Gemini API
+    if gemini_model:
+        try:
+            print("Отправка запроса к Gemini API...")
+            response = gemini_model.generate_content(prompt)
+            
+            if response.text:
+                print("Резюме успешно получено через Gemini.")
+                return response.text.strip()
+            else:
+                print("Gemini API вернул пустой ответ. Возможно, сработали фильтры безопасности.")
+                if response.prompt_feedback:
+                    print(f"Причина блокировки: {response.prompt_feedback}")
+        except Exception as e:
+            print(f"Произошла ошибка во время запроса к Gemini API: {e}. Попытка использовать OpenRouter...")
 
-    except Exception as e:
-        print(f"Произошла ошибка во время запроса к Gemini API: {e}")
-        return None
+    # Попытка суммирования через OpenRouter
+    if OPENROUTER_API_KEY:
+        headers = {
+            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        data = {
+            "model": OPENROUTER_MODEL,
+            "messages": [
+                {"role": "user", "content": prompt}
+            ]
+        }
+        try:
+            print("Отправка запроса к OpenRouter API...")
+            response = requests.post(OPENROUTER_API_BASE, headers=headers, json=data)
+            response.raise_for_status() # Вызовет исключение для ошибок HTTP
+            
+            openrouter_summary = response.json()["choices"][0]["message"]["content"]
+            if openrouter_summary:
+                print("Резюме успешно получено через OpenRouter.")
+                return openrouter_summary.strip()
+            else:
+                print("OpenRouter API вернул пустой ответ.")
+        except requests.exceptions.RequestException as e:
+            print(f"Произошла ошибка во время запроса к OpenRouter API: {e}")
+        except KeyError:
+            print("Не удалось распарсить ответ от OpenRouter API.")
+    else:
+        print("Ключ OPENROUTER_API_KEY не найден. Суммаризация через OpenRouter не будет работать.")
+
+    print("Не удалось получить резюме ни через один из API.")
+    return None
 
 # Блок для проверки работы функции
 if __name__ == "__main__":
@@ -84,7 +114,7 @@ if __name__ == "__main__":
     """
 
     print("\n" + "="*30 + "\n")
-    print("--- Запрос на суммирование через Gemini API ---")
+    print("--- Запрос на суммирование через Gemini API / OpenRouter ---")
     summary = summarize_text_local(test_text)
 
     print("\n" + "="*30 + "\n")
