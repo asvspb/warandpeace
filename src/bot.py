@@ -41,7 +41,7 @@ async def check_and_post_news():
 
     logger.info(f"Найдено {len(articles)} статей на странице. Начинаю обработку...")
 
-    for article in list(reversed(articles))[:5]:
+    for article in reversed(articles):
         if article['link'] not in posted_links:
             logger.info(f"Найдена новая статья: {article['title']}")
             
@@ -57,7 +57,7 @@ async def check_and_post_news():
                 logger.warning(f"Не удалось суммировать статью: {article['title']}")
                 continue
 
-            message = f"{summary}\n{TELEGRAM_CHANNEL_ID}"
+            message = f"{summary}" # Только резюме
             
             try:
                 await bot.send_message(
@@ -90,9 +90,6 @@ async def main():
 
 if __name__ == "__main__":
     try:
-        # --- ТЕСТОВЫЙ РЕЖИМ: Запускаем проверку только один раз ---
-        print("--- ЗАПУСК БОТА В ТЕСТОВОМ РЕЖИМЕ (ОДИН ПРОХОД) ---")
-        asyncio.run(check_and_post_news())
-        print("--- ТЕСТОВЫЙ ПРОХОД ЗАВЕРШЕН ---")
+        asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("Бот остановлен вручную.")
