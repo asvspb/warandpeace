@@ -4,7 +4,7 @@ from telegram import Bot
 from telegram.constants import ParseMode
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID
 from parser import get_articles_from_page, get_article_text
-from summarizer import summarize_text_async
+from summarizer import summarize_text_local # 1. ИСПРАВЛЕН ИМПОРТ
 
 # Настройка логирования
 logging.basicConfig(
@@ -34,8 +34,8 @@ async def check_and_post_news():
     bot = Bot(token=TELEGRAM_BOT_TOKEN)
     posted_links = load_posted_links()
     
-    # Получаем статьи с первой страницы
-    articles = get_articles_from_page(1)
+    # 2. ИСПРАВЛЕН ВЫЗОВ: все блокирующие функции вынесены в отдельные потоки
+    articles = await asyncio.to_thread(get_articles_from_page, 1)
     if not articles:
         logger.info("Не удалось получить список статей.")
         return
@@ -46,21 +46,18 @@ async def check_and_post_news():
         if article['link'] not in posted_links:
             logger.info(f"Найдена новая статья: {article['title']}")
             
-            # Получаем полный текст статьи
-            full_text = get_article_text(article['link'])
+            full_text = await asyncio.to_thread(get_article_text, article['link'])
             
             if not full_text:
                 logger.warning(f"Не удалось получить текст для статьи: {article['title']}")
                 continue
 
-            # Суммируем текст
-            summary = await summarize_text_async(full_text)
+            summary = await asyncio.to_thread(summarize_text_local, full_text)
             
             if not summary:
                 logger.warning(f"Не удалось суммировать статью: {article['title']}")
                 continue
 
-            # Формируем и отправляем сообщение
             message = f"<b>{article['title']}</b>\n\n{summary}\n\n<a href='{article['link']}'>Источник</a>"
             
             try:
@@ -71,7 +68,7 @@ async def check_and_post_news():
                 )
                 logger.info(f"Статья успешно отправлена в канал: {article['title']}")
                 save_posted_link(article['link'])
-                await asyncio.sleep(10)  # Пауза между постами
+                await asyncio.sleep(10)
             except Exception as e:
                 logger.error(f"Ошибка при отправке статьи '{article['title']}': {e}")
 
@@ -90,7 +87,7 @@ async def main():
             logger.critical(f"Произошла критическая ошибка в основном цикле: {e}")
         
         logger.info("Следующая проверка через 5 минут.")
-        await asyncio.sleep(300) # Пауза 5 минут
+        await asyncio.sleep(300)
 
 if __name__ == "__main__":
     try:
