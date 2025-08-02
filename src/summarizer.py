@@ -4,18 +4,18 @@ import requests
 
 # Пытаемся импортировать ключи из конфига
 try:
-    from src.config import AI_API_KEY, OPENROUTER_API_KEY
+    from src.config import GOOGLE_API_KEY, OPENROUTER_API_KEY
 except (ModuleNotFoundError, ImportError):
-    print("Переменные AI_API_KEY или OPENROUTER_API_KEY не найдены в src/config.py")
+    print("Переменные GOOGLE_API_KEY или OPENROUTER_API_KEY не найдены в src/config.py")
     # Пытаемся получить ключи из переменных окружения как запасной вариант
-    AI_API_KEY = os.getenv("AI_API_KEY")
+    GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
     OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 # --- 1. Конфигурация Gemini ---
 gemini_model = None
-if AI_API_KEY:
+if GOOGLE_API_KEY:
     try:
-        genai.configure(api_key=AI_API_KEY)
+        genai.configure(api_key=GOOGLE_API_KEY)
         print("SDK Google Gemini успешно сконфигурирован.")
         # --- 2. Создание модели ---
         # Используем Gemini 1.5 Flash - быстрая и мощная модель
@@ -24,7 +24,7 @@ if AI_API_KEY:
     except Exception as e:
         print(f"Ошибка при конфигурации Gemini или создании модели: {e}")
 else:
-    print("Ключ AI_API_KEY не найден. Суммаризация через Gemini не будет работать.")
+    print("Ключ GOOGLE_API_KEY не найден. Суммаризация через Gemini не будет работать.")
 
 OPENROUTER_API_BASE = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_MODEL = "google/gemini-flash-1.5"
