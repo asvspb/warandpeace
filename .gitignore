@@ -1,14 +1,24 @@
-# Виртуальное окружение
-venv/
+# Python
 __pycache__/
-*.py[co]
+*.pyc
+*.pyo
+*.pyd
 
-# Файл с секретными ключами
+# Virtualenv
+venv/
+pip-wheel-metadata/
+
+# Environment variables
 .env
 
-# Системные файлы
+# Database
+/database/*.db
+
+# Temporary files
+temp/
+
+# IDE / System files
+.idea/
+.vscode/
 .DS_Store
 Thumbs.db
-
-# Gemini file
-GEMINI.md
