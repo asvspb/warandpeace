@@ -4,7 +4,17 @@ import re
 from datetime import datetime
 from summarizer import summarize_text_local
 from config import NEWS_URL
+from tenacity import retry, stop_after_attempt, wait_exponential, \
+    retry_if_exception_type
+import logging
 
+# Настройка логирования
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+@retry(stop=stop_after_attempt(3),
+       wait=wait_exponential(multiplier=1, min=4, max=10),
+       retry=retry_if_exception_type(requests.exceptions.RequestException))
 def get_article_text(url: str) -> str | None:
     """
     Синхронно получает полный текст статьи по URL, перебирая список селекторов.
@@ -12,6 +22,7 @@ def get_article_text(url: str) -> str | None:
     # Список потенциальных селекторов для текста статьи. 
     # Порядок важен: от наиболее вероятного к менее вероятным.
     selectors = [
+        'td.topic_text',      # Текущий рабочий селектор
         'td.topic_text',      # Текущий рабочий селектор
         'div.news-text',      # Старый селектор, на всякий случай
         'div.article-text',   # Еще один распространенный вариант
@@ -29,7 +40,7 @@ def get_article_text(url: str) -> str | None:
         for selector in selectors:
             article_body = soup.select_one(selector)
             if article_body:
-                # print(f"Найден текст статьи с использованием селектора: {selector}") # Для отладки
+                # logger.info(f"Найден текст статьи с использованием селектора: {selector}") # Для отладки
                 break
 
         if article_body:
@@ -39,13 +50,19 @@ def get_article_text(url: str) -> str | None:
             clean_text = '\n'.join(line.strip() for line in article_body.get_text(separator='\n').split('\n') if line.strip())
             return clean_text
         else:
-            print(f"Не удалось найти текст статьи для {url} ни с одним из селекторов.")
+            logger.warning(f"Не удалось найти текст статьи для {url} ни с одним из селекторов.")
             return None
             
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Ошибка сети или HTTP при загрузке статьи {url}: {e}")
+        raise # Перевыбрасываем исключение для tenacity
     except Exception as e:
-        print(f"Произошла ошибка при загрузке или парсинге статьи {url}: {e}")
+        logger.error(f"Произошла непредвиденная ошибка при парсинге статьи {url}: {e}")
         return None
 
+@retry(stop=stop_after_attempt(3),
+       wait=wait_exponential(multiplier=1, min=4, max=10),
+       retry=retry_if_exception_type(requests.exceptions.RequestException))
 def get_articles_from_page(page=1):
     """
     Получает список статей с заданной страницы новостей.
@@ -90,8 +107,11 @@ def get_articles_from_page(page=1):
                                 'link': link
                             })
         return articles_data
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Ошибка сети или HTTP при загрузке страницы новостей: {e}")
+        raise # Перевыбрасываем исключение для tenacity
     except Exception as e:
-        print(f"Произошла ошибка при парсинге страницы новостей: {e}")
+        logger.error(f"Произошла непредвиденная ошибка при парсинге страницы новостей: {e}")
         return []
 
 def main():

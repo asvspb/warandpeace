@@ -1,6 +1,12 @@
 import google.generativeai as genai
 import os
 import requests
+import logging
+from tenacity import retry, stop_after_attempt, wait_exponential,     retry_if_exception_type
+
+# Настройка логирования
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # Пытаемся импортировать ключи из конфига
 try:
@@ -40,13 +46,16 @@ def create_summarization_prompt(full_text: str) -> str:
 {full_text}
 ---"""
 
+@retry(stop=stop_after_attempt(3),
+       wait=wait_exponential(multiplier=1, min=4, max=10),
+       retry=retry_if_exception_type((requests.exceptions.RequestException, genai.types.BlockedPromptException)))
 def summarize_text_local(full_text: str) -> str | None:
     """
     Суммирует текст, сначала пытаясь использовать Google Gemini API, затем OpenRouter.
     """
     cleaned_text = full_text.strip()
     if not cleaned_text:
-        print("Ошибка: Передан пустой текст для суммирования.")
+        logger.error("Ошибка: Передан пустой текст для суммирования.")
         return None
 
     prompt = create_summarization_prompt(cleaned_text)
@@ -54,18 +63,23 @@ def summarize_text_local(full_text: str) -> str | None:
     # Попытка суммирования через Gemini API
     if gemini_model:
         try:
-            print("Отправка запроса к Gemini API...")
+            logger.info("Отправка запроса к Gemini API...")
             response = gemini_model.generate_content(prompt)
             
             if response.text:
-                print("Резюме успешно получено через Gemini.")
+                logger.info("Резюме успешно получено через Gemini.")
                 return response.text.strip()
             else:
-                print("Gemini API вернул пустой ответ. Возможно, сработали фильтры безопасности.")
+                logger.warning("Gemini API вернул пустой ответ. Возможно, сработали фильтры безопасности.")
                 if response.prompt_feedback:
-                    print(f"Причина блокировки: {response.prompt_feedback}")
+                    logger.warning(f"Причина блокировки: {response.prompt_feedback}")
+                raise genai.types.BlockedPromptException("Gemini API вернул пустой ответ или заблокировал промпт.")
+        except genai.types.BlockedPromptException as e:
+            logger.error(f"Gemini API заблокировал промпт: {e}. Попытка использовать OpenRouter...")
+            raise # Перевыбрасываем для tenacity
         except Exception as e:
-            print(f"Произошла ошибка во время запроса к Gemini API: {e}. Попытка использовать OpenRouter...")
+            logger.error(f"Произошла ошибка во время запроса к Gemini API: {e}. Попытка использовать OpenRouter...")
+            raise # Перевыбрасываем для tenacity
 
     # Попытка суммирования через OpenRouter
     if OPENROUTER_API_KEY:
@@ -80,24 +94,27 @@ def summarize_text_local(full_text: str) -> str | None:
             ]
         }
         try:
-            print("Отправка запроса к OpenRouter API...")
+            logger.info("Отправка запроса к OpenRouter API...")
             response = requests.post(OPENROUTER_API_BASE, headers=headers, json=data)
             response.raise_for_status() # Вызовет исключение для ошибок HTTP
             
             openrouter_summary = response.json()["choices"][0]["message"]["content"]
             if openrouter_summary:
-                print("Резюме успешно получено через OpenRouter.")
+                logger.info("Резюме успешно получено через OpenRouter.")
                 return openrouter_summary.strip()
             else:
-                print("OpenRouter API вернул пустой ответ.")
+                logger.warning("OpenRouter API вернул пустой ответ.")
+                raise requests.exceptions.RequestException("OpenRouter API вернул пустой ответ.")
         except requests.exceptions.RequestException as e:
-            print(f"Произошла ошибка во время запроса к OpenRouter API: {e}")
+            logger.error(f"Произошла ошибка во время запроса к OpenRouter API: {e}")
+            raise # Перевыбрасываем для tenacity
         except KeyError:
-            print("Не удалось распарсить ответ от OpenRouter API.")
+            logger.error("Не удалось распарсить ответ от OpenRouter API.")
+            raise requests.exceptions.RequestException("Не удалось распарсить ответ от OpenRouter API.")
     else:
-        print("Ключ OPENROUTER_API_KEY не найден. Суммаризация через OpenRouter не будет работать.")
+        logger.warning("Ключ OPENROUTER_API_KEY не найден. Суммаризация через OpenRouter не будет работать.")
 
-    print("Не удалось получить резюме ни через один из API.")
+    logger.error("Не удалось получить резюме ни через один из API.")
     return None
 
 # Блок для проверки работы функции

@@ -2,7 +2,7 @@ import asyncio
 import logging
 from telegram import Bot
 from telegram.constants import ParseMode
-from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID
+from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID, TELEGRAM_ADMIN_ID
 from parser import get_articles_from_page, get_article_text
 from summarizer import summarize_text_local
 from database import init_db, add_article, is_article_posted
@@ -13,6 +13,19 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+async def send_admin_notification(message: str):
+    """Отправляет уведомление администратору бота."""
+    logger.info(f"Попытка отправить уведомление администратору. TELEGRAM_ADMIN_ID: {TELEGRAM_ADMIN_ID}")
+    if TELEGRAM_ADMIN_ID:
+        bot = Bot(token=TELEGRAM_BOT_TOKEN)
+        try:
+            await bot.send_message(chat_id=TELEGRAM_ADMIN_ID, text=f"[КРИТИЧЕСКАЯ ОШИБКА]\n\n{message}")
+            logger.info(f"Уведомление администратору отправлено: {message[:50]}...")
+        except Exception as e:
+            logger.error(f"Не удалось отправить уведомление администратору (ID: {TELEGRAM_ADMIN_ID}): {e}")
+    else:
+        logger.warning("TELEGRAM_ADMIN_ID не установлен. Уведомления администратору не будут отправляться.")
 
 async def check_and_post_news():
     """Проверяет наличие новых статей и публикует не более 3 самых свежих."""
@@ -83,11 +96,13 @@ async def main():
     """Основная функция, запускающая бота в бесконечном цикле."""
     logger.info("Бот запускается в штатном режиме...")
     init_db()
+    
     while True:
         try:
             await check_and_post_news()
         except Exception as e:
             logger.critical(f"Произошла критическая ошибка в основном цикле: {e}")
+            await send_admin_notification(f"Критическая ошибка в основном цикле бота: {e}")
         
         logger.info("Следующая проверка через 5 минут.")
         await asyncio.sleep(300)

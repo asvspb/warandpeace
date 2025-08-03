@@ -6,6 +6,7 @@ load_dotenv(find_dotenv(), override=True)
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID")
+TELEGRAM_ADMIN_ID = os.getenv("TELEGRAM_ADMIN_ID")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
@@ -15,11 +16,12 @@ NEWS_URL = "https://www.warandpeace.ru/ru/news/"
 
 
 # Проверяем, что все ключевые переменные были загружены
-if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID, GOOGLE_API_KEY, OPENROUTER_API_KEY]):
+if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID, TELEGRAM_ADMIN_ID, GOOGLE_API_KEY, OPENROUTER_API_KEY]):
     # Формируем сообщение об ошибке
     missing_vars = []
     if not TELEGRAM_BOT_TOKEN: missing_vars.append("TELEGRAM_BOT_TOKEN")
     if not TELEGRAM_CHANNEL_ID: missing_vars.append("TELEGRAM_CHANNEL_ID")
+    if not TELEGRAM_ADMIN_ID: missing_vars.append("TELEGRAM_ADMIN_ID")
     if not GOOGLE_API_KEY: missing_vars.append("GOOGLE_API_KEY")
     if not OPENROUTER_API_KEY: missing_vars.append("OPENROUTER_API_KEY")
     
