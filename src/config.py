@@ -10,7 +10,7 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 # Проверяем, что все ключевые переменные были загружены
-if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID, AI_API_KEY, OPENROUTER_API_KEY]):
+if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID, GOOGLE_API_KEY, OPENROUTER_API_KEY]):
     # Формируем сообщение об ошибке
     missing_vars = []
     if not TELEGRAM_BOT_TOKEN: missing_vars.append("TELEGRAM_BOT_TOKEN")
