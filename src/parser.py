@@ -1,86 +1,104 @@
-from requests_html import HTMLSession
+import requests
+from bs4 import BeautifulSoup
 import re
 from datetime import datetime
 from summarizer import summarize_text_local
+from config import NEWS_URL
 
 def get_article_text(url: str) -> str | None:
     """
-    Синхронно получает полный текст статьи по URL, используя точный селектор и кодировку.
+    Синхронно получает полный текст статьи по URL, перебирая список селекторов.
     """
-    session = HTMLSession()
+    # Список потенциальных селекторов для текста статьи. 
+    # Порядок важен: от наиболее вероятного к менее вероятным.
+    selectors = [
+        'td.topic_text',      # Текущий рабочий селектор
+        'div.news-text',      # Старый селектор, на всякий случай
+        'div.article-text',   # Еще один распространенный вариант
+        'div.text',           # Общий селектор
+    ]
+
     try:
-        r = session.get(url, timeout=30)
-        r.raise_for_status()
-        r.html.encoding = 'windows-1251'
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        response.encoding = 'windows-1251'
         
-        article_elements = r.html.find('td.topic_text')
+        soup = BeautifulSoup(response.text, 'html.parser')
         
         article_body = None
-        for element in article_elements:
-            if not element.find('a.a_header_article', first=True):
-                article_body = element
+        for selector in selectors:
+            article_body = soup.select_one(selector)
+            if article_body:
+                # print(f"Найден текст статьи с использованием селектора: {selector}") # Для отладки
                 break
 
         if article_body:
-            clean_text = '\n'.join(line.strip() for line in article_body.text.split('\n') if line.strip())
+            for s in article_body.select('script, style'):
+                s.decompose()
+            
+            clean_text = '\n'.join(line.strip() for line in article_body.get_text(separator='\n').split('\n') if line.strip())
             return clean_text
         else:
-            print(f"Не удалось найти текст статьи для {url}")
+            print(f"Не удалось найти текст статьи для {url} ни с одним из селекторов.")
             return None
             
     except Exception as e:
         print(f"Произошла ошибка при загрузке или парсинге статьи {url}: {e}")
         return None
-    finally:
-        session.close()
 
 def get_articles_from_page(page=1):
-    session = HTMLSession()
+    """
+    Получает список статей с заданной страницы новостей.
+    """
     if page == 1:
-        list_url = "https://warandpeace.ru/ru/news/"
+        list_url = NEWS_URL
     else:
-        list_url = f"https://warandpeace.ru/ru/news/_/_/page={page}/"
+        list_url = f"{NEWS_URL}_/_/page={page}/"
     
     try:
-        response = session.get(list_url, timeout=20)
+        response = requests.get(list_url, timeout=20)
         response.raise_for_status()
-        response.html.encoding = 'windows-1251'
+        response.encoding = 'windows-1251'
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
         
         articles_data = []
-        tables = response.html.find('table')
+        tables = soup.find_all('table', border="0", align="center", cellspacing="0", width="100%")
 
         for table in tables:
-            title_tag = table.find('a.a_header_article', first=True)
-            time_tag = table.find('td.topic_info_top', first=True)
+            if table.find('td', class_='topic_caption'):
+                title_tag = table.find('a', class_='a_header_article')
+                time_tag = table.find('td', class_='topic_info_top')
 
-            if title_tag and time_tag:
-                title = title_tag.text.strip()
-                link = list(title_tag.absolute_links)[0]
+                if title_tag and time_tag:
+                    title = title_tag.text.strip()
+                    link = title_tag['href']
+                    if not link.startswith('http'):
+                        base_url = "https://www.warandpeace.ru"
+                        link = base_url + link if link.startswith('/') else base_url + '/' + link
 
-                time_text = time_tag.text.strip()
-                time_match = re.search(r'(\d{2}\.\d{2}\.\d{2}) (\d{2}:\d{2})', time_text)
-                if time_match:
-                    date_str, time_str = time_match.groups()
-                else:
-                    date_str, time_str = '??.??.??', '??:??'
+                    time_text = time_tag.text.strip()
+                    time_match = re.search(r'(\d{2}\.\d{2}\.\d{2}) (\d{2}:\d{2})', time_text)
+                    date_str, time_str = time_match.groups() if time_match else ('??.??.??', '??:??')
 
-                if title and link:
-                    if not any(d['link'] == link for d in articles_data):
-                        articles_data.append({
-                            'date': date_str,
-                            'time': time_str,
-                            'title': title,
-                            'link': link
-                        })
+                    if title and link:
+                        if not any(d['link'] == link for d in articles_data):
+                            articles_data.append({
+                                'date': date_str,
+                                'time': time_str,
+                                'title': title,
+                                'link': link
+                            })
         return articles_data
     except Exception as e:
         print(f"Произошла ошибка при парсинге страницы новостей: {e}")
         return []
-    finally:
-        session.close()
 
 def main():
-    print("--- Запуск парсера ---")
+    """
+    Тестовая функция для проверки работы парсера.
+    """
+    print("--- Запуск парсера для теста ---")
     latest_articles = get_articles_from_page(1)
     
     if latest_articles:
@@ -101,7 +119,7 @@ def main():
         if full_text:
             print("--- Полный текст статьи получен. ---")
             
-            print("--- Суммаризация текста... ---")
+            print("\n--- Суммаризация текста... ---")
             summary = summarize_text_local(full_text)
             if summary:
                 print("\n--- РЕЗЮМЕ НОВОСТИ ---")
