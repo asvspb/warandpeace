@@ -6,3 +6,4 @@ python-dotenv
 huggingface-hub
 google-generativeai
 tenacity>=8.0.0
+pytest
