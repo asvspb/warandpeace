@@ -1,0 +1,25 @@
+# Git
+.git
+.gitignore
+.dockerignore
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+.venv/
+pip-cache/
+
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+
+# Other
+.pytest_cache/
+.qodo/
+temp/
+developer_log.md
+GEMINI.md
