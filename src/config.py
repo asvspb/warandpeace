@@ -10,7 +10,7 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 # Настройки парсера
-NEWS_URL = os.getenv("NEWS_URL", "https://www.warandpeace.ru/ru/news/")
+NEWS_URL = "https://www.warandpeace.ru/ru/news/"
 
 
 
