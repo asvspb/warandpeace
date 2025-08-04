@@ -45,12 +45,23 @@ def create_summarization_prompt(full_text: str) -> str:
 {full_text}
 ---"""
 
-@retry(stop=stop_after_attempt(3),
-       wait=wait_exponential(multiplier=1, min=4, max=10),
-       retry=retry_if_exception_type((requests.exceptions.RequestException, genai.types.BlockedPromptException)))
 def summarize_text_local(full_text: str) -> str | None:
     """
     Суммирует текст, сначала пытаясь использовать Google Gemini API, затем OpenRouter.
+    Обертка для обработки RetryError.
+    """
+    try:
+        return _summarize_with_retry(full_text)
+    except RetryError as e:
+        logger.error(f"Все попытки суммирования завершились неудачей: {e}")
+        return None
+
+@retry(stop=stop_after_attempt(3),
+       wait=wait_exponential(multiplier=1, min=4, max=10),
+       retry=retry_if_exception_type((requests.exceptions.RequestException, genai.types.BlockedPromptException)))
+def _summarize_with_retry(full_text: str) -> str | None:
+    """
+    Внутренняя функция с логикой суммирования и повторными попытками.
     """
     cleaned_text = full_text.strip()
     if not cleaned_text:
@@ -62,78 +73,72 @@ def summarize_text_local(full_text: str) -> str | None:
     global current_gemini_key_index
     gemini_summary = None
 
-    try:
-        # Попытка суммирования через Gemini API с перебором ключей
-        if GOOGLE_API_KEYS:
-            for _ in range(len(GOOGLE_API_KEYS)):
-                api_key = GOOGLE_API_KEYS[current_gemini_key_index]
-                gemini_model = configure_gemini_model(api_key)
+    # Попытка суммирования через Gemini API с перебором ключей
+    if GOOGLE_API_KEYS:
+        for _ in range(len(GOOGLE_API_KEYS)):
+            api_key = GOOGLE_API_KEYS[current_gemini_key_index]
+            gemini_model = configure_gemini_model(api_key)
 
-                if gemini_model:
-                    try:
-                        logger.info(f"Отправка запроса к Gemini API с ключом {current_gemini_key_index + 1}...")
-                        response = gemini_model.generate_content(prompt)
-                        
-                        if response.text:
-                            logger.info(f"Резюме успешно получено через Gemini с ключом {current_gemini_key_index + 1}.")
-                            gemini_summary = response.text.strip()
-                            break # Успех, выходим из цикла
-                        else:
-                            logger.warning(f"Gemini API с ключом {current_gemini_key_index + 1} вернул пустой ответ. Возможно, сработали фильтры безопасности.")
-                            if response.prompt_feedback:
-                                logger.warning(f"Причина блокировки: {response.prompt_feedback}")
-                            # Продолжаем к следующему ключу
-                    except genai.types.BlockedPromptException as e:
-                        logger.error(f"Gemini API с ключом {current_gemini_key_index + 1} заблокировал промпт: {e}. Попытка использовать следующий ключ...")
+            if gemini_model:
+                try:
+                    logger.info(f"Отправка запроса к Gemini API с ключом {current_gemini_key_index + 1}...")
+                    response = gemini_model.generate_content(prompt)
+                    
+                    if response.text:
+                        logger.info(f"Резюме успешно получено через Gemini с ключом {current_gemini_key_index + 1}.")
+                        gemini_summary = response.text.strip()
+                        return gemini_summary # Успех, возвращаем результат
+                    else:
+                        logger.warning(f"Gemini API с ключом {current_gemini_key_index + 1} вернул пустой ответ. Возможно, сработали фильтры безопасности.")
+                        if response.prompt_feedback:
+                            logger.warning(f"Причина блокировки: {response.prompt_feedback}")
                         # Продолжаем к следующему ключу
-                    except Exception as e:
-                        logger.error(f"Произошла ошибка во время запроса к Gemini API с ключом {current_gemini_key_index + 1}: {e}. Попытка использовать следующий ключ...")
-                        # Продолжаем к следующему ключу
-                
-                # Переходим к следующему ключу (циклически)
-                current_gemini_key_index = (current_gemini_key_index + 1) % len(GOOGLE_API_KEYS)
+                except genai.types.BlockedPromptException as e:
+                    logger.error(f"Gemini API с ключом {current_gemini_key_index + 1} заблокировал промпт: {e}. Попытка использовать следующий ключ...")
+                    # Продолжаем к следующему ключу
+                except Exception as e:
+                    logger.error(f"Произошла ошибка во время запроса к Gemini API с ключом {current_gemini_key_index + 1}: {e}. Попытка использовать следующий ключ...")
+                    # Продолжаем к следующему ключу
+            
+            # Переходим к следующему ключу (циклически)
+            current_gemini_key_index = (current_gemini_key_index + 1) % len(GOOGLE_API_KEYS)
 
-        if gemini_summary:
-            return gemini_summary
+    # Если Gemini не дал результат, пытаемся суммировать через OpenRouter
+    if OPENROUTER_API_KEY:
+        headers = {
+            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        data = {
+            "model": OPENROUTER_MODEL,
+            "messages": [
+                {"role": "user", "content": prompt}
+            ]
+        }
+        try:
+            logger.info("Отправка запроса к OpenRouter API...")
+            response = requests.post(OPENROUTER_API_BASE, headers=headers, json=data)
+            response.raise_for_status() # Вызовет исключение для ошибок HTTP
+            
+            openrouter_summary = response.json()["choices"][0]["message"]["content"]
+            if openrouter_summary:
+                logger.info("Резюме успешно получено через OpenRouter.")
+                return openrouter_summary.strip()
+            else:
+                logger.warning("OpenRouter API вернул пустой ответ.")
+                raise requests.exceptions.RequestException("OpenRouter API вернул пустой ответ.")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Произошла ошибка во время запроса к OpenRouter API: {e}")
+            raise # Перевыбрасываем для tenacity
+        except KeyError:
+            logger.error("Не удалось распарсить ответ от OpenRouter API.")
+            raise requests.exceptions.RequestException("Не удалось распарсить ответ от OpenRouter API.")
+    else:
+        logger.warning("Ключ OPENROUTER_API_KEY не найден. Суммаризация через OpenRouter не будет работать.")
 
-        # Если Gemini не дал результат, пытаемся суммировать через OpenRouter
-        if OPENROUTER_API_KEY:
-            headers = {
-                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                "Content-Type": "application/json"
-            }
-            data = {
-                "model": OPENROUTER_MODEL,
-                "messages": [
-                    {"role": "user", "content": prompt}
-                ]
-            }
-            try:
-                logger.info("Отправка запроса к OpenRouter API...")
-                response = requests.post(OPENROUTER_API_BASE, headers=headers, json=data)
-                response.raise_for_status() # Вызовет исключение для ошибок HTTP
-                
-                openrouter_summary = response.json()["choices"][0]["message"]["content"]
-                if openrouter_summary:
-                    logger.info("Резюме успешно получено через OpenRouter.")
-                    return openrouter_summary.strip()
-                else:
-                    logger.warning("OpenRouter API вернул пустой ответ.")
-                    raise requests.exceptions.RequestException("OpenRouter API вернул пустой ответ.")
-            except requests.exceptions.RequestException as e:
-                logger.error(f"Произошла ошибка во время запроса к OpenRouter API: {e}")
-                raise # Перевыбрасываем для tenacity
-            except KeyError:
-                logger.error("Не удалось распарсить ответ от OpenRouter API.")
-                raise requests.exceptions.RequestException("Не удалось распарсить ответ от OpenRouter API.")
-        else:
-            logger.warning("Ключ OPENROUTER_API_KEY не найден. Суммаризация через OpenRouter не будет работать.")
-
-        logger.error("Не удалось получить резюме ни через один из API.")
-        return None
-    except RetryError as e:
-        logger.error(f"Все попытки суммирования завершились неудачей: {e}")
-        return None
+    logger.error("Не удалось получить резюме ни через один из API.")
+    # Если ни один из API не сработал, вызываем ошибку, чтобы tenacity попробовал еще раз
+    raise requests.exceptions.RequestException("All APIs failed")
 
 # Блок для проверки работы функции
 if __name__ == "__main__":
