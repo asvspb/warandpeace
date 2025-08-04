@@ -3,6 +3,7 @@ import logging
 import threading
 from datetime import datetime
 from functools import partial
+import google.generativeai as genai
 
 from telegram import BotCommand, BotCommandScopeChat, Update
 from telegram.constants import ParseMode
@@ -53,6 +54,7 @@ async def post_init(application: Application):
             BotCommand("weekly_digest", "Сводка за последние 7 дней"),
             BotCommand("monthly_digest", "Сводка за последние 30 дней"),
             BotCommand("annual_digest", "Итоговая годовая сводка"),
+            BotCommand("check_keys", "Проверить работоспособность API ключей"),
         ]
         try:
             await application.bot.set_my_commands(
@@ -99,6 +101,29 @@ async def check_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Принудительно запускает проверку новостей."""
     await update.message.reply_text("Начинаю принудительную проверку новостей...")
     context.job_queue.run_once(check_and_post_news, 1, user_id=update.effective_user.id)
+
+
+async def check_api_keys(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Проверяет работоспособность всех ключей Google API."""
+    await update.message.reply_text(f"Начинаю проверку {len(GOOGLE_API_KEYS)} ключей Google API...")
+    
+    async def check_single_key(api_key: str, key_index: int):
+        key_identifier = f"Ключ #{key_index + 1} ('{api_key[:4]}...')"
+        try:
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel('gemini-1.5-flash-latest')
+            response = await model.generate_content_async("Напиши 'привет'")
+            if response.text and response.text.strip():
+                return f"✅ {key_identifier}: Работает"
+            else:
+                return f"⚠️ {key_identifier}: Не вернул контент"
+        except Exception as e:
+            return f"❌ {key_identifier}: Ошибка - {type(e).__name__}"
+
+    results = await asyncio.gather(*[check_single_key(key, i) for i, key in enumerate(GOOGLE_API_KEYS)])
+    
+    report = "**Отчет по ключам Google API:**\n" + "\n".join(results)
+    await update.message.reply_text(report, parse_mode=ParseMode.MARKDOWN)
 
 
 async def send_admin_notification(context: ContextTypes.DEFAULT_TYPE, message: str):
@@ -227,7 +252,8 @@ def main():
             admin_filter = filters.User(user_id=admin_id_int)
             
             application.add_handler(CommandHandler("check_now", check_now, filters=admin_filter))
-            
+            application.add_handler(CommandHandler("check_keys", check_api_keys, filters=admin_filter))
+
             daily_digest_handler = partial(handle_digest_request, days=1, period_name="сутки")
             weekly_digest_handler = partial(handle_digest_request, days=7, period_name="неделю")
             monthly_digest_handler = partial(handle_digest_request, days=30, period_name="месяц")
@@ -240,7 +266,7 @@ def main():
         except (ValueError, TypeError):
             logger.error(f"TELEGRAM_ADMIN_ID ('{TELEGRAM_ADMIN_ID}') имеет неверный формат. Админ-команды не будут загружены.")
 
-    application.job_queue.run_repeating(check_and_post_news, interval=300, first=10)
+    application.job_queue.run_repeating(check_and_post_news, interval=300, first=10);
 
     threading.Thread(target=run_health_check_server, daemon=True).start()
 
