@@ -2,7 +2,7 @@ import google.generativeai as genai
 import os
 import requests
 import logging
-from tenacity import retry, stop_after_attempt, wait_exponential,     retry_if_exception_type
+from tenacity import retry, stop_after_attempt, wait_exponential,     retry_if_exception_type, RetryError
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -131,7 +131,7 @@ def summarize_text_local(full_text: str) -> str | None:
 
         logger.error("Не удалось получить резюме ни через один из API.")
         return None
-    except tenacity.RetryError as e:
+    except RetryError as e:
         logger.error(f"Все попытки суммирования завершились неудачей: {e}")
         return None
 
