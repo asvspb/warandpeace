@@ -128,7 +128,7 @@ def main():
         
         latest_article = latest_articles[0]
         
-        print(f"\n--- Найдена последняя новость ---")
+        print("\n--- Найдена последняя новость ---")
         print(f"Заголовок: {latest_article['title']}")
         print(f"Ссылка: {latest_article['link']}")
         

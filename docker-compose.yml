@@ -9,3 +9,9 @@ services:
     volumes:
       - ./database:/app/database
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 1m30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

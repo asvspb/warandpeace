@@ -1,11 +1,13 @@
 import asyncio
 import logging
-from telegram import Bot
+import threading
 from telegram.constants import ParseMode
+from telegram.ext import ApplicationBuilder
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID, TELEGRAM_ADMIN_ID
 from parser import get_articles_from_page, get_article_text
 from summarizer import summarize_text_local
 from database import init_db, add_article, is_article_posted
+from healthcheck import run_health_check_server
 
 # Настройка логирования
 logging.basicConfig(
@@ -18,9 +20,9 @@ async def send_admin_notification(message: str):
     """Отправляет уведомление администратору бота."""
     logger.info(f"Попытка отправить уведомление администратору. TELEGRAM_ADMIN_ID: {TELEGRAM_ADMIN_ID}")
     if TELEGRAM_ADMIN_ID:
-        bot = Bot(token=TELEGRAM_BOT_TOKEN)
+        application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
         try:
-            await bot.send_message(chat_id=TELEGRAM_ADMIN_ID, text=f"[КРИТИЧЕСКАЯ ОШИБКА]\n\n{message}")
+            await application.bot.send_message(chat_id=TELEGRAM_ADMIN_ID, text=f"[КРИТИЧЕСКАЯ ОШИБКА]\n\n{message}")
             logger.info(f"Уведомление администратору отправлено: {message[:50]}...")
         except Exception as e:
             logger.error(f"Не удалось отправить уведомление администратору (ID: {TELEGRAM_ADMIN_ID}): {e}")
@@ -30,7 +32,7 @@ async def send_admin_notification(message: str):
 async def check_and_post_news():
     """Проверяет наличие новых статей и публикует не более 3 самых свежих."""
     logger.info("Начинаю проверку новостей...")
-    bot = Bot(token=TELEGRAM_BOT_TOKEN)
+    application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
     
     all_articles = await asyncio.to_thread(get_articles_from_page, 1)
     if not all_articles:
@@ -54,7 +56,7 @@ async def check_and_post_news():
 
     # Получаем @username канала для подписи
     try:
-        chat = await bot.get_chat(chat_id=TELEGRAM_CHANNEL_ID)
+        chat = await application.bot.get_chat(chat_id=TELEGRAM_CHANNEL_ID)
         channel_username = f"@{chat.username}"
     except Exception as e:
         logger.error(f"Не удалось получить username канала: {e}. Использую ID.")
@@ -79,7 +81,7 @@ async def check_and_post_news():
         message = f"<b>{article['title']}</b>\n\n{summary} {channel_username}"
         
         try:
-            await bot.send_message(
+            await application.bot.send_message(
                 chat_id=TELEGRAM_CHANNEL_ID, 
                 text=message,
                 parse_mode=ParseMode.HTML
@@ -96,7 +98,16 @@ async def main():
     """Основная функция, запускающая бота в бесконечном цикле."""
     logger.info("Бот запускается в штатном режиме...")
     init_db()
-    
+
+    # Запуск health check сервера в отдельном потоке
+    try:
+        health_check_thread = threading.Thread(target=run_health_check_server, daemon=True)
+        health_check_thread.start()
+        logger.info("Сервер для health check успешно запущен.")
+    except Exception as e:
+        logger.critical(f"Не удалось запустить сервер для health check: {e}")
+        await send_admin_notification(f"Не удалось запустить сервер для health check: {e}")
+
     while True:
         try:
             await check_and_post_news()
