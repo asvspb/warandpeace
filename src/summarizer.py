@@ -162,3 +162,113 @@ if __name__ == "__main__":
         print(summary)
     else:
         print("Не удалось получить резюме.")
+
+def create_digest_prompt(summaries: list[str], period_name: str) -> str:
+    """
+    Создает промпт для генерации аналитического дайджеста на основе сводок.
+    """
+    summaries_text = "\n- ".join(summaries)
+    return f"""Ты — профессиональный новостной аналитик. Ниже представлен список кратких сводок новостей за последние {period_name}.
+Твоя задача — написать целостную аналитическую сводку на русском языке (200-250 слов).
+
+Требования:
+1.  Не перечисляй просто факты из сводок.
+2.  Определи 2-4 ключевых тренда или тематических блока на основе этих новостей.
+3.  Напиши связный текст, который описывает эти тенденции, объединяя информацию из разных новостей.
+4.  Начни с общего заголовка, например: "Главные события за {period_name}".
+5.  Структурируй текст, используя абзацы для каждого тренда.
+
+Список сводок:
+- {summaries_text}
+"""
+
+def create_annual_digest_prompt(digest_contents: list[str]) -> str:
+    """
+    Создает промпт для генерации годового "мега-дайджеста".
+    """
+    digests_text = "\n\n---\n\n".join(digest_contents)
+    return f"""Ты — главный редактор и ведущий аналитик. Перед тобой подборка еженедельных и ежемесячных аналитических дайджестов за прошедший год.
+Твоя задача — написать итоговую годовую аналитическую статью (400-500 слов).
+
+Требования:
+1.  Выяви и опиши главные, долгосрочные тенденции и события года.
+2.  Проанализируй, как развивались ключевые сюжеты в течение года.
+3.  Сделай выводы о последствиях этих событий.
+4.  Текст должен быть написан в авторитетном, аналитическом стиле.
+5.  Придумай яркий и емкий заголовок для годового отчета.
+
+Материалы для анализа (дайджесты за год):
+{digests_text}
+"""
+
+@retry(stop=stop_after_attempt(2), wait=wait_exponential(multiplier=1, min=4, max=10))
+def _generate_analytical_text(prompt: str) -> str | None:
+    """
+    Универсальная функция для генерации текста по промпту с использованием API.
+    Имеет меньше попыток, так как генерация дайджеста менее критична, чем суммирование.
+    """
+    global current_gemini_key_index
+    # Попытка генерации через Gemini API
+    if GOOGLE_API_KEYS:
+        for _ in range(len(GOOGLE_API_KEYS)):
+            api_key = GOOGLE_API_KEYS[current_gemini_key_index]
+            gemini_model = configure_gemini_model(api_key)
+            if gemini_model:
+                try:
+                    logger.info(f"Отправка аналитического запроса к Gemini API с ключом {current_gemini_key_index + 1}...")
+                    response = gemini_model.generate_content(prompt)
+                    if response.text:
+                        logger.info("Аналитический текст успешно получен через Gemini.")
+                        return response.text.strip()
+                except Exception as e:
+                    logger.error(f"Ошибка при генерации аналитического текста через Gemini: {e}")
+            current_gemini_key_index = (current_gemini_key_index + 1) % len(GOOGLE_API_KEYS)
+
+    # Если Gemini не сработал, пытаемся через OpenRouter
+    if OPENROUTER_API_KEY:
+        headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
+        data = {"model": OPENROUTER_MODEL, "messages": [{"role": "user", "content": prompt}]}
+        try:
+            logger.info("Отправка аналитического запроса к OpenRouter API...")
+            response = requests.post(OPENROUTER_API_BASE, headers=headers, json=data)
+            response.raise_for_status()
+            content = response.json()["choices"][0]["message"]["content"]
+            if content:
+                logger.info("Аналитический текст успешно получен через OpenRouter.")
+                return content.strip()
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Ошибка при генерации аналитического текста через OpenRouter: {e}")
+            raise
+
+    logger.error("Не удалось сгенерировать аналитический текст ни через один из API.")
+    raise requests.exceptions.RequestException("All analytical text generation APIs failed")
+
+def create_digest(summaries: list[str], period_name: str) -> str | None:
+    """
+    Создает аналитический дайджест на основе списка сводок.
+    """
+    if not summaries:
+        logger.warning("Передан пустой список сводок для создания дайджеста.")
+        return None
+    
+    prompt = create_digest_prompt(summaries, period_name)
+    try:
+        return _generate_analytical_text(prompt)
+    except RetryError as e:
+        logger.error(f"Не удалось создать дайджест после нескольких попыток: {e}")
+        return None
+
+def create_annual_digest(digest_contents: list[str]) -> str | None:
+    """
+    Создает годовой "мега-дайджест" на основе других дайджестов.
+    """
+    if not digest_contents:
+        logger.warning("Передан пустой список дайджестов для создания годового отчета.")
+        return None
+
+    prompt = create_annual_digest_prompt(digest_contents)
+    try:
+        return _generate_analytical_text(prompt)
+    except RetryError as e:
+        logger.error(f"Не удалось создать годовой дайджест: {e}")
+        return None

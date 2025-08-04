@@ -13,25 +13,51 @@ def get_db_connection():
         conn.close()
 
 def init_db():
-    """Инициализирует базу данных и создает таблицу, если она не существует."""
+    """
+    Инициализирует базу данных, создает и обновляет таблицы.
+    - Добавляет поле 'summary' в таблицу 'articles'.
+    - Создает таблицу 'digests'.
+    """
     with get_db_connection() as conn:
         cursor = conn.cursor()
+
+        # 1. Модификация таблицы articles
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS articles (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 url TEXT NOT NULL UNIQUE,
                 title TEXT,
+                summary TEXT,
                 published_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        # Проверка и добавление колонки summary для обратной совместимости
+        try:
+            cursor.execute("ALTER TABLE articles ADD COLUMN summary TEXT;")
+        except sqlite3.OperationalError:
+            # Колонка уже существует
+            pass
+
+        # 2. Создание таблицы digests
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS digests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                period TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
         conn.commit()
 
-def add_article(url: str, title: str):
-    """Добавляет новую статью в базу данных."""
+def add_article(url: str, title: str, summary: str):
+    """Добавляет новую статью и ее краткое содержание в базу данных."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
-            cursor.execute("INSERT INTO articles (url, title) VALUES (?, ?)", (url, title))
+            cursor.execute(
+                "INSERT INTO articles (url, title, summary) VALUES (?, ?, ?)",
+                (url, title, summary)
+            )
             conn.commit()
         except sqlite3.IntegrityError:
             # Статья с таким URL уже существует
@@ -43,3 +69,39 @@ def is_article_posted(url: str) -> bool:
         cursor = conn.cursor()
         cursor.execute("SELECT 1 FROM articles WHERE url = ?", (url,))
         return cursor.fetchone() is not None
+
+def add_digest(period: str, content: str):
+    """Сохраняет новый сгенерированный дайджест в базу данных."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO digests (period, content) VALUES (?, ?)",
+            (period, content)
+        )
+        conn.commit()
+
+def get_summaries_for_period(days: int) -> list[str]:
+    """
+    Извлекает сводки статей, опубликованные за последние `days` дней.
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT summary FROM articles WHERE published_at >= datetime('now', '-' || ? || ' days') AND summary IS NOT NULL ORDER BY published_at DESC",
+            (days,)
+        )
+        # fetchall() возвращает список кортежей [(summary1,), (summary2,)]
+        # Преобразуем его в простой список строк
+        return [item[0] for item in cursor.fetchall()]
+
+def get_digests_for_period(days: int) -> list[str]:
+    """
+    Извлекает содержимое дайджестов, созданных за последние `days` дней.
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT content FROM digests WHERE created_at >= datetime('now', '-' || ? || ' days') ORDER BY created_at DESC",
+            (days,)
+        )
+        return [item[0] for item in cursor.fetchall()]

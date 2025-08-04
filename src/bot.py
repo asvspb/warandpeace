@@ -2,6 +2,7 @@ import asyncio
 import logging
 import threading
 from datetime import datetime
+from functools import partial
 
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, ContextTypes, filters
@@ -15,8 +16,19 @@ from config import (
     OPENROUTER_API_KEY
 )
 from parser import get_articles_from_page, get_article_text
-from summarizer import summarize_text_local
-from database import init_db, add_article, is_article_posted
+from summarizer import (
+    summarize_text_local, 
+    create_digest, 
+    create_annual_digest
+)
+from database import (
+    init_db, 
+    add_article, 
+    is_article_posted, 
+    add_digest,
+    get_summaries_for_period,
+    get_digests_for_period
+)
 from healthcheck import run_health_check_server
 
 # Настройка логирования
@@ -33,9 +45,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Доступные команды:\n"
         "/start - показать это сообщение\n"
         "/check_now - принудительно проверить новости\n"
-        "/status - показать статус бота"
+        "/status - показать статус бота\n\n"
+        "**Администраторские команды:**\n"
+        "/daily_digest - сводка за последние 24 часа\n"
+        "/weekly_digest - сводка за последние 7 дней\n"
+        "/monthly_digest - сводка за последние 30 дней\n"
+        "/annual_digest - годовая сводка"
     )
-    await update.message.reply_text(welcome_text)
+    await update.message.reply_text(welcome_text, parse_mode=ParseMode.MARKDOWN)
 
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -119,7 +136,7 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(
                 chat_id=TELEGRAM_CHANNEL_ID, text=message, parse_mode=ParseMode.HTML
             )
-            add_article(article["link"], article["title"])
+            add_article(article["link"], article["title"], summary)
             await asyncio.sleep(15)
         
         if user_id:
@@ -134,6 +151,51 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(chat_id=user_id, text=f"Произошла ошибка: {e}")
 
 
+async def handle_digest_request(update: Update, context: ContextTypes.DEFAULT_TYPE, days: int, period_name: str, is_annual: bool = False):
+    """Общая логика для создания и отправки дайджестов администратору."""
+    user_id = update.effective_user.id
+    await context.bot.send_message(chat_id=user_id, text=f"Начинаю подготовку сводки за {period_name}...")
+
+    try:
+        if is_annual:
+            # Логика для годового дайджеста
+            logger.info("Запрошен годовой дайджест.")
+            source_digests = await asyncio.to_thread(get_digests_for_period, 365)
+            if not source_digests:
+                await context.bot.send_message(chat_id=user_id, text="Нет дайджестов за год для анализа.")
+                return
+            
+            logger.info(f"Найдено {len(source_digests)} дайджестов для годового анализа.")
+            digest_content = await asyncio.to_thread(create_annual_digest, source_digests)
+            period_db_name = "annual"
+        else:
+            # Логика для обычных дайджестов
+            logger.info(f"Запрошен дайджест за {days} дней.")
+            summaries = await asyncio.to_thread(get_summaries_for_period, days)
+            if not summaries:
+                await context.bot.send_message(chat_id=user_id, text=f"Нет статей за указанный период ({period_name}).")
+                return
+
+            logger.info(f"Найдено {len(summaries)} сводок для дайджеста.")
+            digest_content = await asyncio.to_thread(create_digest, summaries, period_name)
+            period_db_name = period_name.lower()
+
+        if not digest_content:
+            await context.bot.send_message(chat_id=user_id, text="Не удалось создать аналитическую сводку. Попробуйте позже.")
+            return
+
+        # Сохраняем дайджест в БД
+        await asyncio.to_thread(add_digest, period_db_name, digest_content)
+        logger.info(f"Дайджест за {period_name} успешно создан и сохранен в БД.")
+
+        # Отправляем результат администратору
+        await context.bot.send_message(chat_id=user_id, text=f"**Ваша аналитическая сводка за {period_name}:**\n\n{digest_content}", parse_mode=ParseMode.MARKDOWN)
+
+    except Exception as e:
+        logger.error(f"Ошибка при создании дайджеста за {period_name}: {e}")
+        await context.bot.send_message(chat_id=user_id, text=f"Произошла серьезная ошибка при создании сводки: {e}")
+
+
 def main():
     """Основная функция, запускающая бота."""
     logger.info("Бот запускается...")
@@ -141,20 +203,30 @@ def main():
 
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
-    # Инициализация данных бота
     application.bot_data["last_check_time"] = "Никогда"
 
-    # Регистрация обработчиков команд
+    # Регистрация обычных команд
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("status", status))
+
+    # Регистрация администраторских команд
     if TELEGRAM_ADMIN_ID:
         admin_filter = filters.User(user_id=int(TELEGRAM_ADMIN_ID))
         application.add_handler(CommandHandler("check_now", check_now, filters=admin_filter))
+        
+        # Создаем частичные функции для каждого типа дайджеста
+        daily_digest_handler = partial(handle_digest_request, days=1, period_name="сутки")
+        weekly_digest_handler = partial(handle_digest_request, days=7, period_name="неделю")
+        monthly_digest_handler = partial(handle_digest_request, days=30, period_name="месяц")
+        annual_digest_handler = partial(handle_digest_request, days=365, period_name="год", is_annual=True)
 
-    # Запуск фоновой задачи
+        application.add_handler(CommandHandler("daily_digest", daily_digest_handler, filters=admin_filter))
+        application.add_handler(CommandHandler("weekly_digest", weekly_digest_handler, filters=admin_filter))
+        application.add_handler(CommandHandler("monthly_digest", monthly_digest_handler, filters=admin_filter))
+        application.add_handler(CommandHandler("annual_digest", annual_digest_handler, filters=admin_filter))
+
     application.job_queue.run_repeating(check_and_post_news, interval=300, first=10)
 
-    # Запуск health check сервера
     threading.Thread(target=run_health_check_server, daemon=True).start()
 
     application.run_polling()
