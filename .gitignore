@@ -1,24 +1,3 @@
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-
-# Virtualenv
-venv/
-pip-wheel-metadata/
-
-# Environment variables
-.env
-
-# Database
-/database/*.db
-
-# Temporary files
-temp/
-
-# IDE / System files
-.idea/
-.vscode/
-.DS_Store
-Thumbs.db
+# Игнорирование отладочных логов
+bot_debug.log
+config_debug.log

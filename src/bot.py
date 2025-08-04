@@ -4,9 +4,9 @@ import threading
 from datetime import datetime
 from functools import partial
 
+from telegram import BotCommand, BotCommandScopeChat, Update
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, ContextTypes, filters
-from telegram import Update
 
 from config import (
     TELEGRAM_BOT_TOKEN, 
@@ -38,19 +38,36 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+async def post_init(application: Application):
+    """Устанавливает команды меню после инициализации бота."""
+    user_commands = [
+        BotCommand("start", "Запустить бота и показать приветствие"),
+        BotCommand("status", "Показать текущий статус бота"),
+    ]
+    await application.bot.set_my_commands(user_commands)
+
+    if TELEGRAM_ADMIN_ID:
+        admin_commands = user_commands + [
+            BotCommand("check_now", "Принудительно проверить новости"),
+            BotCommand("daily_digest", "Сводка за последние 24 часа"),
+            BotCommand("weekly_digest", "Сводка за последние 7 дней"),
+            BotCommand("monthly_digest", "Сводка за последние 30 дней"),
+            BotCommand("annual_digest", "Итоговая годовая сводка"),
+        ]
+        try:
+            await application.bot.set_my_commands(
+                admin_commands, scope=BotCommandScopeChat(chat_id=int(TELEGRAM_ADMIN_ID))
+            )
+            logger.info(f"Установлены расширенные команды для администратора (ID: {TELEGRAM_ADMIN_ID}).")
+        except Exception as e:
+            logger.error(f"Не удалось установить команды для администратора: {e}")
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Отправляет приветственное сообщение и список команд."""
     welcome_text = (
         "Приветствую Вас, сударь! Вас ждет великий бот от Gemini и прибыльный новостной канал \"Война и мир!\"\n\n"
-        "Доступные команды:\n"
-        "/start - показать это сообщение\n"
-        "/check_now - принудительно проверить новости\n"
-        "/status - показать статус бота\n\n"
-        "**Администраторские команды:**\n"
-        "/daily_digest - сводка за последние 24 часа\n"
-        "/weekly_digest - сводка за последние 7 дней\n"
-        "/monthly_digest - сводка за последние 30 дней\n"
-        "/annual_digest - годовая сводка"
+        "Доступные команды можно посмотреть в меню."
     )
     await update.message.reply_text(welcome_text, parse_mode=ParseMode.MARKDOWN)
 
@@ -89,7 +106,7 @@ async def send_admin_notification(context: ContextTypes.DEFAULT_TYPE, message: s
     if TELEGRAM_ADMIN_ID:
         try:
             await context.bot.send_message(
-                chat_id=TELEGRAM_ADMIN_ID, text=f"[УВЕДОМЛЕНИЕ]\n\n{message}"
+                chat_id=int(TELEGRAM_ADMIN_ID), text=f"[УВЕДОМЛЕНИЕ]\n\n{message}"
             )
         except Exception as e:
             logger.error(f"Не удалось отправить уведомление администратору: {e}")
@@ -158,7 +175,6 @@ async def handle_digest_request(update: Update, context: ContextTypes.DEFAULT_TY
 
     try:
         if is_annual:
-            # Логика для годового дайджеста
             logger.info("Запрошен годовой дайджест.")
             source_digests = await asyncio.to_thread(get_digests_for_period, 365)
             if not source_digests:
@@ -169,7 +185,6 @@ async def handle_digest_request(update: Update, context: ContextTypes.DEFAULT_TY
             digest_content = await asyncio.to_thread(create_annual_digest, source_digests)
             period_db_name = "annual"
         else:
-            # Логика для обычных дайджестов
             logger.info(f"Запрошен дайджест за {days} дней.")
             summaries = await asyncio.to_thread(get_summaries_for_period, days)
             if not summaries:
@@ -184,11 +199,9 @@ async def handle_digest_request(update: Update, context: ContextTypes.DEFAULT_TY
             await context.bot.send_message(chat_id=user_id, text="Не удалось создать аналитическую сводку. Попробуйте позже.")
             return
 
-        # Сохраняем дайджест в БД
         await asyncio.to_thread(add_digest, period_db_name, digest_content)
         logger.info(f"Дайджест за {period_name} успешно создан и сохранен в БД.")
 
-        # Отправляем результат администратору
         await context.bot.send_message(chat_id=user_id, text=f"**Ваша аналитическая сводка за {period_name}:**\n\n{digest_content}", parse_mode=ParseMode.MARKDOWN)
 
     except Exception as e:
@@ -201,29 +214,31 @@ def main():
     logger.info("Бот запускается...")
     init_db()
 
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).post_init(post_init).build()
 
     application.bot_data["last_check_time"] = "Никогда"
 
-    # Регистрация обычных команд
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("status", status))
 
-    # Регистрация администраторских команд
     if TELEGRAM_ADMIN_ID:
-        admin_filter = filters.User(user_id=int(TELEGRAM_ADMIN_ID))
-        application.add_handler(CommandHandler("check_now", check_now, filters=admin_filter))
-        
-        # Создаем частичные функции для каждого типа дайджеста
-        daily_digest_handler = partial(handle_digest_request, days=1, period_name="сутки")
-        weekly_digest_handler = partial(handle_digest_request, days=7, period_name="неделю")
-        monthly_digest_handler = partial(handle_digest_request, days=30, period_name="месяц")
-        annual_digest_handler = partial(handle_digest_request, days=365, period_name="год", is_annual=True)
+        try:
+            admin_id_int = int(TELEGRAM_ADMIN_ID)
+            admin_filter = filters.User(user_id=admin_id_int)
+            
+            application.add_handler(CommandHandler("check_now", check_now, filters=admin_filter))
+            
+            daily_digest_handler = partial(handle_digest_request, days=1, period_name="сутки")
+            weekly_digest_handler = partial(handle_digest_request, days=7, period_name="неделю")
+            monthly_digest_handler = partial(handle_digest_request, days=30, period_name="месяц")
+            annual_digest_handler = partial(handle_digest_request, days=365, period_name="год", is_annual=True)
 
-        application.add_handler(CommandHandler("daily_digest", daily_digest_handler, filters=admin_filter))
-        application.add_handler(CommandHandler("weekly_digest", weekly_digest_handler, filters=admin_filter))
-        application.add_handler(CommandHandler("monthly_digest", monthly_digest_handler, filters=admin_filter))
-        application.add_handler(CommandHandler("annual_digest", annual_digest_handler, filters=admin_filter))
+            application.add_handler(CommandHandler("daily_digest", daily_digest_handler, filters=admin_filter))
+            application.add_handler(CommandHandler("weekly_digest", weekly_digest_handler, filters=admin_filter))
+            application.add_handler(CommandHandler("monthly_digest", monthly_digest_handler, filters=admin_filter))
+            application.add_handler(CommandHandler("annual_digest", annual_digest_handler, filters=admin_filter))
+        except (ValueError, TypeError):
+            logger.error(f"TELEGRAM_ADMIN_ID ('{TELEGRAM_ADMIN_ID}') имеет неверный формат. Админ-команды не будут загружены.")
 
     application.job_queue.run_repeating(check_and_post_news, interval=300, first=10)
 
