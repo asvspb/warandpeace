@@ -49,15 +49,21 @@ def init_db():
         """)
         conn.commit()
 
-def add_article(url: str, title: str, summary: str):
+def add_article(url: str, title: str, summary: str, published_at_iso: str | None = None):
     """Добавляет новую статью и ее краткое содержание в базу данных."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
-            cursor.execute(
-                "INSERT INTO articles (url, title, summary) VALUES (?, ?, ?)",
-                (url, title, summary)
-            )
+            if published_at_iso:
+                cursor.execute(
+                    "INSERT INTO articles (url, title, summary, published_at) VALUES (?, ?, ?, ?)",
+                    (url, title, summary, published_at_iso)
+                )
+            else:
+                cursor.execute(
+                    "INSERT INTO articles (url, title, summary) VALUES (?, ?, ?)",
+                    (url, title, summary)
+                )
             conn.commit()
         except sqlite3.IntegrityError:
             # Статья с таким URL уже существует
