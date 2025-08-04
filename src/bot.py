@@ -28,9 +28,10 @@ from database import (
     is_article_posted, 
     add_digest,
     get_summaries_for_period,
-    get_digests_for_period
+    get_digests_for_period,
+    get_stats
 )
-from healthcheck import run_health_check_server
+from healthcheck import check_parser_health
 
 # Настройка логирования
 logging.basicConfig(
@@ -55,6 +56,8 @@ async def post_init(application: Application):
             BotCommand("monthly_digest", "Сводка за последние 30 дней"),
             BotCommand("annual_digest", "Итоговая годовая сводка"),
             BotCommand("check_keys", "Проверить работоспособность API ключей"),
+            BotCommand("healthcheck", "Проверить работоспособность парсера"),
+            BotCommand("posted_stats", "Статистика по опубликованным статьям"),
         ]
         try:
             await application.bot.set_my_commands(
@@ -101,6 +104,43 @@ async def check_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Принудительно запускает проверку новостей."""
     await update.message.reply_text("Начинаю принудительную проверку новостей...")
     context.job_queue.run_once(check_and_post_news, 1, user_id=update.effective_user.id)
+
+
+async def healthcheck(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Выполняет проверку работоспособности парсера по запросу."""
+    await update.message.reply_text("Начинаю проверку селекторов парсера...")
+    is_ok = await asyncio.to_thread(check_parser_health)
+    if is_ok:
+        await update.message.reply_text("✅ Проверка прошла успешно. Селекторы парсера в порядке.")
+    else:
+        await update.message.reply_text("❌ ОБНАРУЖЕНА ПРОБЛЕМА! Селекторы парсера не работают. Проверьте логи.")
+
+
+async def posted_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отправляет статистику по опубликованным статьям."""
+    stats = await asyncio.to_thread(get_stats)
+    
+    last_article_title = stats['last_article']['title']
+    last_article_date = stats['last_article']['published_at']
+    
+    # Преобразуем дату в читаемый формат, если она есть
+    if last_article_date != "Нет":
+        try:
+            # Пример формата из БД: 2025-08-04 18:30:00
+            dt_obj = datetime.fromisoformat(last_article_date)
+            last_article_date = dt_obj.strftime('%d %B %Y в %H:%M')
+        except (ValueError, TypeError):
+            # Если формат отличается, оставляем как есть
+            pass
+
+    stats_text = (
+        f"**Статистика публикаций:**\n\n"
+        f"Всего опубликовано статей: **{stats['total_articles']}**\n\n"
+        f"**Последняя опубликованная статья:**\n"
+        f"- *Заголовок:* {last_article_title}\n"
+        f"- *Дата публикации:* {last_article_date}"
+    )
+    await update.message.reply_text(stats_text, parse_mode=ParseMode.MARKDOWN)
 
 
 async def check_api_keys(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -165,6 +205,7 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
         chat = await context.bot.get_chat(chat_id=TELEGRAM_CHANNEL_ID)
         channel_username = f"@{chat.username}"
 
+        posted_count = 0
         for article in articles_to_post:
             full_text = await asyncio.to_thread(get_article_text, article["link"])
             if not full_text:
@@ -179,10 +220,11 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
                 chat_id=TELEGRAM_CHANNEL_ID, text=message, parse_mode=ParseMode.HTML
             )
             add_article(article["link"], article["title"], summary)
+            posted_count += 1
             await asyncio.sleep(15)
         
         if user_id:
-            await context.bot.send_message(chat_id=user_id, text=f"Успешно опубликовано {len(articles_to_post)} новых статей.")
+            await context.bot.send_message(chat_id=user_id, text=f"Успешно опубликовано {posted_count} новых статей.")
 
         logger.info("Проверка новостей успешно завершена.")
 
@@ -253,6 +295,8 @@ def main():
             
             application.add_handler(CommandHandler("check_now", check_now, filters=admin_filter))
             application.add_handler(CommandHandler("check_keys", check_api_keys, filters=admin_filter))
+            application.add_handler(CommandHandler("healthcheck", healthcheck, filters=admin_filter))
+            application.add_handler(CommandHandler("posted_stats", posted_stats, filters=admin_filter))
 
             daily_digest_handler = partial(handle_digest_request, days=1, period_name="сутки")
             weekly_digest_handler = partial(handle_digest_request, days=7, period_name="неделю")
@@ -266,9 +310,7 @@ def main():
         except (ValueError, TypeError):
             logger.error(f"TELEGRAM_ADMIN_ID ('{TELEGRAM_ADMIN_ID}') имеет неверный формат. Админ-команды не будут загружены.")
 
-    application.job_queue.run_repeating(check_and_post_news, interval=300, first=10);
-
-    threading.Thread(target=run_health_check_server, daemon=True).start()
+    application.job_queue.run_repeating(check_and_post_news, interval=300, first=10)
 
     application.run_polling()
 

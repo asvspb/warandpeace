@@ -105,3 +105,28 @@ def get_digests_for_period(days: int) -> list[str]:
             (days,)
         )
         return [item[0] for item in cursor.fetchall()]
+
+def get_stats() -> dict:
+    """
+    Возвращает статистику по опубликованным статьям.
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        
+        # Общее количество статей
+        cursor.execute("SELECT COUNT(*) FROM articles")
+        total_articles = cursor.fetchone()[0]
+        
+        # Последняя опубликованная статья
+        cursor.execute("SELECT title, published_at FROM articles ORDER BY published_at DESC LIMIT 1")
+        last_article_row = cursor.fetchone()
+        
+        last_article = {
+            "title": last_article_row[0] if last_article_row else "Нет",
+            "published_at": last_article_row[1] if last_article_row else "Нет"
+        }
+        
+        return {
+            "total_articles": total_articles,
+            "last_article": last_article
+        }
