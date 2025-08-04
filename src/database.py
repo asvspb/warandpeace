@@ -14,31 +14,36 @@ def get_db_connection():
 
 def init_db():
     """
-    Инициализирует базу данных, создает и обновляет таблицы.
-    - Добавляет поле 'summary' в таблицу 'articles'.
-    - Создает таблицу 'digests'.
+    Инициализирует базу данных, создавая две основные таблицы:
+    - 'articles': для хранения основной информации о статьях.
+    - 'summaries': для хранения сгенерированных резюме, связанных со статьями.
+    Также создает таблицу 'digests' для аналитических сводок.
     """
     with get_db_connection() as conn:
         cursor = conn.cursor()
 
-        # 1. Модификация таблицы articles
+        # 1. Таблица для статей (без резюме)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS articles (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 url TEXT NOT NULL UNIQUE,
                 title TEXT,
-                summary TEXT,
                 published_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        # Проверка и добавление колонки summary для обратной совместимости
-        try:
-            cursor.execute("ALTER TABLE articles ADD COLUMN summary TEXT;")
-        except sqlite3.OperationalError:
-            # Колонка уже существует
-            pass
 
-        # 2. Создание таблицы digests
+        # 2. Таблица для резюме
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS summaries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                article_id INTEGER NOT NULL,
+                summary_text TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (article_id) REFERENCES articles (id)
+            )
+        """)
+
+        # 3. Таблица для дайджестов (без изменений)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS digests (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,31 +54,66 @@ def init_db():
         """)
         conn.commit()
 
-def add_article(url: str, title: str, summary: str, published_at_iso: str | None = None):
-    """Добавляет новую статью и ее краткое содержание в базу данных."""
+def add_article(url: str, title: str, published_at_iso: str | None = None) -> int | None:
+    """
+    Добавляет новую статью в таблицу 'articles' и возвращает ее ID.
+    Если статья уже существует, просто возвращает ее ID.
+    """
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
+            # Сначала проверяем, существует ли статья
+            cursor.execute("SELECT id FROM articles WHERE url = ?", (url,))
+            existing_article = cursor.fetchone()
+            if existing_article:
+                return existing_article[0]
+
+            # Если нет, вставляем новую
             if published_at_iso:
                 cursor.execute(
-                    "INSERT INTO articles (url, title, summary, published_at) VALUES (?, ?, ?, ?)",
-                    (url, title, summary, published_at_iso)
+                    "INSERT INTO articles (url, title, published_at) VALUES (?, ?, ?)",
+                    (url, title, published_at_iso)
                 )
             else:
                 cursor.execute(
-                    "INSERT INTO articles (url, title, summary) VALUES (?, ?, ?)",
-                    (url, title, summary)
+                    "INSERT INTO articles (url, title) VALUES (?, ?)",
+                    (url, title)
                 )
             conn.commit()
+            return cursor.lastrowid
         except sqlite3.IntegrityError:
-            # Статья с таким URL уже существует
-            pass
+            # На случай, если гонка потоков все же произойдет
+            cursor.execute("SELECT id FROM articles WHERE url = ?", (url,))
+            return cursor.fetchone()[0]
+        except sqlite3.Error as e:
+            print(f"Database error in add_article: {e}")
+            return None
+
+def add_summary(article_id: int, summary_text: str):
+    """Добавляет резюме для статьи в таблицу 'summaries'."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                "INSERT INTO summaries (article_id, summary_text) VALUES (?, ?)",
+                (article_id, summary_text)
+            )
+            conn.commit()
+        except sqlite3.Error as e:
+            print(f"Database error in add_summary: {e}")
 
 def is_article_posted(url: str) -> bool:
     """Проверяет, была ли статья с таким URL уже опубликована."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT 1 FROM articles WHERE url = ?", (url,))
+        return cursor.fetchone() is not None
+
+def has_summary(article_id: int) -> bool:
+    """Проверяет, есть ли у статьи с данным ID резюме."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 FROM summaries WHERE article_id = ?", (article_id,))
         return cursor.fetchone() is not None
 
 def add_digest(period: str, content: str):
@@ -88,16 +128,17 @@ def add_digest(period: str, content: str):
 
 def get_summaries_for_period(days: int) -> list[str]:
     """
-    Извлекает сводки статей, опубликованные за последние `days` дней.
+    Извлекает тексты резюме за последние `days` дней.
     """
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT summary FROM articles WHERE published_at >= datetime('now', '-' || ? || ' days') AND summary IS NOT NULL ORDER BY published_at DESC",
-            (days,)
-        )
-        # fetchall() возвращает список кортежей [(summary1,), (summary2,)]
-        # Преобразуем его в простой список строк
+        cursor.execute("""
+            SELECT s.summary_text 
+            FROM summaries s
+            JOIN articles a ON s.article_id = a.id
+            WHERE a.published_at >= datetime('now', '-' || ? || ' days')
+            ORDER BY a.published_at DESC
+        """, (days,))
         return [item[0] for item in cursor.fetchall()]
 
 def get_digests_for_period(days: int) -> list[str]:
@@ -119,11 +160,12 @@ def get_stats() -> dict:
     with get_db_connection() as conn:
         cursor = conn.cursor()
         
-        # Общее количество статей
         cursor.execute("SELECT COUNT(*) FROM articles")
         total_articles = cursor.fetchone()[0]
         
-        # Последняя опубликованная статья
+        cursor.execute("SELECT COUNT(*) FROM summaries")
+        total_summaries = cursor.fetchone()[0]
+
         cursor.execute("SELECT title, published_at FROM articles ORDER BY published_at DESC LIMIT 1")
         last_article_row = cursor.fetchone()
         
@@ -134,5 +176,6 @@ def get_stats() -> dict:
         
         return {
             "total_articles": total_articles,
+            "total_summaries": total_summaries,
             "last_article": last_article
         }
