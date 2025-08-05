@@ -76,7 +76,7 @@ def backfill_articles(start_date: datetime, end_date: datetime, source: str = 'a
         #     print(f"Не удалось получить резюме для статьи: {title}. Пропускаю.")
         #     continue
 
-        add_article(url, title, summary, published_at_iso=published_at)
+        add_article(url, title, published_at_iso=published_at)
         processed_count += 1
         print(f"Добавлена статья: {title} ({published_at}) (без суммаризации)")
         time.sleep(0.1) # Уменьшаем задержку для быстрого заполнения
