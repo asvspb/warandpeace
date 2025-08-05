@@ -16,7 +16,7 @@ from config import (
     GOOGLE_API_KEYS, 
     OPENROUTER_API_KEY
 )
-from parser import get_articles_from_page, get_article_text
+from parser import get_articles_from_page, get_article_text, sync_archive
 from summarizer import (
     summarize_text_local, 
     create_digest, 
@@ -310,7 +310,11 @@ def main():
         except (ValueError, TypeError):
             logger.error(f"TELEGRAM_ADMIN_ID ('{TELEGRAM_ADMIN_ID}') имеет неверный формат. Админ-команды не будут загружены.")
 
+    # 5-минутная проверка главной страницы
     application.job_queue.run_repeating(check_and_post_news, interval=300, first=10)
+    
+    # 4-часовая полная синхронизация с архивом
+    application.job_queue.run_repeating(sync_archive, interval=14400, first=60)
 
     application.run_polling()
 

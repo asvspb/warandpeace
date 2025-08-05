@@ -5,12 +5,20 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '.'))
 
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 from urllib.parse import urljoin
 
 from config import NEWS_URL
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+
+# Относительный импорт, так как database.py находится в том же каталоге src
+from .database import (
+    init_db, 
+    add_article, 
+    get_latest_article_timestamp,
+    get_article_urls_in_range
+)
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')

@@ -194,3 +194,25 @@ def get_articles_without_summary() -> list[tuple[int, str, str]]:
             ORDER BY a.published_at ASC
         """)
         return cursor.fetchall()
+
+def get_latest_article_timestamp() -> str | None:
+    """
+    Возвращает временную метку самой последней статьи в базе данных.
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT MAX(published_at) FROM articles")
+        result = cursor.fetchone()
+        return result[0] if result else None
+
+def get_article_urls_in_range(start_date_iso: str, end_date_iso: str) -> set[str]:
+    """
+    Возвращает множество URL-адресов статей в заданном диапазоне дат.
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT url FROM articles WHERE published_at BETWEEN ? AND ?",
+            (start_date_iso, end_date_iso)
+        )
+        return {row[0] for row in cursor.fetchall()}
