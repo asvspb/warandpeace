@@ -28,3 +28,7 @@ bot_debug.log
 config_debug.log
 logs/
 parse_specific_date.log
+
+# Logs
+logs/
+devAI/
