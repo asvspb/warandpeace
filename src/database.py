@@ -179,3 +179,18 @@ def get_stats() -> dict:
             "total_summaries": total_summaries,
             "last_article": last_article
         }
+
+def get_articles_without_summary() -> list[tuple[int, str, str]]:
+    """
+    Возвращает список статей (id, url, title), у которых еще нет резюме.
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT a.id, a.url, a.title
+            FROM articles a
+            LEFT JOIN summaries s ON a.id = s.article_id
+            WHERE s.id IS NULL
+            ORDER BY a.published_at ASC
+        """)
+        return cursor.fetchall()

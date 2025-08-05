@@ -6,4 +6,4 @@ python-dotenv
 google-generativeai
 tenacity>=8.0.0
 pytest
-flask
+flasktenacity
