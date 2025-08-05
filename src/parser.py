@@ -13,7 +13,7 @@ from config import NEWS_URL
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 # Относительный импорт, так как database.py находится в том же каталоге src
-from .database import (
+from database import (
     init_db, 
     add_article, 
     get_latest_article_timestamp,
@@ -25,6 +25,18 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 ARCHIVE_SEARCH_BASE_URL = "https://www.warandpeace.ru/ru/archive/search/_/"
+
+def _parse_custom_date(date_str: str) -> datetime:
+    """
+    Парсит строку с датой, пробуя несколько распространенных форматов.
+    Поддерживает форматы 'ДД.ММ.ГГ ЧЧ:ММ' и 'ДД.ММ.ГГГГ ЧЧ:ММ'.
+    """
+    try:
+        # Сначала пробуем формат с 4-значным годом, как более современный
+        return datetime.strptime(date_str, '%d.%m.%Y %H:%M')
+    except ValueError:
+        # Если не получилось, пробуем с 2-значным годом
+        return datetime.strptime(date_str, '%d.%m.%y %H:%M')
 
 @retry(stop=stop_after_attempt(3),
        wait=wait_exponential(multiplier=1, min=4, max=10),
@@ -84,8 +96,8 @@ def get_articles_from_page(page=1):
                 # Извлечение и парсинг даты и времени
                 time_str = time_element.get_text(strip=True)
                 try:
-                    # Предполагаем формат "ЧЧ:ММ ДД.ММ.ГГГГ"
-                    dt_object = datetime.strptime(time_str, '%d.%m.%y %H:%M')
+                    # Используем новую функцию для большей гибкости
+                    dt_object = _parse_custom_date(time_str)
                     published_at_iso = dt_object.isoformat()
                 except ValueError:
                     logger.warning(f"Не удалось распарсить дату из '{time_str}'. Используется текущее время.")
@@ -138,8 +150,8 @@ def get_articles_from_archive_search(start_date_str: str, end_date_str: str, pag
                 # Извлечение и парсинг даты и времени
                 time_str = time_element.get_text(strip=True)
                 try:
-                    # Предполагаем формат "ЧЧ:ММ ДД.ММ.ГГГГ"
-                    dt_object = datetime.strptime(time_str, '%d.%m.%y %H:%M')
+                    # Используем новую функцию для большей гибкости
+                    dt_object = _parse_custom_date(time_str)
                     published_at_iso = dt_object.isoformat()
                 except ValueError:
                     logger.warning(f"Не удалось распарсить дату из '{time_str}'. Используется текущее время.")

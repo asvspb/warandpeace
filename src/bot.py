@@ -178,16 +178,25 @@ async def send_admin_notification(context: ContextTypes.DEFAULT_TYPE, message: s
 
 
 async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
-    """Основная логика проверки и публикации новостей."""
+    """Основная логика проверки и публикации новостей с улучшенным мониторингом."""
     logger.info("Начинаю проверку новостей...")
     user_id = context.job.user_id if context.job and hasattr(context.job, 'user_id') else None
 
     try:
         all_articles = await asyncio.to_thread(get_articles_from_page, 1)
         if not all_articles:
-            logger.info("Не удалось получить список статей.")
+            logger.warning("Парсер не вернул ни одной статьи с главной страницы.")
+            await send_admin_notification(
+                context,
+                "**Сбой парсера: get_articles_from_page**\n\n"
+                "Парсер не смог получить список статей с главной страницы. "
+                "Возможные причины:\n"
+                "- Изменилась верстка сайта.\n"
+                "- Сайт временно недоступен.\n"
+                "Рекомендуется запустить `/healthcheck` для проверки селекторов."
+            )
             if user_id:
-                await context.bot.send_message(chat_id=user_id, text="Не удалось получить список статей.")
+                await context.bot.send_message(chat_id=user_id, text="Не удалось получить список статей. Администратор уведомлен.")
             return
 
         new_articles = [a for a in all_articles if not is_article_posted(a["link"])]
@@ -200,7 +209,7 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
             return
 
         logger.info(f"Найдено {len(new_articles)} новых статей. Публикуем не более 3.")
-        articles_to_post = sorted(new_articles, key=lambda x: (x["date"], x["time"]))[-3:]
+        articles_to_post = sorted(new_articles, key=lambda x: (x["published_at"]))[-3:]
 
         chat = await context.bot.get_chat(chat_id=TELEGRAM_CHANNEL_ID)
         channel_username = f"@{chat.username}"
@@ -209,17 +218,33 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
         for article in articles_to_post:
             full_text = await asyncio.to_thread(get_article_text, article["link"])
             if not full_text:
+                logger.error(f"Не удалось получить текст статьи: {article['link']}")
+                await send_admin_notification(
+                    context,
+                    f"**Сбой парсера: get_article_text**\n\n"
+                    f"Не удалось получить полный текст для статьи:\n"
+                    f"[{article['title']}]({article['link']})\n\n"
+                    f"Статья пропущена. Вероятно, изменилась верстка страницы статьи."
+                )
                 continue
 
             summary = await asyncio.to_thread(summarize_text_local, full_text)
             if not summary:
+                logger.error(f"Не удалось сгенерировать резюме для статьи: {article['link']}")
+                await send_admin_notification(
+                    context,
+                    f"**Сбой суммаризатора**\n\n"
+                    f"Не удалось сгенерировать резюме для статьи:\n"
+                    f"[{article['title']}]({article['link']})\n\n"
+                    f"Статья пропущена. Проверьте логи и состояние API ключей (`/check_keys`)."
+                )
                 continue
 
             message = f"<b>{article['title']}</b>\n\n{summary} {channel_username}"
             await context.bot.send_message(
                 chat_id=TELEGRAM_CHANNEL_ID, text=message, parse_mode=ParseMode.HTML
             )
-            add_article(article["link"], article["title"], summary)
+            add_article(article["link"], article["title"], summary, article["published_at"])
             posted_count += 1
             await asyncio.sleep(15)
         
@@ -229,10 +254,10 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
         logger.info("Проверка новостей успешно завершена.")
 
     except Exception as e:
-        logger.critical(f"Критическая ошибка при проверке новостей: {e}")
-        await send_admin_notification(context, f"Критическая ошибка: {e}")
+        logger.critical(f"Критическая ошибка при проверке новостей: {e}", exc_info=True)
+        await send_admin_notification(context, f"**Критическая ошибка в `check_and_post_news`**\n\n`{e}`")
         if user_id:
-            await context.bot.send_message(chat_id=user_id, text=f"Произошла ошибка: {e}")
+            await context.bot.send_message(chat_id=user_id, text=f"Произошла критическая ошибка: {e}")
 
 
 async def handle_digest_request(update: Update, context: ContextTypes.DEFAULT_TYPE, days: int, period_name: str, is_annual: bool = False):
