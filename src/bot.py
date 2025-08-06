@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import threading
+import time
 from datetime import datetime
 from functools import partial
 import google.generativeai as genai
@@ -8,21 +9,22 @@ import google.generativeai as genai
 from telegram import BotCommand, BotCommandScopeChat, Update
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, ContextTypes, filters
+from apscheduler.schedulers.background import BackgroundScheduler
 
-from config import (
+from src.config (
     TELEGRAM_BOT_TOKEN, 
     TELEGRAM_CHANNEL_ID, 
     TELEGRAM_ADMIN_ID, 
-    GOOGLE_API_KEYS, 
-    OPENROUTER_API_KEY
+    GOOGLE_API_KEYS
 )
-from parser import get_articles_from_page, get_article_text, sync_archive
-from summarizer import (
+from scripts.sync_news_database import sync_news_database
+from src.parser import get_articles_from_page, get_article_text
+from src.summarizer (
     summarize_text_local, 
     create_digest, 
     create_annual_digest
 )
-from database import (
+from src.database (
     init_db, 
     add_article, 
     is_article_posted, 
@@ -31,7 +33,7 @@ from database import (
     get_digests_for_period,
     get_stats
 )
-from healthcheck import check_parser_health
+from src.healthcheck import check_parser_health
 
 # Настройка логирования
 logging.basicConfig(
@@ -51,6 +53,7 @@ async def post_init(application: Application):
     if TELEGRAM_ADMIN_ID:
         admin_commands = user_commands + [
             BotCommand("check_now", "Принудительно проверить новости"),
+            BotCommand("sync_db", "Запустить полную синхронизацию БД"),
             BotCommand("daily_digest", "Сводка за последние 24 часа"),
             BotCommand("weekly_digest", "Сводка за последние 7 дней"),
             BotCommand("monthly_digest", "Сводка за последние 30 дней"),
@@ -87,15 +90,13 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         next_check_time = jobs[0].next_t.strftime("%Y-%m-%d %H:%M:%S")
 
     google_keys_status = "Активны" if GOOGLE_API_KEYS else "Не найдены"
-    openrouter_key_status = "Активен" if OPENROUTER_API_KEY else "Не найден"
 
     status_text = (
         f"Бот работает.\n"
         f"Последняя проверка новостей: {last_check_time}\n"
         f"Следующая проверка новостей: {next_check_time}\n\n"
         f"Статус ключей:\n"
-        f"- Google API: {google_keys_status}\n"
-        f"- OpenRouter API: {openrouter_key_status}"
+        f"- Google API: {google_keys_status}"
     )
     await update.message.reply_text(status_text)
 
@@ -104,6 +105,14 @@ async def check_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Принудительно запускает проверку новостей."""
     await update.message.reply_text("Начинаю принудительную проверку новостей...")
     context.job_queue.run_once(check_and_post_news, 1, user_id=update.effective_user.id)
+
+
+async def sync_db_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Принудительно запускает полную синхронизацию базы данных."""
+    await update.message.reply_text("Начинаю полную синхронизацию базы данных. Это может занять некоторое время...")
+    # Запускаем синхронизацию в фоновом потоке, чтобы не блокировать бота
+    threading.Thread(target=sync_news_database).start()
+    await update.message.reply_text("Процесс синхронизации запущен в фоновом режиме. По завершении в консоли появятся логи.")
 
 
 async def healthcheck(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -302,10 +311,17 @@ async def handle_digest_request(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 def main():
-    """Основная функция, запускающая бота."""
+    """Основная функция, запускающая бота и планировщик."""
     logger.info("Бот запускается...")
     init_db()
 
+    # --- Настройка планировщика APScheduler ---
+    scheduler = BackgroundScheduler(timezone="Europe/Moscow")
+    scheduler.add_job(sync_news_database, 'interval', hours=4, id="full_db_sync")
+    scheduler.start()
+    logger.info("Планировщик для полной синхронизации БД запущен (каждые 4 часа).")
+
+    # --- Настройка и запуск Telegram-бота ---
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).post_init(post_init).build()
 
     application.bot_data["last_check_time"] = "Никогда"
@@ -319,6 +335,7 @@ def main():
             admin_filter = filters.User(user_id=admin_id_int)
             
             application.add_handler(CommandHandler("check_now", check_now, filters=admin_filter))
+            application.add_handler(CommandHandler("sync_db", sync_db_command, filters=admin_filter))
             application.add_handler(CommandHandler("check_keys", check_api_keys, filters=admin_filter))
             application.add_handler(CommandHandler("healthcheck", healthcheck, filters=admin_filter))
             application.add_handler(CommandHandler("posted_stats", posted_stats, filters=admin_filter))
@@ -335,14 +352,14 @@ def main():
         except (ValueError, TypeError):
             logger.error(f"TELEGRAM_ADMIN_ID ('{TELEGRAM_ADMIN_ID}') имеет неверный формат. Админ-команды не будут загружены.")
 
-    # 5-минутная проверка главной страницы
+    # 5-минутная проверка главной страницы для быстрой публикации
     application.job_queue.run_repeating(check_and_post_news, interval=300, first=10)
     
-    # 4-часовая полная синхронизация с архивом
-    application.job_queue.run_repeating(sync_archive, interval=14400, first=60)
-
+    logger.info("Запускаю бота в режиме polling...")
     application.run_polling()
 
+    # Чистое завершение работы планировщика при остановке бота
+    scheduler.shutdown()
 
 if __name__ == "__main__":
     main()
