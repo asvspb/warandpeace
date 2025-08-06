@@ -30,7 +30,7 @@
     TELEGRAM_ADMIN_ID=123456789
 
     # Ключи API для суммирования
-    # Можно указать несколько ключей через запятую
+    # Можно указать несколько ключей через запятую для Google API
     GOOGLE_API_KEYS=your_google_api_key_1,your_google_api_key_2
     OPENROUTER_API_KEY=your_openrouter_api_key
     ```
