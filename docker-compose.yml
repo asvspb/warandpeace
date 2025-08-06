@@ -10,13 +10,3 @@ services:
     volumes:
       - ./database:/app/database
     restart: unless-stopped
-
-  healthchecker:
-    build: .
-    container_name: warandpeace-healthchecker
-    command: python3 src/healthcheck.py
-    env_file:
-      - .env
-    restart: unless-stopped
-    depends_on:
-      - telegram-bot
