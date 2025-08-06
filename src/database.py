@@ -33,8 +33,7 @@ def init_db():
                 published_at TIMESTAMP NOT NULL,
                 summary_text TEXT,
                 status TEXT NOT NULL DEFAULT 'new', -- new, summarizing, summarized, failed, posted
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
         # Индексы для ускорения выборок по статусу и дате
@@ -82,11 +81,11 @@ def get_article_by_url(url: str) -> sqlite3.Row | None:
         return cursor.fetchone()
 
 def set_article_status(article_id: int, status: str):
-    """Обновляет статус статьи и время изменения."""
+    """Обновляет статус статьи."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "UPDATE articles SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            "UPDATE articles SET status = ? WHERE id = ?",
             (status, article_id)
         )
         conn.commit()
@@ -96,7 +95,7 @@ def update_article_summary(article_id: int, summary_text: str):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "UPDATE articles SET summary_text = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            "UPDATE articles SET summary_text = ? WHERE id = ?",
             (summary_text, article_id)
         )
         conn.commit()

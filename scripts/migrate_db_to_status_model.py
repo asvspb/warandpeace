@@ -1,117 +1,79 @@
 import sqlite3
 import logging
 
-# Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 DATABASE_NAME = "database/articles.db"
-BACKUP_NAME = "database/articles.db.backup"
+
+def add_column_if_not_exists(cursor, table_name, column_name, column_def):
+    """Проверяет и добавляет колонку, если она не существует."""
+    cursor.execute(f"PRAGMA table_info({table_name})")
+    columns = [row[1] for row in cursor.fetchall()]
+    if column_name not in columns:
+        logger.info(f"Добавляю колонку '{column_name}' в таблицу '{table_name}'...")
+        cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_def}")
+    else:
+        logger.info(f"Колонка '{column_name}' уже существует в таблице '{table_name}'.")
 
 def migrate_db():
     """
-    Выполняет миграцию старой схемы БД (articles + summaries) к новой (articles со статусом).
-    1. Переименовывает старую таблицу articles в old_articles.
-    2. Создает новую таблицу articles с правильной структурой.
-    3. Копирует данные из old_articles, обогащая их данными из summaries.
-    4. Удаляет временные таблицы.
+    Выполняет идемпотентную миграцию базы данных к последней версии.
+    Проверяет наличие таблиц и колонок перед их созданием или изменением.
     """
-    logger.info("Начинаю миграцию базы данных...")
+    logger.info("Запуск проверки и миграции базы данных...")
     
-    # Создаем бэкап на всякий случай
     try:
-        with open(DATABASE_NAME, 'rb') as src, open(BACKUP_NAME, 'wb') as dst:
-            dst.write(src.read())
-        logger.info(f"Резервная копия базы данных создана: {BACKUP_NAME}")
-    except FileNotFoundError:
-        logger.warning("Исходная база данных не найдена. Пропускаю создание резервной копии.")
-        # Если базы нет, миграция не нужна, но init_db() должен быть вызван
-        return
+        with sqlite3.connect(DATABASE_NAME) as conn:
+            cursor = conn.cursor()
 
-    conn = sqlite3.connect(DATABASE_NAME)
-    cursor = conn.cursor()
+            # Проверяем, существует ли таблица 'articles' вообще
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='articles'")
+            if not cursor.fetchone():
+                logger.info("Таблица 'articles' не найдена. Создаю ее с нуля.")
+                cursor.execute("""
+                    CREATE TABLE articles (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        url TEXT NOT NULL UNIQUE,
+                        title TEXT NOT NULL,
+                        published_at TIMESTAMP NOT NULL,
+                        summary_text TEXT,
+                        status TEXT NOT NULL DEFAULT 'new',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                logger.info("Таблица 'articles' успешно создана.")
 
-    try:
-        # --- Шаг 1: Проверить, нужна ли миграция ---
-        cursor.execute("PRAGMA table_info(articles)")
-        columns = [row[1] for row in cursor.fetchall()]
-        if 'status' in columns:
-            logger.info("Миграция не требуется. Поле 'status' уже существует в таблице articles.")
-            return
+            # Добавляем недост��ющие колонки в таблицу 'articles'
+            add_column_if_not_exists(cursor, 'articles', 'status', "TEXT NOT NULL DEFAULT 'new'")
+            add_column_if_not_exists(cursor, 'articles', 'summary_text', 'TEXT')
+            add_column_if_not_exists(cursor, 'articles', 'created_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
+            add_column_if_not_exists(cursor, 'articles', 'updated_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
 
-        # --- Шаг 2: Переименовать старую таблицу articles ---
-        logger.info("Переименовываю 'articles' в 'old_articles'...")
-        cursor.execute("ALTER TABLE articles RENAME TO old_articles")
-
-        # --- Шаг 3: Создать новую таблицу articles ---
-        logger.info("Создаю новую таблицу 'articles' со статусной моделью...")
-        cursor.execute("""
-            CREATE TABLE articles (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                url TEXT NOT NULL UNIQUE,
-                title TEXT NOT NULL,
-                published_at TIMESTAMP NOT NULL,
-                summary_text TEXT,
-                status TEXT NOT NULL DEFAULT 'new', 
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        # --- Шаг 4: Перенести данные, обогащая их из summaries ---
-        logger.info("Переношу данные из 'old_articles' и 'summaries' в новую таблицу...")
-        
-        # Сначала получаем все резюме в словарь для быстрого доступа
-        summaries = {}
-        try:
-            cursor.execute("SELECT article_id, summary_text FROM summaries")
-            for row in cursor.fetchall():
-                summaries[row[0]] = row[1]
-            logger.info(f"Найдено {len(summaries)} резюме в старой таблице.")
-        except sqlite3.OperationalError:
-            logger.warning("Таблица 'summaries' не найдена. Миграция будет выполнена без резюме.")
-
-        # Переносим статьи, определяя статус
-        cursor.execute("SELECT id, url, title, published_at FROM old_articles")
-        articles_to_migrate = cursor.fetchall()
-        
-        migrated_count = 0
-        for article in articles_to_migrate:
-            article_id, url, title, published_at = article
-            summary = summaries.get(article_id)
+            # Проверяем, существует ли старая таблица 'summaries'
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='summaries'")
+            if cursor.fetchone():
+                logger.info("Обнаружена старая таблица 'summaries'. Переношу данные...")
+                # Получаем все резюме в словарь
+                summaries = {row[0]: row[1] for row in cursor.execute("SELECT article_id, summary_text FROM summaries").fetchall()}
+                
+                # Обновляем 'articles', добавляя резюме и меняя статус
+                for article_id, summary in summaries.items():
+                    cursor.execute("UPDATE articles SET summary_text = ?, status = 'posted' WHERE id = ? AND summary_text IS NULL", (summary, article_id))
+                
+                logger.info("Удаляю старую таблицу 'summaries'...")
+                cursor.execute("DROP TABLE summaries")
             
-            # Статус: если есть резюме, то 'posted', иначе 'new' (предполагаем, что раз есть резюме, то запощено)
-            status = 'posted' if summary else 'new'
-            
-            cursor.execute("""
-                INSERT INTO articles (id, url, title, published_at, summary_text, status) 
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (article_id, url, title, published_at, summary, status))
-            migrated_count += 1
+            # Создаем индексы, если их нет
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_articles_status ON articles (status)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_articles_published_at ON articles (published_at)")
 
-        logger.info(f"Успешно перенесено {migrated_count} статей.")
-
-        # --- Шаг 5: Удалить старые таблицы ---
-        logger.info("Удаляю временные таблицы 'old_articles' и 'summaries'...")
-        cursor.execute("DROP TABLE old_articles")
-        try:
-            cursor.execute("DROP TABLE summaries")
-        except sqlite3.OperationalError:
-            pass # Таблицы могло и не быть
-
-        # --- Шаг 6: Создать индексы ---
-        logger.info("Создаю индексы для новой таблицы...")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_articles_status ON articles (status)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_articles_published_at ON articles (published_at)")
-
-        conn.commit()
-        logger.info("Миграция базы данных успешно завершена!")
+            conn.commit()
+            logger.info("Проверка и миграция базы данных успешно завершены.")
 
     except sqlite3.Error as e:
-        logger.error(f"Произошла ошибка во время миграции: {e}")
-        conn.rollback()
-    finally:
-        conn.close()
+        logger.error(f"Произошла ошибка во время миграции: {e}", exc_info=True)
 
 if __name__ == "__main__":
     migrate_db()

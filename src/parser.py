@@ -13,12 +13,7 @@ from config import NEWS_URL
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 # Относительный импорт, так как database.py находится в том же каталоге src
-from database import (
-    init_db, 
-    add_article, 
-    get_latest_article_timestamp,
-    get_article_urls_in_range
-)
+from database import add_article, get_article_by_url
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -224,36 +219,3 @@ def fetch_articles_in_date_range(start_date: datetime, end_date: datetime) -> li
     logger.info(f"Сбор статей из архива завершен. Всего найдено {len(all_articles)} статей.")
     return all_articles
 
-def reconcile_archive_with_db():
-    """
-    Сверяет архив новостей с базой данных и добавляет недостающие статьи.
-    Начинает с даты последней статьи в БД и идет до текущего момента.
-    """
-    init_db()
-    
-    latest_timestamp_str = get_latest_article_timestamp()
-    if latest_timestamp_str:
-        start_date = datetime.fromisoformat(latest_timestamp_str)
-    else:
-        # Если база пуста, начинаем с какой-то разумной даты, например, 30 дней назад
-        start_date = datetime.now() - timedelta(days=30)
-        logger.info("База данных пуста. Начинаю сверку за последние 30 дней.")
-
-    end_date = datetime.now()
-    
-    # Получаем все URL из БД в этом диапазоне для быстрой проверки
-    existing_urls = get_article_urls_in_range(start_date.isoformat(), end_date.isoformat())
-    logger.info(f"В базе данных уже есть {len(existing_urls)} статей в диапазоне с {start_date.strftime('%Y-%m-%d')} по {end_date.strftime('%Y-%m-%d')}.")
-
-    # Собираем статьи из архива
-    archive_articles = fetch_articles_in_date_range(start_date, end_date)
-    
-    added_count = 0
-    for article in archive_articles:
-        if article['link'] not in existing_urls:
-            add_article(article['link'], article['title'], article['published_at'])
-            added_count += 1
-            logger.info(f"Добавлена новая статья: {article['title']}")
-    
-    logger.info(f"Сверка завершена. Добавлено {added_count} новых статей.")
-    return added_count

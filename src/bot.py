@@ -23,7 +23,6 @@ from database import (
 from parser import get_articles_from_page, get_article_text
 from summarizer import summarize_text_local, create_digest, create_annual_digest
 from healthcheck import check_parser_health
-from scripts.migrate_db_to_status_model import migrate_db
 
 # Настройка логирования
 logging.basicConfig(
@@ -222,8 +221,6 @@ async def handle_digest_request(update: Update, context: ContextTypes.DEFAULT_TY
 
 def main():
     """Основная функция, запускающая бота."""
-    logger.info("Запуск миграции базы данных...")
-    migrate_db()
     logger.info("Инициализация базы данных...")
     init_db()
 
