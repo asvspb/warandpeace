@@ -24,16 +24,16 @@ async def check_telegram_token():
     except Exception as e:
         print(f"❌ Токен Telegram: Произошла ошибка: {e}")
 
-async def check_google_api_key(key: str, index: int):
-    """Проверяет ключ Google API, пытаясь создать модель."""
+async def check_google_api_key(key: str, key_name: str):
+    """Проверяет ключ Google API, используя его имя для вывода."""
     try:
         genai.configure(api_key=key)
         model = genai.GenerativeModel('gemini-1.5-flash-latest')
         # Небольшой тестовый вызов для проверки аутентификации
         await model.generate_content_async("test", generation_config=genai.types.GenerationConfig(max_output_tokens=1))
-        print(f"✅ Ключ GOOGLE_API_KEY_{index}: Действителен.")
+        print(f"✅ Ключ {key_name}: Действителен.")
     except Exception as e:
-        print(f"❌ Ключ GOOGLE_API_KEY_{index}: Недействителен или истек. Ошибка: {e}")
+        print(f"❌ Ключ {key_name}: Недействителен или истек. Ошибка: {e}")
 
 async def check_openrouter_api_key(key: str):
     """Проверяет ключ OpenRouter API, делая тестовый запрос."""
@@ -62,30 +62,34 @@ async def main():
     await check_telegram_token()
     print("\n--- Проверка ключей API ---")
 
-    google_keys = [
-        os.getenv("GOOGLE_API_KEY"),
-        os.getenv("GOOGLE_API_KEY_1"),
-        os.getenv("GOOGLE_API_KEY_2"),
-        os.getenv("GOOGLE_API_KEY_3"),
+    # Список всех имен переменных для ключей Google
+    google_key_names = [
+        "GOOGLE_API_KEY", "GOOGLE_API_KEY_1", "GOOGLE_API_KEY_2",
+        "GOOGLE_API_KEY_3", "GOOGLE_API_KEY_4", "GOOGLE_API_KEY_5",
+        "GOOGLE_API_KEY_6", "GOOGLE_API_KEY_7"
     ]
     openrouter_key = os.getenv("OPENROUTER_API_KEY")
 
     tasks = []
-    has_any_key = False
+    found_keys = False
 
-    for i, key in enumerate(google_keys):
+    # Создаем задачи для проверки каждого найденного ключа Google
+    for key_name in google_key_names:
+        key = os.getenv(key_name)
         if key:
-            has_any_key = True
-            tasks.append(check_google_api_key(key, i + 1))
+            found_keys = True
+            tasks.append(check_google_api_key(key, key_name))
 
+    # Задача для проверки ключа OpenRouter
     if openrouter_key:
-        has_any_key = True
+        found_keys = True
         tasks.append(check_openrouter_api_key(openrouter_key))
 
-    if not has_any_key:
+    if not found_keys:
         print("Не найдены ключи API для проверки.")
         return
 
+    # Асинхронно запускаем все задачи на проверку
     await asyncio.gather(*tasks)
 
 if __name__ == "__main__":
