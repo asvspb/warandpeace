@@ -97,17 +97,20 @@ def is_article_posted(url: str) -> bool:
         cursor.execute("SELECT 1 FROM articles WHERE url = ?", (url,))
         return cursor.fetchone() is not None
 
-def get_summaries_for_period(days: int) -> List[str]:
-    """Извлекает тексты резюме статей за последние `days` дней."""
+def get_summaries_for_date_range(start_date: str, end_date: str) -> List[str]:
+    """
+    Извлекает тексты резюме статей за указанный диапазон дат.
+    Даты должны быть в формате ISO 'YYYY-MM-DD HH:MM:SS'.
+    """
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT summary_text 
             FROM articles
             WHERE summary_text IS NOT NULL
-              AND published_at >= datetime('now', '-' || ? || ' days')
+              AND published_at BETWEEN ? AND ?
             ORDER BY published_at DESC
-        """, (days,))
+        """, (start_date, end_date))
         return [item['summary_text'] for item in cursor.fetchall()]
 
 def add_digest(period: str, content: str):

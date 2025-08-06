@@ -1,6 +1,7 @@
 import unittest
 import sqlite3
 import os
+from datetime import datetime
 from src.database import init_db, add_article, is_article_posted, get_db_connection
 
 class TestDatabase(unittest.TestCase):
@@ -36,7 +37,9 @@ class TestDatabase(unittest.TestCase):
         """Тест: статья успешно добавляется в БД."""
         url = "http://example.com/article1"
         title = "Test Article 1"
-        add_article(url, title)
+        published_at = datetime.now().isoformat()
+        summary = "Test Summary"
+        add_article(url, title, published_at, summary)
 
         with get_db_connection() as conn:
             cursor = conn.cursor()
@@ -50,9 +53,11 @@ class TestDatabase(unittest.TestCase):
         """Тест: добавление дубликата статьи не вызывает ошибок и не создает новую запись."""
         url = "http://example.com/article2"
         title = "Test Article 2"
+        published_at = datetime.now().isoformat()
+        summary = "Test Summary"
         
-        add_article(url, title) # Первое добавление
-        add_article(url, title) # Попытка добавить дубликат
+        add_article(url, title, published_at, summary) # Первое добавление
+        add_article(url, title, published_at, summary) # Попытка добавить дубликат
 
         with get_db_connection() as conn:
             cursor = conn.cursor()
@@ -64,8 +69,10 @@ class TestDatabase(unittest.TestCase):
         """Тест: функция правильно определяет опубликованные и неопубликованные статьи."""
         posted_url = "http://example.com/posted"
         not_posted_url = "http://example.com/not-posted"
+        published_at = datetime.now().isoformat()
+        summary = "Test Summary"
         
-        add_article(posted_url, "Posted Article")
+        add_article(posted_url, "Posted Article", published_at, summary)
 
         self.assertTrue(is_article_posted(posted_url), "Функция неверно определила опубликованную статью.")
         self.assertFalse(is_article_posted(not_posted_url), "Функция неверно определила неопубликованную статью.")

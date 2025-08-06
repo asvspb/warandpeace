@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import partial
 import requests
 
@@ -13,7 +13,7 @@ from database import (
     init_db,
     add_article,
     is_article_posted,
-    get_summaries_for_period,
+    get_summaries_for_date_range,
     get_digests_for_period,
     add_digest,
     get_stats,
@@ -115,9 +115,9 @@ async def post_init(application: Application):
 
     if TELEGRAM_ADMIN_ID:
         admin_commands = user_commands + [
-            BotCommand("daily_digest", "Сводка за последние 24 часа"),
-            BotCommand("weekly_digest", "Сводка за последние 7 дней"),
-            BotCommand("monthly_digest", "Сводка за последние 30 дней"),
+            BotCommand("daily_digest", "Дайджест за вчерашний день"),
+            BotCommand("weekly_digest", "Дайджест за прошлую неделю"),
+            BotCommand("monthly_digest", "Дайджест за прошлый месяц"),
             BotCommand("annual_digest", "Итоговая годовая сводка"),
             BotCommand("healthcheck", "Проверить доступность сайта"),
         ]
@@ -138,7 +138,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показывает статистику из базы данных."""
-    stats = get_stats()
+    stats = await asyncio.to_thread(get_stats)
     
     status_text = (
         f"**Статистика базы данных:**\n\n"
@@ -168,7 +168,7 @@ async def healthcheck(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = "Проверяю доступность сайта..."
     await update.message.reply_text(message)
     try:
-        response = await asyncio.to_thread(requests.get, NEWS_URL, {'timeout': 10})
+        response = await asyncio.to_thread(requests.get, NEWS_URL, timeout=10)
         if response.status_code == 200:
             await update.message.reply_text("✅ Сайт warandpeace.ru доступен.")
         else:
@@ -178,37 +178,155 @@ async def healthcheck(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Не удалось подключиться к сайту: {e}")
 
 
-async def handle_digest_request(update: Update, context: ContextTypes.DEFAULT_TYPE, days: int, period_name: str, is_annual: bool = False):
-    """Общая логика для создания и отправки дайджестов."""
+# --- Digest Commands ---
+
+async def daily_digest_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Создает и отправляет дайджест за предыдущий календарный день."""
     user_id = update.effective_user.id
-    await context.bot.send_message(chat_id=user_id, text=f"Начинаю подготовку сводки за {period_name}...")
+    await context.bot.send_message(chat_id=user_id, text="Начинаю подготовку дайджеста за вчерашний день...")
 
     try:
-        if is_annual:
-            source_data = get_digests_for_period(365)
-            if not source_data:
-                await context.bot.send_message(chat_id=user_id, text="Нет дайджестов за год для анализа.")
-                return
-            digest_content = await asyncio.to_thread(create_annual_digest, source_data)
-            period_db_name = "annual"
-        else:
-            source_data = get_summaries_for_period(days)
-            if not source_data:
-                await context.bot.send_message(chat_id=user_id, text=f"Нет статей за указанный период ({period_name}).")
-                return
-            digest_content = await asyncio.to_thread(create_digest, source_data, period_name)
-            period_db_name = period_name.lower()
+        today = datetime.now()
+        yesterday = today - timedelta(days=1)
+        start_date = yesterday.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_date = yesterday.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+        summaries = await asyncio.to_thread(
+            get_summaries_for_date_range,
+            start_date.isoformat(),
+            end_date.isoformat()
+        )
+
+        if not summaries:
+            await context.bot.send_message(chat_id=user_id, text=f"За {yesterday.strftime('%d.%m.%Y')} не найдено статей для создания дайджеста.")
+            return
+
+        period_name = f"вчера, {yesterday.strftime('%d %B %Y')}"
+        digest_content = await asyncio.to_thread(create_digest, summaries, period_name)
 
         if not digest_content:
             await context.bot.send_message(chat_id=user_id, text="Не удалось создать аналитическую сводку.")
             return
 
-        add_digest(period_db_name, digest_content)
-        await context.bot.send_message(chat_id=user_id, text=f"**Аналитическая сводка за {period_name}:**\n\n{digest_content}", parse_mode=ParseMode.MARKDOWN)
-
+        await asyncio.to_thread(add_digest, f"daily_{yesterday.strftime('%Y-%m-%d')}", digest_content)
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=f"**Аналитический дайджест за {period_name}:**\n\n{digest_content}",
+            parse_mode=ParseMode.MARKDOWN
+        )
     except Exception as e:
-        logger.error(f"Ошибка при создании дайджеста за {period_name}: {e}", exc_info=True)
+        logger.error(f"Ошибка при создании суточного дайджеста: {e}", exc_info=True)
         await context.bot.send_message(chat_id=user_id, text=f"Произошла ошибка при создании сводки: {e}")
+
+
+async def weekly_digest_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Создает и отправляет дайджест за предыдущую полную неделю (Пн-Вс)."""
+    user_id = update.effective_user.id
+    await context.bot.send_message(chat_id=user_id, text="Начинаю подготовку дайджеста за прошлую неделю...")
+
+    try:
+        today = datetime.now()
+        last_sunday = today - timedelta(days=today.isoweekday())
+        end_of_last_week = last_sunday.replace(hour=23, minute=59, second=59, microsecond=999999)
+        start_of_last_week = (end_of_last_week - timedelta(days=6)).replace(hour=0, minute=0, second=0, microsecond=0)
+
+        summaries = await asyncio.to_thread(
+            get_summaries_for_date_range,
+            start_of_last_week.isoformat(),
+            end_of_last_week.isoformat()
+        )
+
+        if not summaries:
+            await context.bot.send_message(chat_id=user_id, text="За прошлую неделю не найдено статей для создания дайджеста.")
+            return
+
+        period_name = f"прошлую неделю ({start_of_last_week.strftime('%d.%m')} - {end_of_last_week.strftime('%d.%m.%Y')})"
+        digest_content = await asyncio.to_thread(create_digest, summaries, period_name)
+
+        if not digest_content:
+            await context.bot.send_message(chat_id=user_id, text="Не удалось создать аналитическую сводку.")
+            return
+
+        await asyncio.to_thread(add_digest, f"weekly_{start_of_last_week.strftime('%Y-%m-%d')}", digest_content)
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=f"**Аналитический дайджест за {period_name}:**\n\n{digest_content}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    except Exception as e:
+        logger.error(f"Ошибка при создании недельного дайджеста: {e}", exc_info=True)
+        await context.bot.send_message(chat_id=user_id, text=f"Произошла ошибка при создании сводки: {e}")
+
+
+async def monthly_digest_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Создает и отправляет дайджест за предыдущий полный месяц."""
+    user_id = update.effective_user.id
+    await context.bot.send_message(chat_id=user_id, text="Начинаю подготовку дайджеста за прошлый месяц...")
+
+    try:
+        today = datetime.now()
+        first_day_of_current_month = today.replace(day=1)
+        last_day_of_last_month = first_day_of_current_month - timedelta(days=1)
+        first_day_of_last_month = last_day_of_last_month.replace(day=1)
+
+        start_date = first_day_of_last_month.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_date = last_day_of_last_month.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+        summaries = await asyncio.to_thread(
+            get_summaries_for_date_range,
+            start_date.isoformat(),
+            end_date.isoformat()
+        )
+
+        if not summaries:
+            await context.bot.send_message(chat_id=user_id, text="За прошлый месяц не найдено статей для создания дайджеста.")
+            return
+
+        period_name = f"прошлый месяц ({start_date.strftime('%B %Y')})"
+        digest_content = await asyncio.to_thread(create_digest, summaries, period_name)
+
+        if not digest_content:
+            await context.bot.send_message(chat_id=user_id, text="Не удалось создать аналитическую сводку.")
+            return
+
+        await asyncio.to_thread(add_digest, f"monthly_{start_date.strftime('%Y-%m')}", digest_content)
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=f"**Аналитический дайджест за {period_name}:**\n\n{digest_content}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    except Exception as e:
+        logger.error(f"Ошибка при создании месячного дайджеста: {e}", exc_info=True)
+        await context.bot.send_message(chat_id=user_id, text=f"Произошла ошибка при создании сводки: {e}")
+
+
+async def annual_digest_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Создает и отправляет годовой дайджест на основе дайджестов за год."""
+    user_id = update.effective_user.id
+    await context.bot.send_message(chat_id=user_id, text="Начинаю подготовку итоговой годовой сводки...")
+
+    try:
+        digests = await asyncio.to_thread(get_digests_for_period, 365)
+        if not digests:
+            await context.bot.send_message(chat_id=user_id, text="Нет дайджестов за год для анализа.")
+            return
+
+        digest_content = await asyncio.to_thread(create_annual_digest, digests)
+        if not digest_content:
+            await context.bot.send_message(chat_id=user_id, text="Не удалось создать годовую сводку.")
+            return
+
+        year = datetime.now().year - 1
+        await asyncio.to_thread(add_digest, f"annual_{year}", digest_content)
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=f"**Итоговая аналитическая сводка за {year} год:**\n\n{digest_content}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    except Exception as e:
+        logger.error(f"Ошибка при создании годового дайджеста: {e}", exc_info=True)
+        await context.bot.send_message(chat_id=user_id, text=f"Произошла ошибка при создании сводки: {e}")
+
 
 def main():
     """Основная функция, запускающая бота."""
@@ -225,10 +343,10 @@ def main():
     if TELEGRAM_ADMIN_ID:
         admin_filter = filters.User(user_id=int(TELEGRAM_ADMIN_ID))
         application.add_handler(CommandHandler("healthcheck", healthcheck, filters=admin_filter))
-        application.add_handler(CommandHandler("daily_digest", partial(handle_digest_request, days=1, period_name="сутки"), filters=admin_filter))
-        application.add_handler(CommandHandler("weekly_digest", partial(handle_digest_request, days=7, period_name="неделю"), filters=admin_filter))
-        application.add_handler(CommandHandler("monthly_digest", partial(handle_digest_request, days=30, period_name="месяц"), filters=admin_filter))
-        application.add_handler(CommandHandler("annual_digest", partial(handle_digest_request, days=365, period_name="год", is_annual=True), filters=admin_filter))
+        application.add_handler(CommandHandler("daily_digest", daily_digest_command, filters=admin_filter))
+        application.add_handler(CommandHandler("weekly_digest", weekly_digest_command, filters=admin_filter))
+        application.add_handler(CommandHandler("monthly_digest", monthly_digest_command, filters=admin_filter))
+        application.add_handler(CommandHandler("annual_digest", annual_digest_command, filters=admin_filter))
 
     application.run_polling()
 
