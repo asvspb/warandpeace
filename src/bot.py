@@ -11,27 +11,28 @@ from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, ContextTypes, filters
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from src.config (
-    TELEGRAM_BOT_TOKEN, 
-    TELEGRAM_CHANNEL_ID, 
-    TELEGRAM_ADMIN_ID, 
-    GOOGLE_API_KEYS
+from config import (
+    TELEGRAM_BOT_TOKEN,
+    TELEGRAM_CHANNEL_ID,
+    TELEGRAM_ADMIN_ID,
+    GOOGLE_API_KEYS,
 )
 from scripts.sync_news_database import sync_news_database
 from src.parser import get_articles_from_page, get_article_text
-from src.summarizer (
-    summarize_text_local, 
-    create_digest, 
-    create_annual_digest
+from summarizer import (
+    summarize_text_local,
+    create_digest,
+    create_annual_digest,
 )
-from src.database (
-    init_db, 
-    add_article, 
-    is_article_posted, 
+from database import (
+    init_db,
+    add_article,
+    is_article_posted,
     add_digest,
     get_summaries_for_period,
     get_digests_for_period,
-    get_stats
+    get_stats,
+    add_summary,
 )
 from src.healthcheck import check_parser_health
 
@@ -253,8 +254,10 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(
                 chat_id=TELEGRAM_CHANNEL_ID, text=message, parse_mode=ParseMode.HTML
             )
-            add_article(article["link"], article["title"], summary, article["published_at"])
-            posted_count += 1
+            article_id = add_article(article["link"], article["title"], article["published_at"])
+            if article_id:
+                add_summary(article_id, summary)
+                posted_count += 1
             await asyncio.sleep(15)
         
         if user_id:
