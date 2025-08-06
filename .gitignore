@@ -13,6 +13,7 @@ pip-wheel-metadata/
 
 # Database
 /database/*.db
+*.backup
 
 # Temporary files
 temp/

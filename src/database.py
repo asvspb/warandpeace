@@ -1,49 +1,47 @@
 import sqlite3
 from contextlib import contextmanager
+import logging
 
 DATABASE_NAME = "database/articles.db"
+logger = logging.getLogger(__name__)
 
 @contextmanager
 def get_db_connection():
     """Контекстный менеджер для соединения с БД."""
-    conn = sqlite3.connect(DATABASE_NAME)
     try:
+        conn = sqlite3.connect(DATABASE_NAME)
+        conn.row_factory = sqlite3.Row
         yield conn
+    except sqlite3.Error as e:
+        logger.error(f"Database connection error: {e}")
+        raise
     finally:
-        conn.close()
+        if conn:
+            conn.close()
 
 def init_db():
     """
-    Инициализирует базу данных, создавая две основные таблицы:
-    - 'articles': для хранения основной информации о статьях.
-    - 'summaries': для хранения сгенерированных резюме, связанных со статьями.
-    Также создает таблицу 'digests' для аналитических сводок.
+    Инициализирует базу данных, создавая таблицу articles с полем статуса.
     """
     with get_db_connection() as conn:
         cursor = conn.cursor()
-
-        # 1. Таблица для статей (без резюме)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS articles (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 url TEXT NOT NULL UNIQUE,
-                title TEXT,
-                published_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        # 2. Таблица для резюме
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS summaries (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                article_id INTEGER NOT NULL,
-                summary_text TEXT NOT NULL,
+                title TEXT NOT NULL,
+                published_at TIMESTAMP NOT NULL,
+                summary_text TEXT,
+                status TEXT NOT NULL DEFAULT 'new', -- new, summarizing, summarized, failed, posted
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (article_id) REFERENCES articles (id)
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-
-        # 3. Таблица для дайджестов (без изменений)
+        # Индексы для ускорения выборок по статусу и дате
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_articles_status ON articles (status)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_articles_published_at ON articles (published_at)")
+        
+        # Таблица для дайджестов остается без изменений
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS digests (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,71 +51,79 @@ def init_db():
             )
         """)
         conn.commit()
+        logger.info("База данных успешно инициализирована со схемой 'status'.")
 
-def add_article(url: str, title: str, published_at_iso: str | None = None) -> int | None:
+def add_article(url: str, title: str, published_at_iso: str) -> int | None:
     """
-    Добавляет новую статью в таблицу 'articles' и возвращает ее ID.
-    Если статья уже существует, просто возвращает ее ID.
+    Добавляет новую статью со статусом 'new'.
+    Возвращает ID статьи, если она была добавлена, иначе None.
     """
     with get_db_connection() as conn:
-        cursor = conn.cursor()
         try:
-            # Сначала проверяем, существует ли статья
-            cursor.execute("SELECT id FROM articles WHERE url = ?", (url,))
-            existing_article = cursor.fetchone()
-            if existing_article:
-                return existing_article[0]
-
-            # Если нет, вставляем новую
-            if published_at_iso:
-                cursor.execute(
-                    "INSERT INTO articles (url, title, published_at) VALUES (?, ?, ?)",
-                    (url, title, published_at_iso)
-                )
-            else:
-                cursor.execute(
-                    "INSERT INTO articles (url, title) VALUES (?, ?)",
-                    (url, title)
-                )
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO articles (url, title, published_at, status) VALUES (?, ?, ?, 'new')",
+                (url, title, published_at_iso)
+            )
             conn.commit()
             return cursor.lastrowid
         except sqlite3.IntegrityError:
-            # На случай, если гонка потоков все же произойдет
-            cursor.execute("SELECT id FROM articles WHERE url = ?", (url,))
-            return cursor.fetchone()[0]
+            logger.warning(f"Статья с URL {url} уже существует в базе. Пропускаю добавление.")
+            return None
         except sqlite3.Error as e:
-            print(f"Database error in add_article: {e}")
+            logger.error(f"Ошибка при добавлении статьи {url}: {e}")
             return None
 
-def add_summary(article_id: int, summary_text: str):
-    """Добавляет резюме для статьи в таблицу 'summaries'."""
+def get_article_by_url(url: str) -> sqlite3.Row | None:
+    """Находит статью по ее URL."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        try:
-            cursor.execute(
-                "INSERT INTO summaries (article_id, summary_text) VALUES (?, ?)",
-                (article_id, summary_text)
-            )
-            conn.commit()
-        except sqlite3.Error as e:
-            print(f"Database error in add_summary: {e}")
+        cursor.execute("SELECT * FROM articles WHERE url = ?", (url,))
+        return cursor.fetchone()
 
-def is_article_posted(url: str) -> bool:
-    """Проверяет, была ли статья с таким URL уже опубликована."""
+def set_article_status(article_id: int, status: str):
+    """Обновляет статус статьи и время изменения."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT 1 FROM articles WHERE url = ?", (url,))
-        return cursor.fetchone() is not None
+        cursor.execute(
+            "UPDATE articles SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (status, article_id)
+        )
+        conn.commit()
 
-def has_summary(article_id: int) -> bool:
-    """Проверяет, есть ли у статьи с данным ID резюме."""
+def update_article_summary(article_id: int, summary_text: str):
+    """Добавляет резюме к статье."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT 1 FROM summaries WHERE article_id = ?", (article_id,))
-        return cursor.fetchone() is not None
+        cursor.execute(
+            "UPDATE articles SET summary_text = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (summary_text, article_id)
+        )
+        conn.commit()
 
+def get_articles_by_status(status: str, limit: int = 10) -> list[sqlite3.Row]:
+    """Получает список статей с определенным статусом."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM articles WHERE status = ? ORDER BY published_at ASC LIMIT ?", (status, limit))
+        return cursor.fetchall()
+
+def get_summaries_for_period(days: int) -> list[str]:
+    """Извлекает тексты резюме опубликованных статей за последние `days` дней."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT summary_text 
+            FROM articles
+            WHERE status = 'posted' AND summary_text IS NOT NULL
+              AND published_at >= datetime('now', '-' || ? || ' days')
+            ORDER BY published_at DESC
+        """, (days,))
+        return [item['summary_text'] for item in cursor.fetchall()]
+
+# Функции для дайджестов и статистики, адаптированные под новую схему
 def add_digest(period: str, content: str):
-    """Сохраняет новый сгенерированный дайджест в базу данных."""
+    """Сохраняет новый дайджест."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -126,93 +132,36 @@ def add_digest(period: str, content: str):
         )
         conn.commit()
 
-def get_summaries_for_period(days: int) -> list[str]:
-    """
-    Извлекает тексты резюме за последние `days` дней.
-    """
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT s.summary_text 
-            FROM summaries s
-            JOIN articles a ON s.article_id = a.id
-            WHERE a.published_at >= datetime('now', '-' || ? || ' days')
-            ORDER BY a.published_at DESC
-        """, (days,))
-        return [item[0] for item in cursor.fetchall()]
-
 def get_digests_for_period(days: int) -> list[str]:
-    """
-    Извлекает содержимое дайджестов, созданных за последние `days` дней.
-    """
+    """Извлекает дайджесты за последние `days` дней."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT content FROM digests WHERE created_at >= datetime('now', '-' || ? || ' days') ORDER BY created_at DESC",
             (days,)
         )
-        return [item[0] for item in cursor.fetchall()]
+        return [item['content'] for item in cursor.fetchall()]
 
 def get_stats() -> dict:
-    """
-    Возвращает статистику по опубликованным статьям.
-    """
+    """Возвращает статистику по статьям в базе."""
+    stats = {}
     with get_db_connection() as conn:
         cursor = conn.cursor()
         
+        # Общее количество статей
         cursor.execute("SELECT COUNT(*) FROM articles")
-        total_articles = cursor.fetchone()[0]
+        stats['total_articles'] = cursor.fetchone()[0]
         
-        cursor.execute("SELECT COUNT(*) FROM summaries")
-        total_summaries = cursor.fetchone()[0]
+        # Статистика по статусам
+        cursor.execute("SELECT status, COUNT(*) FROM articles GROUP BY status")
+        stats['by_status'] = {row['status']: row['COUNT(*)'] for row in cursor.fetchall()}
 
-        cursor.execute("SELECT title, published_at FROM articles ORDER BY published_at DESC LIMIT 1")
+        # Последняя опубликованная статья
+        cursor.execute("SELECT title, published_at FROM articles WHERE status = 'posted' ORDER BY published_at DESC LIMIT 1")
         last_article_row = cursor.fetchone()
         
-        last_article = {
-            "title": last_article_row[0] if last_article_row else "Нет",
-            "published_at": last_article_row[1] if last_article_row else "Нет"
+        stats['last_posted_article'] = {
+            "title": last_article_row['title'] if last_article_row else "Нет",
+            "published_at": last_article_row['published_at'] if last_article_row else "Нет"
         }
-        
-        return {
-            "total_articles": total_articles,
-            "total_summaries": total_summaries,
-            "last_article": last_article
-        }
-
-def get_articles_without_summary() -> list[tuple[int, str, str]]:
-    """
-    Возвращает список статей (id, url, title), у которых еще нет резюме.
-    """
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT a.id, a.url, a.title
-            FROM articles a
-            LEFT JOIN summaries s ON a.id = s.article_id
-            WHERE s.id IS NULL
-            ORDER BY a.published_at ASC
-        """)
-        return cursor.fetchall()
-
-def get_latest_article_timestamp() -> str | None:
-    """
-    Возвращает временную метку самой последней статьи в базе данных.
-    """
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT MAX(published_at) FROM articles")
-        result = cursor.fetchone()
-        return result[0] if result else None
-
-def get_article_urls_in_range(start_date_iso: str, end_date_iso: str) -> set[str]:
-    """
-    Возвращает множество URL-адресов статей в заданном диапазоне дат.
-    """
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT url FROM articles WHERE published_at BETWEEN ? AND ?",
-            (start_date_iso, end_date_iso)
-        )
-        return {row[0] for row in cursor.fetchall()}
+        return stats
