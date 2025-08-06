@@ -218,7 +218,7 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
             return
 
         logger.info(f"Найдено {len(new_articles)} новых статей. Публикуем не более 3.")
-        articles_to_post = sorted(new_articles, key=lambda x: (x["published_at"]))[-3:]
+        articles_to_post = sorted(new_articles, key=lambda x: x["published_at"])[:3]
 
         chat = await context.bot.get_chat(chat_id=TELEGRAM_CHANNEL_ID)
         channel_username = f"@{chat.username}"
@@ -315,7 +315,9 @@ def main():
     logger.info("Бот запускается...")
     init_db()
 
-    # --- Настройка планировщика APScheduler ---
+    # --- Первичная синхронизация при запуске ---
+    logger.info("Запуск первичной синхронизации базы данных перед стартом...")
+    sync_news_database()
     scheduler = BackgroundScheduler(timezone="Europe/Moscow")
     scheduler.add_job(sync_news_database, 'interval', hours=4, id="full_db_sync")
     scheduler.start()
