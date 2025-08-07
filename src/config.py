@@ -26,6 +26,15 @@ if TELEGRAM_ADMIN_IDS_STR:
     except ValueError:
         raise ValueError("Переменная TELEGRAM_ADMIN_IDS должна быть списком ID (чисел), разделенных запятыми.")
 
+PREMIUM_USER_IDS_STR = os.getenv("PREMIUM_USER_IDS")
+PREMIUM_USER_IDS = []
+if PREMIUM_USER_IDS_STR:
+    try:
+        PREMIUM_USER_IDS = [int(user_id.strip()) for user_id in PREMIUM_USER_IDS_STR.split(',')]
+    except ValueError:
+        raise ValueError("Переменная PREMIUM_USER_IDS должна быть списком ID (чисел), разделенных запятыми.")
+
+
 # --- Ключи API ---
 # Динамически собираем все ключи Google API из переменных окружения
 GOOGLE_API_KEYS = []
