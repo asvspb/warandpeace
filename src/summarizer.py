@@ -8,7 +8,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # Импорт ключей из обновленного конфига
-from config import GOOGLE_API_KEYS
+from config import GOOGLE_API_KEYS, GEMINI_MODEL_NAME
 
 # Глобальный индекс для перебора ключей
 current_gemini_key_index = 0
@@ -18,7 +18,7 @@ def configure_gemini_model(api_key: str):
     """Конфигурирует модель Gemini с заданным ключом."""
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        model = genai.GenerativeModel(GEMINI_MODEL_NAME)
         logger.info(f"Модель '{model.model_name}' успешно сконфигурирована.")
         return model
     except Exception as e:

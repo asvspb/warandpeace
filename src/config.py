@@ -34,6 +34,9 @@ if main_key:
 # --- Настройки парсера ---
 NEWS_URL = "https://www.warandpeace.ru/ru/news/"
 
+# --- Настройки AI моделей ---
+GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "models/gemini-1.5-flash-latest")
+
 # --- Проверка ключевых переменных ---
 if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID, TELEGRAM_ADMIN_ID]):
     missing_vars = []
