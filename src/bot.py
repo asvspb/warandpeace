@@ -7,7 +7,7 @@ from telegram import BotCommand, BotCommandScopeChat, Update
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, ContextTypes, filters
 
-from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID, TELEGRAM_ADMIN_IDS, NEWS_URL, PREMIUM_USER_IDS
+from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID, TELEGRAM_ADMIN_IDS, NEWS_URL, PREMIUM_DIGEST_CHANNEL_ID
 from database import (
     init_db,
     add_article,
@@ -181,34 +181,6 @@ async def healthcheck(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- Digest Commands ---
 
-async def send_digest_to_subscribers(context: ContextTypes.DEFAULT_TYPE, digest_content: str, period_name: str) -> int:
-    """
-    Отправляет сгенерированный дайджест всем премиум-пользователям.
-
-    Args:
-        context: Контекст бота.
-        digest_content: Текст дайджеста.
-        period_name: Название периода (напр., "вчера, 07 августа 2025").
-
-    Returns:
-        Количество успешных отправок.
-    """
-    if not PREMIUM_USER_IDS:
-        logger.info("Список премиум-пользователей пуст. Рассылка дайджеста не производится.")
-        return 0
-
-    message = f"**Аналитический дайджест за {period_name}:**\n\n{digest_content}"
-    successful_sends = 0
-    for user_id in PREMIUM_USER_IDS:
-        try:
-            await context.bot.send_message(chat_id=user_id, text=message, parse_mode=ParseMode.MARKDOWN)
-            logger.info(f"Дайджест успешно отправлен премиум-пользователю {user_id}.")
-            successful_sends += 1
-            await asyncio.sleep(0.5)  # Небольшая задержка для избежания rate-лимитов
-        except Exception as e:
-            logger.warning(f"Не удалось отправить дайджест пользователю {user_id}: {e}. Возможно, пользователь не запускал бота.")
-    return successful_sends
-
 async def daily_digest_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Создает и отправляет дайджест за предыдущий календарный день."""
     admin_id = update.effective_user.id
@@ -239,16 +211,16 @@ async def daily_digest_command(update: Update, context: ContextTypes.DEFAULT_TYP
 
         await asyncio.to_thread(add_digest, f"daily_{yesterday.strftime('%Y-%m-%d')}", digest_content)
 
-        sent_count = await send_digest_to_subscribers(context, digest_content, period_name)
-        total_subscribers = len(PREMIUM_USER_IDS)
+        if PREMIUM_DIGEST_CHANNEL_ID:
+            message_to_send = f"**Аналитический дайджест за {period_name}:**\n\n{digest_content}"
+            await context.bot.send_message(chat_id=PREMIUM_DIGEST_CHANNEL_ID, text=message_to_send, parse_mode=ParseMode.MARKDOWN)
+            admin_report = f"✅ Дайджест за {period_name} успешно опубликован в премиум-канале."
+        else:
+            admin_report = f"✅ Дайджест за {period_name} готов.\n" \
+                           f"⚠️ Премиум-канал не настроен, дайджест не опубликован."
 
-        await context.bot.send_message(
-            chat_id=admin_id,
-            text=f"✅ Дайджест за {period_name} готов и разослан.\n"
-                 f"Успешно отправлено: {sent_count} из {total_subscribers} премиум-пользователей.\n\n"
-                 f"--- Preview ---\n{digest_content}",
-            parse_mode=ParseMode.MARKDOWN
-        )
+        await context.bot.send_message(chat_id=admin_id, text=f"{admin_report}\n\n--- Preview ---\n{digest_content}", parse_mode=ParseMode.MARKDOWN)
+
     except Exception as e:
         logger.error(f"Ошибка при создании суточного дайджеста: {e}", exc_info=True)
         await context.bot.send_message(chat_id=admin_id, text=f"Произошла ошибка при создании сводки: {e}")
@@ -283,16 +255,16 @@ async def weekly_digest_command(update: Update, context: ContextTypes.DEFAULT_TY
 
         await asyncio.to_thread(add_digest, f"weekly_{start_of_last_week.strftime('%Y-%m-%d')}", digest_content)
 
-        sent_count = await send_digest_to_subscribers(context, digest_content, period_name)
-        total_subscribers = len(PREMIUM_USER_IDS)
+        if PREMIUM_DIGEST_CHANNEL_ID:
+            message_to_send = f"**Аналитический дайджест за {period_name}:**\n\n{digest_content}"
+            await context.bot.send_message(chat_id=PREMIUM_DIGEST_CHANNEL_ID, text=message_to_send, parse_mode=ParseMode.MARKDOWN)
+            admin_report = f"✅ Дайджест за {period_name} успешно опубликован в премиум-канале."
+        else:
+            admin_report = f"✅ Дайджест за {period_name} готов.\n" \
+                           f"⚠️ Премиум-канал не настроен, дайджест не опубликован."
 
-        await context.bot.send_message(
-            chat_id=admin_id,
-            text=f"✅ Дайджест за {period_name} готов и разослан.\n"
-                 f"Успешно отправлено: {sent_count} из {total_subscribers} премиум-пользователей.\n\n"
-                 f"--- Preview ---\n{digest_content}",
-            parse_mode=ParseMode.MARKDOWN
-        )
+        await context.bot.send_message(chat_id=admin_id, text=f"{admin_report}\n\n--- Preview ---\n{digest_content}", parse_mode=ParseMode.MARKDOWN)
+
     except Exception as e:
         logger.error(f"Ошибка при создании недельного дайджеста: {e}", exc_info=True)
         await context.bot.send_message(chat_id=admin_id, text=f"Произошла ошибка при создании сводки: {e}")
@@ -330,16 +302,16 @@ async def monthly_digest_command(update: Update, context: ContextTypes.DEFAULT_T
 
         await asyncio.to_thread(add_digest, f"monthly_{start_date.strftime('%Y-%m')}", digest_content)
 
-        sent_count = await send_digest_to_subscribers(context, digest_content, period_name)
-        total_subscribers = len(PREMIUM_USER_IDS)
+        if PREMIUM_DIGEST_CHANNEL_ID:
+            message_to_send = f"**Аналитический дайджест за {period_name}:**\n\n{digest_content}"
+            await context.bot.send_message(chat_id=PREMIUM_DIGEST_CHANNEL_ID, text=message_to_send, parse_mode=ParseMode.MARKDOWN)
+            admin_report = f"✅ Дайджест за {period_name} успешно опубликован в премиум-канале."
+        else:
+            admin_report = f"✅ Дайджест за {period_name} готов.\n" \
+                           f"⚠️ Премиум-канал не настроен, дайджест не опубликован."
 
-        await context.bot.send_message(
-            chat_id=admin_id,
-            text=f"✅ Дайджест за {period_name} готов и разослан.\n"
-                 f"Успешно отправлено: {sent_count} из {total_subscribers} премиум-пользователей.\n\n"
-                 f"--- Preview ---\n{digest_content}",
-            parse_mode=ParseMode.MARKDOWN
-        )
+        await context.bot.send_message(chat_id=admin_id, text=f"{admin_report}\n\n--- Preview ---\n{digest_content}", parse_mode=ParseMode.MARKDOWN)
+
     except Exception as e:
         logger.error(f"Ошибка при создании месячного дайджеста: {e}", exc_info=True)
         await context.bot.send_message(chat_id=admin_id, text=f"Произошла ошибка при создании сводки: {e}")
@@ -364,16 +336,16 @@ async def annual_digest_command(update: Update, context: ContextTypes.DEFAULT_TY
         await asyncio.to_thread(add_digest, f"annual_{year}", digest_content)
 
         period_name = f"{year} год"
-        sent_count = await send_digest_to_subscribers(context, digest_content, period_name)
-        total_subscribers = len(PREMIUM_USER_IDS)
+        if PREMIUM_DIGEST_CHANNEL_ID:
+            message_to_send = f"**Итоговая аналитическая сводка за {year} год:**\n\n{digest_content}"
+            await context.bot.send_message(chat_id=PREMIUM_DIGEST_CHANNEL_ID, text=message_to_send, parse_mode=ParseMode.MARKDOWN)
+            admin_report = f"✅ Итоговая сводка за {year} год успешно опубликована в премиум-канале."
+        else:
+            admin_report = f"✅ Итоговая сводка за {year} год готова.\n" \
+                           f"⚠️ Премиум-канал не настроен, дайджест не опубликован."
 
-        await context.bot.send_message(
-            chat_id=admin_id,
-            text=f"✅ Итоговая сводка за {year} год готова и разослана.\n"
-                 f"Успешно отправлено: {sent_count} из {total_subscribers} премиум-пользователей.\n\n"
-                 f"--- Preview ---\n{digest_content}",
-            parse_mode=ParseMode.MARKDOWN
-        )
+        await context.bot.send_message(chat_id=admin_id, text=f"{admin_report}\n\n--- Preview ---\n{digest_content}", parse_mode=ParseMode.MARKDOWN)
+
     except Exception as e:
         logger.error(f"Ошибка при создании годового дайджеста: {e}", exc_info=True)
         await context.bot.send_message(chat_id=admin_id, text=f"Произошла ошибка при создании сводки: {e}")
