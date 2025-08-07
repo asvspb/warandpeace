@@ -1,8 +1,18 @@
 import os
-from dotenv import load_dotenv, find_dotenv
+import sys
+from dotenv import load_dotenv
 
-# Ищем .env файл и загружаем переменные, перезаписывая существующие
-load_dotenv(find_dotenv(), override=True)
+# Определяем абсолютный путь к директории, где находится этот файл (src)
+src_dir = os.path.dirname(os.path.abspath(__file__))
+# Определяем корень проекта (на один уровень выше)
+project_root = os.path.dirname(src_dir)
+
+# Явно указываем путь к .env файлу в корне проекта
+dotenv_path = os.path.join(project_root, '.env')
+
+# Загружаем переменные из найденного .env файла
+# Этот подход надежнее, чем find_dotenv(), при запусках из разных директорий.
+load_dotenv(dotenv_path=dotenv_path, override=True)
 
 # --- Основные переменные окружения ---
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")

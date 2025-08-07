@@ -22,42 +22,55 @@ def get_db_connection():
 
 def init_db():
     """
-    Инициализирует базу данных, создавая таблицы.
-    Таблица 'articles' теперь не содержит поля 'status'.
+    Инициализирует или обновляет схему базы данных.
+    - Добавляет таблицу 'articles' со всеми необходимыми полями, включая 'backfill_status'.
+    - Выполняет миграцию данных из старой схемы, если это необходимо.
     """
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        # Удаляем старый индекс, если он существует
-        cursor.execute("DROP INDEX IF EXISTS idx_articles_status")
-        
-        # Создаем новую таблицу без поля status
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS articles_new (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                url TEXT NOT NULL UNIQUE,
-                title TEXT NOT NULL,
-                published_at TIMESTAMP NOT NULL,
-                summary_text TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        
-        # Копируем данные из старой таблицы в новую, если старая существует
-        try:
-            cursor.execute("INSERT INTO articles_new (id, url, title, published_at, summary_text, created_at) SELECT id, url, title, published_at, summary_text, created_at FROM articles")
-            cursor.execute("DROP TABLE articles")
-        except sqlite3.OperationalError:
-            # Это произойдет, если таблицы 'articles' не существует (первый запуск)
-            logger.info("Таблица 'articles' не найдена, создается новая структура.")
-            pass
 
-        # Переименовываем новую таблицу
-        cursor.execute("ALTER TABLE articles_new RENAME TO articles")
+        # 1. Проверяем, существует ли уже новая колонка
+        cursor.execute("PRAGMA table_info(articles)")
+        columns = [column['name'] for column in cursor.fetchall()]
+        
+        if 'backfill_status' in columns:
+            logger.info("Колонка 'backfill_status' уже существует. Миграция не требуется.")
+        else:
+            logger.info("Колонка 'backfill_status' не найдена. Начинаем миграцию схемы...")
+            
+            # 2. Создаем новую таблицу с правильной схемой
+            cursor.execute("""
+                CREATE TABLE articles_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    url TEXT NOT NULL UNIQUE,
+                    title TEXT NOT NULL,
+                    published_at TIMESTAMP NOT NULL,
+                    summary_text TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    backfill_status TEXT CHECK(backfill_status IN ('success', 'failed', 'skipped'))
+                )
+            """)
 
-        # Создаем индекс для published_at
+            # 3. Копируем данные из старой таблицы (если она существует)
+            try:
+                # Выбираем только те колонки, которые есть в обеих таблицах
+                cursor.execute("INSERT INTO articles_new (id, url, title, published_at, summary_text, created_at) SELECT id, url, title, published_at, summary_text, created_at FROM articles")
+                # 4. Удаляем старую таблицу
+                cursor.execute("DROP TABLE articles")
+                logger.info("Старая таблица 'articles' удалена.")
+            except sqlite3.OperationalError:
+                logger.info("Старая таблица 'articles' не найдена, будет создана новая.")
+                pass  # Игнорируем ошибку, если таблицы 'articles' не было
+
+            # 5. Переименовываем новую таблицу
+            cursor.execute("ALTER TABLE articles_new RENAME TO articles")
+            logger.info("Таблица 'articles' успешно обновлена до новой схемы.")
+
+        # 6. Создаем индексы
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_articles_published_at ON articles (published_at)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_articles_backfill_status ON articles (backfill_status)")
 
-        # Таблица для дайджестов остается без изменений
+        # 7. Создаем таблицу для дайджестов (без изменений)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS digests (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,8 +79,57 @@ def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        
         conn.commit()
-        logger.info("База данных успешно инициализирована (схема без статусов).")
+        logger.info("Инициализация базы данных завершена.")
+
+
+def get_articles_for_backfill(status: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    Получает статьи для обработки.
+
+    Args:
+        status: Если 'failed', возвращает только статьи с ошибками.
+                Если None, возвращает статьи, которые еще не обрабатывались.
+
+    Returns:
+        Список словарей со статьями.
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        if status == 'failed':
+            query = "SELECT * FROM articles WHERE backfill_status = 'failed' ORDER BY published_at DESC"
+            cursor.execute(query)
+        else:
+            query = "SELECT * FROM articles WHERE backfill_status IS NULL ORDER BY published_at DESC"
+            cursor.execute(query)
+        
+        articles = cursor.fetchall()
+        return [dict(row) for row in articles]
+
+def update_article_backfill_status(article_id: int, status: str, summary: Optional[str] = None):
+    """
+    Обновляет статус backfill для статьи и ее резюме, если применимо.
+
+    Args:
+        article_id: ID статьи для обновления.
+        status: Новый статус ('success', 'failed', 'skipped').
+        summary: Текст резюме, если статус 'success'.
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        if status == 'success' and summary:
+            cursor.execute(
+                "UPDATE articles SET backfill_status = ?, summary_text = ? WHERE id = ?",
+                (status, summary, article_id)
+            )
+        else:
+            cursor.execute(
+                "UPDATE articles SET backfill_status = ? WHERE id = ?",
+                (status, article_id)
+            )
+        conn.commit()
+        logger.info(f"Статус статьи {article_id} обновлен на '{status}'.")
 
 def add_article(url: str, title: str, published_at_iso: str, summary: str) -> Optional[int]:
     """
@@ -134,14 +196,37 @@ def get_digests_for_period(days: int) -> List[str]:
         return [item['content'] for item in cursor.fetchall()]
 
 def get_stats() -> Dict[str, Any]:
-    """Возвращает статистику по статьям в базе."""
-    stats: Dict[str, Any] = {}
+    """Возвращает подробную статистику по статьям в базе."""
+    stats: Dict[str, Any] = {
+        'total_articles': 0,
+        'success': 0,
+        'failed': 0,
+        'skipped': 0,
+        'pending': 0, # Статьи, у которых статус IS NULL
+        'last_posted_article': {
+            'title': "Нет",
+            'published_at': "Нет"
+        }
+    }
     with get_db_connection() as conn:
         cursor = conn.cursor()
         
+        # 1. Общее количество статей
         cursor.execute("SELECT COUNT(*) FROM articles")
-        stats['total_articles'] = cursor.fetchone()[0]
-        
+        total = cursor.fetchone()
+        if total:
+            stats['total_articles'] = total[0]
+
+        # 2. Статистика по статусам
+        # Заменяем NULL на 'pending' для удобства подсчета
+        query = "SELECT COALESCE(backfill_status, 'pending') as status, COUNT(*) as count FROM articles GROUP BY status"
+        cursor.execute(query)
+        status_counts = cursor.fetchall()
+        for row in status_counts:
+            if row['status'] in stats:
+                stats[row['status']] = row['count']
+
+        # 3. Последняя опубликованная статья
         cursor.execute("SELECT title, published_at FROM articles ORDER BY published_at DESC LIMIT 1")
         last_article_row = cursor.fetchone()
         
@@ -150,9 +235,5 @@ def get_stats() -> Dict[str, Any]:
                 "title": last_article_row['title'],
                 "published_at": last_article_row['published_at']
             }
-        else:
-            stats['last_posted_article'] = {
-                "title": "Нет",
-                "published_at": "Нет"
-            }
-        return stats
+            
+    return stats

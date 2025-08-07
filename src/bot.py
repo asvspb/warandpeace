@@ -1,7 +1,6 @@
 import asyncio
 import logging
 from datetime import datetime, timedelta
-from functools import partial
 import requests
 
 from telegram import BotCommand, BotCommandScopeChat, Update

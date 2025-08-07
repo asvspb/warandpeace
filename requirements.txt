@@ -7,3 +7,4 @@ google-generativeai
 tenacity>=8.0.0
 pytest
 APScheduler
+click
