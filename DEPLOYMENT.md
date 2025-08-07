@@ -46,10 +46,6 @@ cd warandpeace
     # Для публичного: @username
     # Для частного: -1001234567890 (как получить: https://stackoverflow.com/a/32572159)
     TELEGRAM_CHANNEL_ID=@your_channel_username
-    
-    # (Опционально) Ваш личный Telegram User ID для получения уведомлений об ошибках.
-    # Можно получить у бота @userinfobot.
-    TELEGRAM_ADMIN_ID=123456789
 
     # --- API для обработки текста ---
     # Укажите хотя бы один ключ API для работы функции суммирования.

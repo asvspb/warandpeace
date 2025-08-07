@@ -17,7 +17,14 @@ load_dotenv(dotenv_path=dotenv_path, override=True)
 # --- Основные переменные окружения ---
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID")
-TELEGRAM_ADMIN_ID = os.getenv("TELEGRAM_ADMIN_ID")
+
+TELEGRAM_ADMIN_IDS_STR = os.getenv("TELEGRAM_ADMIN_IDS")
+TELEGRAM_ADMIN_IDS = []
+if TELEGRAM_ADMIN_IDS_STR:
+    try:
+        TELEGRAM_ADMIN_IDS = [int(admin_id.strip()) for admin_id in TELEGRAM_ADMIN_IDS_STR.split(',')]
+    except ValueError:
+        raise ValueError("Переменная TELEGRAM_ADMIN_IDS должна быть списком ID (чисел), разделенных запятыми.")
 
 # --- Ключи API ---
 # Динамически собираем все ключи Google API из переменных окружения
@@ -38,11 +45,10 @@ NEWS_URL = "https://www.warandpeace.ru/ru/news/"
 GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "models/gemini-1.5-flash-latest")
 
 # --- Проверка ключевых переменных ---
-if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID, TELEGRAM_ADMIN_ID]):
+if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID]):
     missing_vars = []
     if not TELEGRAM_BOT_TOKEN: missing_vars.append("TELEGRAM_BOT_TOKEN")
     if not TELEGRAM_CHANNEL_ID: missing_vars.append("TELEGRAM_CHANNEL_ID")
-    if not TELEGRAM_ADMIN_ID: missing_vars.append("TELEGRAM_ADMIN_ID")
     raise ValueError(f"Ключевые переменные Telegram не заданы: {', '.join(missing_vars)}. Проверьте ваш .env файл.")
 
 if not GOOGLE_API_KEYS:

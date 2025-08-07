@@ -7,7 +7,7 @@ from telegram import BotCommand, BotCommandScopeChat, Update
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, ContextTypes, filters
 
-from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID, TELEGRAM_ADMIN_ID, NEWS_URL
+from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID, TELEGRAM_ADMIN_IDS, NEWS_URL
 from database import (
     init_db,
     add_article,
@@ -112,7 +112,7 @@ async def post_init(application: Application):
     ]
     await application.bot.set_my_commands(user_commands)
 
-    if TELEGRAM_ADMIN_ID:
+    if TELEGRAM_ADMIN_IDS:
         admin_commands = user_commands + [
             BotCommand("daily_digest", "Дайджест за вчерашний день"),
             BotCommand("weekly_digest", "Дайджест за прошлую неделю"),
@@ -120,12 +120,14 @@ async def post_init(application: Application):
             BotCommand("annual_digest", "Итоговая годовая сводка"),
             BotCommand("healthcheck", "Проверить доступность сайта"),
         ]
-        try:
-            await application.bot.set_my_commands(
-                admin_commands, scope=BotCommandScopeChat(chat_id=int(TELEGRAM_ADMIN_ID))
-            )
-        except Exception as e:
-            logger.error(f"Не удалось установить команды для администратора: {e}")
+        for admin_id in TELEGRAM_ADMIN_IDS:
+            try:
+                await application.bot.set_my_commands(
+                    admin_commands, scope=BotCommandScopeChat(chat_id=admin_id)
+                )
+                logger.info(f"Админ-команды успешно установлены для администратора {admin_id}.")
+            except Exception as e:
+                logger.error(f"Не удалось установить команды для администратора {admin_id}: {e}")
 
     # Запуск единой задачи
     application.job_queue.run_repeating(check_and_post_news, interval=300, first=10, name="CheckAndPostNews")
@@ -339,8 +341,8 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("status", status))
 
-    if TELEGRAM_ADMIN_ID:
-        admin_filter = filters.User(user_id=int(TELEGRAM_ADMIN_ID))
+    if TELEGRAM_ADMIN_IDS:
+        admin_filter = filters.User(user_id=TELEGRAM_ADMIN_IDS)
         application.add_handler(CommandHandler("healthcheck", healthcheck, filters=admin_filter))
         application.add_handler(CommandHandler("daily_digest", daily_digest_command, filters=admin_filter))
         application.add_handler(CommandHandler("weekly_digest", weekly_digest_command, filters=admin_filter))
