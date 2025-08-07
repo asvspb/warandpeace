@@ -11,12 +11,11 @@ Additional features include periodic digests, health-checks for the parser and A
   - `summarizer.py` – local & remote LLM summarisation utilities.
   - `database.py` – SQLite helper functions (init, CRUD, statistics) used by the bot.
   - `config.py` – loads environment variables, API keys and settings.
-  - `healthcheck.py` – validates that the parser CSS selectors still match the target site.
-  - Aux files (`get_todays_articles.py`, etc.) – one-off helpers.
+  - `/healthcheck` command in bot – validates that the parser CSS selectors still match the target site and checks API key validity.
+  - Aux files – one-off helpers.
 - `tests/` – pytest test-suite for parser, summariser and DB helpers.
 - `scripts/` – CLI helpers (e.g. DB migrations, manual triggers).
 - `database/` – SQLite database file lives here (mounted volume in Docker).
-- `logs/` – runtime logs (Docker volume).
 - `Dockerfile`, `docker-compose.yml` – containerisation and orchestration.
 - `.env` – secrets & runtime configuration (never commit real values).
 
@@ -37,7 +36,7 @@ Key separation of concerns:
 - **CI**: run `pytest -q` in Docker build or GitHub Actions.
 
 #### 4. Code Style
-- **Language**: Python 3.11+, favour type hints (`typing`) for all public functions.
+- **Language**: Python 3.10+, favour type hints (`typing`) for all public functions.
 - **Asynchronous IO**: use `asyncio` in bot handlers & heavy IO (HTTP calls, DB) – avoid blocking operations in event loop.
 - **Naming**: snake_case for variables & functions, PascalCase for classes, UPPER_SNAKE for constants.
 - **Logging**: use the stdlib `logging` module; never `print` in production code.
@@ -64,9 +63,8 @@ Key separation of concerns:
 
 #### 7. Tools & Dependencies
 - **python-telegram-bot** – interaction with Telegram API & job queue.
-- **google-generativeai / OpenRouter** – LLM summarisation.
+- **google-generativeai** – LLM summarisation.
 - **requests & BeautifulSoup4** – HTTP scraping & parsing.
-- **feedparser** – RSS/Atom feeds (future use).
 - **pytest** – testing framework.
 - **tenacity** – retry logic for unreliable networks.
 
