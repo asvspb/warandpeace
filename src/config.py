@@ -1,5 +1,6 @@
 import os
 import sys
+
 from dotenv import load_dotenv
 
 # Определяем абсолютный путь к директории, где находится этот файл (src)
@@ -8,7 +9,7 @@ src_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(src_dir)
 
 # Явно указываем путь к .env файлу в корне проекта
-dotenv_path = os.path.join(project_root, '.env')
+dotenv_path = os.path.join(project_root, ".env")
 
 # Загружаем переменные из найденного .env файла
 # Этот подход надежнее, чем find_dotenv(), при запусках из разных директорий.
@@ -26,7 +27,7 @@ admin_ids_set = set()
 # 1. Из переменной со списком через запятую (приоритет)
 admin_ids_csv = os.getenv("TELEGRAM_ADMIN_IDS")
 if admin_ids_csv:
-    for admin_id in admin_ids_csv.split(','):
+    for admin_id in admin_ids_csv.split(","):
         if admin_id.strip():
             admin_ids_set.add(admin_id.strip())
 
@@ -50,16 +51,18 @@ TELEGRAM_ADMIN_ID = TELEGRAM_ADMIN_IDS[0] if TELEGRAM_ADMIN_IDS else None
 seen_keys = set()
 GOOGLE_API_KEYS = []
 
+
 def add_key(key):
     """Добавляет ключ в список, если он не пустой и еще не был добавлен."""
     if key and key not in seen_keys:
         seen_keys.add(key)
         GOOGLE_API_KEYS.append(key)
 
+
 # 1. Приоритет: переменная GOOGLE_API_KEYS с CSV
 keys_from_csv = os.getenv("GOOGLE_API_KEYS")
 if keys_from_csv:
-    for k in keys_from_csv.split(','):
+    for k in keys_from_csv.split(","):
         add_key(k.strip())
 
 # 2. Основной ключ GOOGLE_API_KEY (для обратной совместимости)
@@ -79,12 +82,16 @@ GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "models/gemini-1.5-flash-late
 # TELEGRAM_ADMIN_ID больше не является обязательным для запуска.
 if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID]):
     missing_vars = []
-    if not TELEGRAM_BOT_TOKEN: missing_vars.append("TELEGRAM_BOT_TOKEN")
-    if not TELEGRAM_CHANNEL_ID: missing_vars.append("TELEGRAM_CHANNEL_ID")
-    
+    if not TELEGRAM_BOT_TOKEN:
+        missing_vars.append("TELEGRAM_BOT_TOKEN")
+    if not TELEGRAM_CHANNEL_ID:
+        missing_vars.append("TELEGRAM_CHANNEL_ID")
+
     # Сообщение об ошибке будет вызвано только если есть недостающие переменные.
     if missing_vars:
         raise ValueError(f"Ключевые переменные Telegram не заданы: {', '.join(missing_vars)}. Проверьте ваш .env файл.")
 
 if not GOOGLE_API_KEYS:
-    raise ValueError("Не найден ни один ключ Google API (GOOGLE_API_KEYS, GOOGLE_API_KEY, GOOGLE_API_KEY_1 и т.д.). Проверьте ваш .env файл.")
+    raise ValueError(
+        "Не найден ни один ключ Google API (GOOGLE_API_KEYS, GOOGLE_API_KEY, GOOGLE_API_KEY_1 и т.д.). Проверьте ваш .env файл."
+    )

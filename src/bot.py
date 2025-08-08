@@ -1,32 +1,24 @@
 import asyncio
 import logging
 from datetime import datetime, timedelta
-import requests
+from parser import get_article_text, get_articles_from_page
 
+import requests
 from telegram import BotCommand, BotCommandScopeChat, Update
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, ContextTypes, filters
 
-from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID, TELEGRAM_ADMIN_IDS, NEWS_URL
-from database import (
-    init_db,
-    add_article,
-    is_article_posted,
-    get_summaries_for_date_range,
-    get_digests_for_period,
-    add_digest,
-    get_stats,
-)
-from parser import get_articles_from_page, get_article_text
-from summarizer import summarize_text_local, create_digest, create_annual_digest
+from config import NEWS_URL, TELEGRAM_ADMIN_IDS, TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID
+from database import (add_article, add_digest, get_digests_for_period, get_stats, get_summaries_for_date_range, init_db,
+                      is_article_posted)
+from summarizer import create_annual_digest, create_digest, summarize_text_local
 
 # Настройка логирования
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
-)
+logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # --- Основная задача ---
+
 
 async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
     """
@@ -42,10 +34,10 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
 
         # Сортируем статьи от старых к новым, чтобы публиковать в хронологическом порядке
         articles_from_site.reverse()
-        
+
         posted_count = 0
         # Ограничение, чтобы не публиковать слишком много за раз
-        max_posts_per_run = 3 
+        max_posts_per_run = 3
 
         chat = await context.bot.get_chat(chat_id=TELEGRAM_CHANNEL_ID)
         channel_username = f"@{chat.username}"
@@ -60,7 +52,7 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
                 continue
 
             logger.info(f"Найдена новая статья для обработки: {article_data['title']}")
-            
+
             try:
                 # 3. Полный цикл обработки и публикации
                 full_text = await asyncio.to_thread(get_article_text, article_data["link"])
@@ -72,29 +64,23 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
                 if not summary:
                     logger.error(f"Не удалось сгенерировать резюме: {article_data['link']}")
                     continue
-                
+
                 # 4. Публикация в Telegram
                 message = f"<b>{article_data['title']}</b>\n\n{summary} {channel_username}"
-                await context.bot.send_message(
-                    chat_id=TELEGRAM_CHANNEL_ID, text=message, parse_mode=ParseMode.HTML
-                )
+                await context.bot.send_message(chat_id=TELEGRAM_CHANNEL_ID, text=message, parse_mode=ParseMode.HTML)
                 logger.info(f"Статья '{article_data['title']}' успешно опубликована.")
-                
+
                 # 5. Сохранение в БД ПОСЛЕ публикации
                 await asyncio.to_thread(
-                    add_article, 
-                    article_data["link"], 
-                    article_data["title"], 
-                    article_data["published_at"],
-                    summary
+                    add_article, article_data["link"], article_data["title"], article_data["published_at"], summary
                 )
-                
+
                 posted_count += 1
-                await asyncio.sleep(10) # Пауза между публикациями
+                await asyncio.sleep(10)  # Пауза между публикациями
 
             except Exception as e:
                 logger.error(f"Ошибка при полной обработке статьи {article_data['link']}: {e}", exc_info=True)
-        
+
         if posted_count == 0:
             logger.info("[TASK] Новых статей для публикации не найдено.")
 
@@ -103,6 +89,7 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
 
 
 # --- Команды бота ---
+
 
 async def post_init(application: Application):
     """Устанавливает команды и запускает фоновую задачу."""
@@ -122,9 +109,7 @@ async def post_init(application: Application):
         ]
         for admin_id in TELEGRAM_ADMIN_IDS:
             try:
-                await application.bot.set_my_commands(
-                    admin_commands, scope=BotCommandScopeChat(chat_id=int(admin_id))
-                )
+                await application.bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=int(admin_id)))
             except Exception as e:
                 logger.error(f"Не удалось установить команды для администратора {admin_id}: {e}")
 
@@ -132,36 +117,34 @@ async def post_init(application: Application):
     application.job_queue.run_repeating(check_and_post_news, interval=300, first=10, name="CheckAndPostNews")
     logger.info("Единая фоновая задача для проверки и публикации новостей запущена.")
 
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Отправляет приветственное сообщение."""
     await update.message.reply_text("Привет! Я бот для новостного канала 'Война и мир'.")
 
+
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показывает статистику из базы данных."""
     stats = await asyncio.to_thread(get_stats)
-    
+
     status_text = (
-        f"**Статистика базы данных:**\n\n"
-        f"Всего опубликованных статей: **{stats.get('total_articles', 0)}**\n\n"
+        f"**Статистика базы данных:**\n\n" f"Всего опубликованных статей: **{stats.get('total_articles', 0)}**\n\n"
     )
-    
-    last_posted = stats.get('last_posted_article', {})
-    if last_posted and last_posted.get('title') != 'Нет':
+
+    last_posted = stats.get("last_posted_article", {})
+    if last_posted and last_posted.get("title") != "Нет":
         try:
             # Преобразование строки ISO в объект datetime
-            dt_obj = datetime.fromisoformat(last_posted['published_at'])
+            dt_obj = datetime.fromisoformat(last_posted["published_at"])
             # Форматирование для вывода
-            date_str = dt_obj.strftime('%d %B %Y в %H:%M')
+            date_str = dt_obj.strftime("%d %B %Y в %H:%M")
         except (ValueError, TypeError):
-            date_str = last_posted['published_at'] # Fallback
-        
-        status_text += (
-            f"**Последняя опубликованная статья:**\n"
-            f"- *{last_posted['title']}*\n"
-            f"- *{date_str}*"
-        )
-    
+            date_str = last_posted["published_at"]  # Fallback
+
+        status_text += f"**Последняя опубликованная статья:**\n" f"- *{last_posted['title']}*\n" f"- *{date_str}*"
+
     await update.message.reply_text(status_text, parse_mode=ParseMode.MARKDOWN)
+
 
 async def healthcheck(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Проверяет доступность сайта новостей."""
@@ -180,6 +163,7 @@ async def healthcheck(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- Digest Commands ---
 
+
 async def daily_digest_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Создает и отправляет дайджест за предыдущий календарный день."""
     user_id = update.effective_user.id
@@ -191,14 +175,12 @@ async def daily_digest_command(update: Update, context: ContextTypes.DEFAULT_TYP
         start_date = yesterday.replace(hour=0, minute=0, second=0, microsecond=0)
         end_date = yesterday.replace(hour=23, minute=59, second=59, microsecond=999999)
 
-        summaries = await asyncio.to_thread(
-            get_summaries_for_date_range,
-            start_date.isoformat(),
-            end_date.isoformat()
-        )
+        summaries = await asyncio.to_thread(get_summaries_for_date_range, start_date.isoformat(), end_date.isoformat())
 
         if not summaries:
-            await context.bot.send_message(chat_id=user_id, text=f"За {yesterday.strftime('%d.%m.%Y')} не найдено статей для создания дайджеста.")
+            await context.bot.send_message(
+                chat_id=user_id, text=f"За {yesterday.strftime('%d.%m.%Y')} не найдено статей для создания дайджеста."
+            )
             return
 
         period_name = f"вчера, {yesterday.strftime('%d %B %Y')}"
@@ -212,7 +194,7 @@ async def daily_digest_command(update: Update, context: ContextTypes.DEFAULT_TYP
         await context.bot.send_message(
             chat_id=user_id,
             text=f"**Аналитический дайджест за {period_name}:**\n\n{digest_content}",
-            parse_mode=ParseMode.MARKDOWN
+            parse_mode=ParseMode.MARKDOWN,
         )
     except Exception as e:
         logger.error(f"Ошибка при создании суточного дайджеста: {e}", exc_info=True)
@@ -231,16 +213,18 @@ async def weekly_digest_command(update: Update, context: ContextTypes.DEFAULT_TY
         start_of_last_week = (end_of_last_week - timedelta(days=6)).replace(hour=0, minute=0, second=0, microsecond=0)
 
         summaries = await asyncio.to_thread(
-            get_summaries_for_date_range,
-            start_of_last_week.isoformat(),
-            end_of_last_week.isoformat()
+            get_summaries_for_date_range, start_of_last_week.isoformat(), end_of_last_week.isoformat()
         )
 
         if not summaries:
-            await context.bot.send_message(chat_id=user_id, text="За прошлую неделю не найдено статей для создания дайджеста.")
+            await context.bot.send_message(
+                chat_id=user_id, text="За прошлую неделю не найдено статей для создания дайджеста."
+            )
             return
 
-        period_name = f"прошлую неделю ({start_of_last_week.strftime('%d.%m')} - {end_of_last_week.strftime('%d.%m.%Y')})"
+        period_name = (
+            f"прошлую неделю ({start_of_last_week.strftime('%d.%m')} - {end_of_last_week.strftime('%d.%m.%Y')})"
+        )
         digest_content = await asyncio.to_thread(create_digest, summaries, period_name)
 
         if not digest_content:
@@ -251,7 +235,7 @@ async def weekly_digest_command(update: Update, context: ContextTypes.DEFAULT_TY
         await context.bot.send_message(
             chat_id=user_id,
             text=f"**Аналитический дайджест за {period_name}:**\n\n{digest_content}",
-            parse_mode=ParseMode.MARKDOWN
+            parse_mode=ParseMode.MARKDOWN,
         )
     except Exception as e:
         logger.error(f"Ошибка при создании недельного дайджеста: {e}", exc_info=True)
@@ -272,14 +256,12 @@ async def monthly_digest_command(update: Update, context: ContextTypes.DEFAULT_T
         start_date = first_day_of_last_month.replace(hour=0, minute=0, second=0, microsecond=0)
         end_date = last_day_of_last_month.replace(hour=23, minute=59, second=59, microsecond=999999)
 
-        summaries = await asyncio.to_thread(
-            get_summaries_for_date_range,
-            start_date.isoformat(),
-            end_date.isoformat()
-        )
+        summaries = await asyncio.to_thread(get_summaries_for_date_range, start_date.isoformat(), end_date.isoformat())
 
         if not summaries:
-            await context.bot.send_message(chat_id=user_id, text="За прошлый месяц не найдено статей для создания дайджеста.")
+            await context.bot.send_message(
+                chat_id=user_id, text="За прошлый месяц не найдено статей для создания дайджеста."
+            )
             return
 
         period_name = f"прошлый месяц ({start_date.strftime('%B %Y')})"
@@ -293,7 +275,7 @@ async def monthly_digest_command(update: Update, context: ContextTypes.DEFAULT_T
         await context.bot.send_message(
             chat_id=user_id,
             text=f"**Аналитический дайджест за {period_name}:**\n\n{digest_content}",
-            parse_mode=ParseMode.MARKDOWN
+            parse_mode=ParseMode.MARKDOWN,
         )
     except Exception as e:
         logger.error(f"Ошибка при создании месячного дайджеста: {e}", exc_info=True)
@@ -321,7 +303,7 @@ async def annual_digest_command(update: Update, context: ContextTypes.DEFAULT_TY
         await context.bot.send_message(
             chat_id=user_id,
             text=f"**Итоговая аналитическая сводка за {year} год:**\n\n{digest_content}",
-            parse_mode=ParseMode.MARKDOWN
+            parse_mode=ParseMode.MARKDOWN,
         )
     except Exception as e:
         logger.error(f"Ошибка при создании годового дайджеста: {e}", exc_info=True)
@@ -344,7 +326,7 @@ def main():
         # Преобразуем строки в int для фильтра
         admin_ids_int = [int(admin_id) for admin_id in TELEGRAM_ADMIN_IDS]
         admin_filter = filters.User(user_id=admin_ids_int)
-        
+
         application.add_handler(CommandHandler("healthcheck", healthcheck, filters=admin_filter))
         application.add_handler(CommandHandler("daily_digest", daily_digest_command, filters=admin_filter))
         application.add_handler(CommandHandler("weekly_digest", weekly_digest_command, filters=admin_filter))
@@ -352,6 +334,7 @@ def main():
         application.add_handler(CommandHandler("annual_digest", annual_digest_command, filters=admin_filter))
 
     application.run_polling()
+
 
 if __name__ == "__main__":
     main()

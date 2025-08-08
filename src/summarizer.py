@@ -1,14 +1,15 @@
-import google.generativeai as genai
-import os
 import logging
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, RetryError
+import os
+
+import google.generativeai as genai
+from tenacity import RetryError, retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 # Настройка логирования
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 # Импорт ключей из обновленного конфига
-from config import GOOGLE_API_KEYS, GEMINI_MODEL_NAME
+from config import GEMINI_MODEL_NAME, GOOGLE_API_KEYS
 
 # Глобальный индекс для перебора ключей
 current_gemini_key_index = 0
@@ -25,9 +26,12 @@ def configure_gemini_model(api_key: str):
         logger.error(f"Ошибка при конфигурации Gemini или создании модели: {e}")
         return None
 
-@retry(stop=stop_after_attempt(len(GOOGLE_API_KEYS) if GOOGLE_API_KEYS else 1),
-       wait=wait_exponential(multiplier=1, min=4, max=10),
-       retry=retry_if_exception_type((genai.types.BlockedPromptException, Exception)))
+
+@retry(
+    stop=stop_after_attempt(len(GOOGLE_API_KEYS) if GOOGLE_API_KEYS else 1),
+    wait=wait_exponential(multiplier=1, min=4, max=10),
+    retry=retry_if_exception_type((genai.types.BlockedPromptException, Exception)),
+)
 def _make_gemini_request(prompt: str) -> str | None:
     """
     Выполняет запрос к Gemini API с использованием циклического перебора ключей.
@@ -49,7 +53,7 @@ def _make_gemini_request(prompt: str) -> str | None:
     try:
         logger.info(f"Отправка запроса к Gemini API с ключом #{current_gemini_key_index + 1}...")
         response = gemini_model.generate_content(prompt)
-        
+
         if response.text:
             logger.info(f"Ответ успешно получен с ключом #{current_gemini_key_index + 1}.")
             return response.text.strip()
@@ -66,6 +70,7 @@ def _make_gemini_request(prompt: str) -> str | None:
         current_gemini_key_index = (current_gemini_key_index + 1) % len(GOOGLE_API_KEYS)
         raise
 
+
 # --- 2. Создание промптов ---
 def create_summarization_prompt(full_text: str) -> str:
     """
@@ -77,6 +82,7 @@ def create_summarization_prompt(full_text: str) -> str:
 ---
 {full_text}
 ---"""
+
 
 def create_digest_prompt(summaries: list[str], period_name: str) -> str:
     """
@@ -97,6 +103,7 @@ def create_digest_prompt(summaries: list[str], period_name: str) -> str:
 - {summaries_text}
 """
 
+
 def create_annual_digest_prompt(digest_contents: list[str]) -> str:
     """
     Создает промпт для генерации годового "мега-дайджеста".
@@ -116,6 +123,7 @@ def create_annual_digest_prompt(digest_contents: list[str]) -> str:
 {digests_text}
 """
 
+
 # --- 3. Публичные функции ---
 def summarize_text_local(full_text: str) -> str | None:
     """
@@ -133,6 +141,7 @@ def summarize_text_local(full_text: str) -> str | None:
         logger.error(f"Не удалось получить резюме после исчерпания всех ключей: {e}")
         return None
 
+
 def create_digest(summaries: list[str], period_name: str) -> str | None:
     """
     Создает аналитический дайджест на основе списка сводок.
@@ -140,13 +149,14 @@ def create_digest(summaries: list[str], period_name: str) -> str | None:
     if not summaries:
         logger.warning("Передан пустой список сводок для создания дайджеста.")
         return None
-    
+
     prompt = create_digest_prompt(summaries, period_name)
     try:
         return _make_gemini_request(prompt)
     except RetryError as e:
         logger.error(f"Не удалось создать дайджест после исчерпания всех ключей: {e}")
         return None
+
 
 def create_annual_digest(digest_contents: list[str]) -> str | None:
     """
@@ -163,6 +173,7 @@ def create_annual_digest(digest_contents: list[str]) -> str | None:
         logger.error(f"Не удалось создать годовой дайджест: {e}")
         return None
 
+
 # --- Блок для проверки ---
 if __name__ == "__main__":
     test_text = """
@@ -175,11 +186,11 @@ if __name__ == "__main__":
     дронов и разрабатывают контрмеры для повышения эффективности систем ПВО.
     """
 
-    print("\n" + "="*30 + "\n")
+    print("\n" + "=" * 30 + "\n")
     print("--- Запрос на суммирование через Gemini API ---")
     summary = summarize_text_local(test_text)
 
-    print("\n" + "="*30 + "\n")
+    print("\n" + "=" * 30 + "\n")
     print("--- Результат суммирования ---")
     if summary:
         print(summary)

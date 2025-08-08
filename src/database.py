@@ -1,10 +1,11 @@
+import logging
 import sqlite3
 from contextlib import contextmanager
-import logging
-from typing import Optional, Dict, Any, List
+from typing import Any, Dict, List, Optional
 
 DATABASE_NAME = "database/articles.db"
 logger = logging.getLogger(__name__)
+
 
 @contextmanager
 def get_db_connection():
@@ -20,6 +21,7 @@ def get_db_connection():
         if conn:
             conn.close()
 
+
 def init_db():
     """
     Инициализирует или обновляет схему базы данных.
@@ -31,15 +33,16 @@ def init_db():
 
         # 1. Проверяем, существует ли уже новая колонка
         cursor.execute("PRAGMA table_info(articles)")
-        columns = [column['name'] for column in cursor.fetchall()]
-        
-        if 'backfill_status' in columns:
+        columns = [column["name"] for column in cursor.fetchall()]
+
+        if "backfill_status" in columns:
             logger.info("Колонка 'backfill_status' уже существует. Миграция не требуется.")
         else:
             logger.info("Колонка 'backfill_status' не найдена. Начинаем миграцию схемы...")
-            
+
             # 2. Создаем новую таблицу с правильной схемой
-            cursor.execute("""
+            cursor.execute(
+                """
                 CREATE TABLE articles_new (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     url TEXT NOT NULL UNIQUE,
@@ -49,12 +52,15 @@ def init_db():
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     backfill_status TEXT CHECK(backfill_status IN ('success', 'failed', 'skipped'))
                 )
-            """)
+            """
+            )
 
             # 3. Копируем данные из старой таблицы (если она существует)
             try:
                 # Выбираем только те колонки, которые есть в обеих таблицах
-                cursor.execute("INSERT INTO articles_new (id, url, title, published_at, summary_text, created_at) SELECT id, url, title, published_at, summary_text, created_at FROM articles")
+                cursor.execute(
+                    "INSERT INTO articles_new (id, url, title, published_at, summary_text, created_at) SELECT id, url, title, published_at, summary_text, created_at FROM articles"
+                )
                 # 4. Удаляем старую таблицу
                 cursor.execute("DROP TABLE articles")
                 logger.info("Старая таблица 'articles' удалена.")
@@ -71,15 +77,17 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_articles_backfill_status ON articles (backfill_status)")
 
         # 7. Создаем таблицу для дайджестов (без изменений)
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE TABLE IF NOT EXISTS digests (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 period TEXT NOT NULL,
                 content TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
-        """)
-        
+        """
+        )
+
         conn.commit()
         logger.info("Инициализация базы данных завершена.")
 
@@ -97,15 +105,16 @@ def get_articles_for_backfill(status: Optional[str] = None) -> List[Dict[str, An
     """
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        if status == 'failed':
+        if status == "failed":
             query = "SELECT * FROM articles WHERE backfill_status = 'failed' ORDER BY published_at DESC"
             cursor.execute(query)
         else:
             query = "SELECT * FROM articles WHERE backfill_status IS NULL ORDER BY published_at DESC"
             cursor.execute(query)
-        
+
         articles = cursor.fetchall()
         return [dict(row) for row in articles]
+
 
 def update_article_backfill_status(article_id: int, status: str, summary: Optional[str] = None):
     """
@@ -118,18 +127,15 @@ def update_article_backfill_status(article_id: int, status: str, summary: Option
     """
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        if status == 'success' and summary:
+        if status == "success" and summary:
             cursor.execute(
-                "UPDATE articles SET backfill_status = ?, summary_text = ? WHERE id = ?",
-                (status, summary, article_id)
+                "UPDATE articles SET backfill_status = ?, summary_text = ? WHERE id = ?", (status, summary, article_id)
             )
         else:
-            cursor.execute(
-                "UPDATE articles SET backfill_status = ? WHERE id = ?",
-                (status, article_id)
-            )
+            cursor.execute("UPDATE articles SET backfill_status = ? WHERE id = ?", (status, article_id))
         conn.commit()
         logger.info(f"Статус статьи {article_id} обновлен на '{status}'.")
+
 
 def add_article(url: str, title: str, published_at_iso: str, summary: str) -> Optional[int]:
     """
@@ -141,7 +147,7 @@ def add_article(url: str, title: str, published_at_iso: str, summary: str) -> Op
             cursor = conn.cursor()
             cursor.execute(
                 "INSERT INTO articles (url, title, published_at, summary_text) VALUES (?, ?, ?, ?)",
-                (url, title, published_at_iso, summary)
+                (url, title, published_at_iso, summary),
             )
             conn.commit()
             return cursor.lastrowid
@@ -152,12 +158,14 @@ def add_article(url: str, title: str, published_at_iso: str, summary: str) -> Op
             logger.error(f"Ошибка при добавлении статьи {url}: {e}")
             return None
 
+
 def is_article_posted(url: str) -> bool:
     """Проверяет, была ли статья уже опубликована (существует ли в БД)."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT 1 FROM articles WHERE url = ?", (url,))
         return cursor.fetchone() is not None
+
 
 def get_summaries_for_date_range(start_date: str, end_date: str) -> List[str]:
     """
@@ -166,24 +174,26 @@ def get_summaries_for_date_range(start_date: str, end_date: str) -> List[str]:
     """
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT summary_text 
             FROM articles
             WHERE summary_text IS NOT NULL
               AND published_at BETWEEN ? AND ?
             ORDER BY published_at DESC
-        """, (start_date, end_date))
-        return [item['summary_text'] for item in cursor.fetchall()]
+        """,
+            (start_date, end_date),
+        )
+        return [item["summary_text"] for item in cursor.fetchall()]
+
 
 def add_digest(period: str, content: str):
     """Сохраняет новый дайджест."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO digests (period, content) VALUES (?, ?)",
-            (period, content)
-        )
+        cursor.execute("INSERT INTO digests (period, content) VALUES (?, ?)", (period, content))
         conn.commit()
+
 
 def get_digests_for_period(days: int) -> List[str]:
     """Извлекает дайджесты за последние `days` дней."""
@@ -191,31 +201,29 @@ def get_digests_for_period(days: int) -> List[str]:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT content FROM digests WHERE created_at >= datetime('now', '-' || ? || ' days') ORDER BY created_at DESC",
-            (days,)
+            (days,),
         )
-        return [item['content'] for item in cursor.fetchall()]
+        return [item["content"] for item in cursor.fetchall()]
+
 
 def get_stats() -> Dict[str, Any]:
     """Возвращает подробную статистику по статьям в базе."""
     stats: Dict[str, Any] = {
-        'total_articles': 0,
-        'success': 0,
-        'failed': 0,
-        'skipped': 0,
-        'pending': 0, # Статьи, у которых статус IS NULL
-        'last_posted_article': {
-            'title': "Нет",
-            'published_at': "Нет"
-        }
+        "total_articles": 0,
+        "success": 0,
+        "failed": 0,
+        "skipped": 0,
+        "pending": 0,  # Статьи, у которых статус IS NULL
+        "last_posted_article": {"title": "Нет", "published_at": "Нет"},
     }
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        
+
         # 1. Общее количество статей
         cursor.execute("SELECT COUNT(*) FROM articles")
         total = cursor.fetchone()
         if total:
-            stats['total_articles'] = total[0]
+            stats["total_articles"] = total[0]
 
         # 2. Статистика по статусам
         # Заменяем NULL на 'pending' для удобства подсчета
@@ -223,17 +231,17 @@ def get_stats() -> Dict[str, Any]:
         cursor.execute(query)
         status_counts = cursor.fetchall()
         for row in status_counts:
-            if row['status'] in stats:
-                stats[row['status']] = row['count']
+            if row["status"] in stats:
+                stats[row["status"]] = row["count"]
 
         # 3. Последняя опубликованная статья
         cursor.execute("SELECT title, published_at FROM articles ORDER BY published_at DESC LIMIT 1")
         last_article_row = cursor.fetchone()
-        
+
         if last_article_row:
-            stats['last_posted_article'] = {
-                "title": last_article_row['title'],
-                "published_at": last_article_row['published_at']
+            stats["last_posted_article"] = {
+                "title": last_article_row["title"],
+                "published_at": last_article_row["published_at"],
             }
-            
+
     return stats
