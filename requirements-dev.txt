@@ -1,0 +1,38 @@
+# Code formatting
+black==23.12.1
+isort==5.13.2
+
+# Linting and type checking
+flake8==7.0.0
+flake8-docstrings==1.7.0
+flake8-bugbear==24.1.17
+mypy==1.8.0
+pylint==3.0.3
+
+# Testing
+pytest==7.4.4
+pytest-cov==4.1.0
+pytest-asyncio==0.21.1
+pytest-mock==3.12.0
+pytest-timeout==2.2.0
+
+# Code complexity and quality metrics
+radon==6.0.1
+xenon==0.9.1
+
+# Security scanning
+bandit==1.7.6
+safety==3.0.1
+pip-audit==2.6.3
+
+# Documentation
+sphinx==7.2.6
+sphinx-rtd-theme==2.0.0
+
+# Pre-commit hooks
+pre-commit==3.6.0
+
+# Development utilities
+ipython==8.19.0
+ipdb==0.13.13
+rich==13.7.0
