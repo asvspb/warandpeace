@@ -48,12 +48,13 @@ cd warandpeace
     # Для частного: -1001234567890 (как получить: https://stackoverflow.com/a/32572159)
     TELEGRAM_CHANNEL_ID=@your_channel_username
     
-    # --- API для обработки текста ---
-    # Укажите хотя бы один ключ API для работы функции суммирования.
-    # Для распределения нагрузки можно добавить GOOGLE_API_KEY_1, GOOGLE_API_KEY_2 и т.д.
-    GOOGLE_API_KEY=your_main_google_api_key
-    GOOGLE_API_KEY_1=your_secondary_google_api_key
+    # (Опционально) ID вашего Telegram-аккаунта для получения уведомлений об ошибках
+    TELEGRAM_ADMIN_ID=123456789
 
+    # Ключи API для суммирования
+    # Можно указать несколько ключей через запятую для Google API
+    GOOGLE_API_KEYS=your_google_api_key_1,your_google_api_key_2
+    OPENROUTER_API_KEY=your_openrouter_api_key
     ```
 
 ### Шаг 3: Подготовка каталога для базы данных
