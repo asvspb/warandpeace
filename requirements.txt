@@ -8,7 +8,7 @@ tenacity>=8.0.0
 pytest
 APScheduler
 click
-mistralai==0.4.2
+mistralai
 sqlalchemy
 psycopg2-binary
 alembic
