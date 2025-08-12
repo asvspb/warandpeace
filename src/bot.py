@@ -18,7 +18,7 @@ from database import (
     get_stats,
 )
 from parser import get_articles_from_page, get_article_text
-from summarizer import summarize_text_local, create_digest, create_annual_digest
+from summarizer import summarize_text_local, create_digest, create_annual_digest, summarize_with_mistral
 
 # Настройка логирования
 logging.basicConfig(
@@ -68,9 +68,22 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
                     logger.error(f"Не удалось получить текст статьи: {article_data['link']}")
                     continue
 
-                summary = await asyncio.to_thread(summarize_text_local, full_text)
+                try:
+                    summary = await asyncio.to_thread(summarize_text_local, full_text)
+                except Exception as e:
+                    logger.error(f"Ошибка при получении резюме от Gemini: {e}")
+                    summary = None
+
                 if not summary:
-                    logger.error(f"Не удалось сгенерировать резюме: {article_data['link']}")
+                    logger.warning(f"Не удалось получить резюме от Gemini, пробую Mistral: {article_data['link']}")
+                    try:
+                        summary = await asyncio.to_thread(summarize_with_mistral, full_text)
+                    except Exception as e:
+                        logger.error(f"Ошибка при получении резюме от Mistral: {e}")
+                        summary = None
+
+                if not summary:
+                    logger.error(f"Не удалось сгенерировать резюме ни одним из сервисов: {article_data['link']}")
                     continue
                 
                 # 4. Публикация в Telegram

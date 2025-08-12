@@ -31,11 +31,14 @@ main_key = os.getenv("GOOGLE_API_KEY")
 if main_key:
     GOOGLE_API_KEYS.insert(0, main_key) # Вставляем его в начало для приоритета
 
+MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
+
 # --- Настройки парсера ---
 NEWS_URL = "https://www.warandpeace.ru/ru/news/"
 
 # --- Настройки AI моделей ---
 GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "models/gemini-1.5-flash-latest")
+MISTRAL_MODEL_NAME = os.getenv("MISTRAL_MODEL_NAME", "mistral-large-latest")
 
 # --- Проверка ключевых переменных ---
 if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID, TELEGRAM_ADMIN_ID]):

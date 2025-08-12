@@ -163,38 +163,35 @@ def create_annual_digest(digest_contents: list[str]) -> str | None:
         logger.error(f"Не удалось создать годовой дайджест: {e}")
         return None
 
-def summarize_with_mistral(text_to_summarize: str) -> str:
+def summarize_with_mistral(text_to_summarize: str) -> str | None:
     """
     Суммирует предоставленный текст с помощью модели Mistral.
     """
     from mistralai.client import MistralClient
     from mistralai.models.chat_completion import ChatMessage
-    
-    
+
     if not MISTRAL_API_KEY:
-        logging.error("API-ключ для Mistral не найден.")
-        return "Ошибка: API-ключ для сервиса суммирования не настроен."
-
-    client = MistralClient(api_key=MISTRAL_API_KEY)
-    model_name = MISTRAL_MODEL_NAME
-
-    system_prompt = "Ты — экспертный ассистент, который умеет делать краткие и содержательные выжимки из новостных статей на русском языке. Твоя задача — изложить суть статьи в 3-4 предложениях, сохранив ключевые факты и основной посыл."
-
-    messages = [
-        ChatMessage(role="system", content=system_prompt),
-        ChatMessage(role="user", content=text_to_summarize)
-    ]
+        logger.error("API-ключ для Mistral не найден.")
+        return None
 
     try:
+        client = MistralClient(api_key=MISTRAL_API_KEY)
+
+        prompt = create_summarization_prompt(text_to_summarize)
+        messages = [ChatMessage(role="user", content=prompt)]
+
         chat_response = client.chat(
-            model=model_name,
+            model=MISTRAL_MODEL_NAME,
             messages=messages,
         )
+
         summary = chat_response.choices[0].message.content
+        logger.info("Резюме успешно получено от Mistral.")
         return summary.strip()
+
     except Exception as e:
-        logging.error(f"Ошибка при обращении к API Mistral: {e}")
-        return "Не удалось получить краткое изложение. Попробуйте позже."
+        logger.error(f"Ошибка при получении резюме от Mistral: {e}")
+        return None
 
 # --- Блок для проверки ---
 if __name__ == "__main__":
