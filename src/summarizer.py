@@ -8,7 +8,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # Импорт ключей из обновленного конфига
-from config import GOOGLE_API_KEYS, GEMINI_MODEL_NAME
+from config import GOOGLE_API_KEYS, GEMINI_MODEL_NAME, MISTRAL_API_KEY, MISTRAL_MODEL_NAME
 
 # Глобальный индекс для перебора ключей
 current_gemini_key_index = 0
@@ -162,6 +162,39 @@ def create_annual_digest(digest_contents: list[str]) -> str | None:
     except RetryError as e:
         logger.error(f"Не удалось создать годовой дайджест: {e}")
         return None
+
+def summarize_with_mistral(text_to_summarize: str) -> str:
+    """
+    Суммирует предоставленный текст с помощью модели Mistral.
+    """
+    from mistralai.client import MistralClient
+    from mistralai.models.chat_completion import ChatMessage
+    
+    
+    if not MISTRAL_API_KEY:
+        logging.error("API-ключ для Mistral не найден.")
+        return "Ошибка: API-ключ для сервиса суммирования не настроен."
+
+    client = MistralClient(api_key=MISTRAL_API_KEY)
+    model_name = MISTRAL_MODEL_NAME
+
+    system_prompt = "Ты — экспертный ассистент, который умеет делать краткие и содержательные выжимки из новостных статей на русском языке. Твоя задача — изложить суть статьи в 3-4 предложениях, сохранив ключевые факты и основной посыл."
+
+    messages = [
+        ChatMessage(role="system", content=system_prompt),
+        ChatMessage(role="user", content=text_to_summarize)
+    ]
+
+    try:
+        chat_response = client.chat(
+            model=model_name,
+            messages=messages,
+        )
+        summary = chat_response.choices[0].message.content
+        return summary.strip()
+    except Exception as e:
+        logging.error(f"Ошибка при обращении к API Mistral: {e}")
+        return "Не удалось получить краткое изложение. Попробуйте позже."
 
 # --- Блок для проверки ---
 if __name__ == "__main__":
