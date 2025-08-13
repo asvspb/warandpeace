@@ -1,35 +1,93 @@
 import logging
+import os
+from collections import defaultdict
+from time import monotonic
+from typing import List
+
 from telegram import Bot
 from telegram.constants import ParseMode
-from config import TELEGRAM_ADMIN_IDS
 
 logger = logging.getLogger(__name__)
 
-bot_instance: Bot | None = None
+# Кэш админских ID и троттлинг-стейт
+_cached_admin_ids: List[int] | None = None
+_last_sent_at = defaultdict(float)  # throttle_key -> timestamp
 
-def initialize_bot(bot: Bot):
-    """Сохраняет экземпляр бота для последующего использования."""
-    global bot_instance
-    bot_instance = bot
-    logger.info("Экземпляр бота успешно инициализирован в модуле уведомлений.")
 
-async def send_admin_notification(message: str):
-    """Отправляет асинхронное уведомление всем администраторам."""
-    if not bot_instance:
-        logger.error("Экземпляр бота не инициализирован. Уведомление не отправлено.")
-        return
+def _load_admin_ids() -> List[int]:
+    """Загружает список администраторов из окружения.
 
-    if not TELEGRAM_ADMIN_IDS:
-        logger.warning("Список ID администраторов пуст. Уведомление не отправлено.")
-        return
+    Поддерживает обе формы: TELEGRAM_ADMIN_ID (один ID) и TELEGRAM_ADMIN_IDS (через запятую).
+    Исключает дубликаты, игнорирует некорректные значения.
+    """
+    global _cached_admin_ids
+    if _cached_admin_ids is not None:
+        return _cached_admin_ids
 
-    for admin_id in TELEGRAM_ADMIN_IDS:
+    ids: set[int] = set()
+
+    single_id = os.getenv("TELEGRAM_ADMIN_ID")
+    if single_id:
         try:
-            await bot_instance.send_message(
+            ids.add(int(single_id))
+        except Exception:
+            logger.warning("TELEGRAM_ADMIN_ID не является целым числом: %s", single_id)
+
+    list_ids = os.getenv("TELEGRAM_ADMIN_IDS", "")
+    if list_ids:
+        for token in list_ids.split(","):
+            token = token.strip()
+            if not token:
+                continue
+            try:
+                ids.add(int(token))
+            except Exception:
+                logger.warning("Некорректный ID в TELEGRAM_ADMIN_IDS: %s", token)
+
+    _cached_admin_ids = list(ids)
+    return _cached_admin_ids
+
+
+async def notify_admin(
+    bot: Bot,
+    message: str,
+    *,
+    throttle_key: str,
+    cooldown_sec: int | None = None,
+):
+    """Отправляет уведомление администраторам с троттлингом.
+
+    - bot: активный экземпляр Telegram-бота
+    - message: текст уведомления (кратко, без PII)
+    - throttle_key: ключ события для раздельного троттлинга
+    - cooldown_sec: интервал подавления повторов (по умолчанию из ADMIN_ALERTS_COOLDOWN_SEC или 900)
+    """
+    admin_ids = _load_admin_ids()
+    if not admin_ids:
+        logger.debug("Список администраторов пуст — уведомление пропущено")
+        return
+
+    if cooldown_sec is None:
+        try:
+            cooldown_sec = int(os.getenv("ADMIN_ALERTS_COOLDOWN_SEC", "900"))
+        except Exception:
+            cooldown_sec = 900
+
+    now = monotonic()
+    last_time = _last_sent_at[throttle_key]
+    if now - last_time < cooldown_sec:
+        return
+
+    for admin_id in admin_ids:
+        try:
+            await bot.send_message(
                 chat_id=admin_id,
                 text=message,
-                parse_mode=ParseMode.MARKDOWN
+                parse_mode=ParseMode.MARKDOWN,
+                disable_web_page_preview=True,
             )
-            logger.info(f"Уведомление успешно отправлено администратору {admin_id}.")
         except Exception as e:
-            logger.error(f"Не удалось отправить уведомление администратору {admin_id}: {e}")
+            logger.error("Не удалось отправить уведомление админу %s: %s", admin_id, e)
+            # Не сбрасываем троттлинг, чтобы при флаппинге не спамить
+        else:
+            _last_sent_at[throttle_key] = now

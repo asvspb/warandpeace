@@ -1,10 +1,12 @@
 import asyncio
 import logging
+import os
 from datetime import datetime, timedelta
 import requests
 
 from telegram import BotCommand, BotCommandScopeChat, Update
 from telegram.constants import ParseMode
+from telegram.error import NetworkError, TimedOut, RetryAfter, BadRequest, TelegramError
 from telegram.ext import Application, CommandHandler, ContextTypes, filters
 
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID, TELEGRAM_ADMIN_ID, NEWS_URL
@@ -19,11 +21,30 @@ from database import (
 )
 from parser import get_articles_from_page, get_article_text
 from summarizer import summarize_text_local, create_digest, create_annual_digest, summarize_with_mistral
+from notifications import notify_admin
 
-# Настройка логирования
+# Настройка логирования (тихий режим для сторонних библиотек и управляемый уровень для приложения)
+log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+log_level = getattr(logging, log_level_name, logging.INFO)
+
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+    level=log_level,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
+
+verbose_lib_logs = os.getenv("ENABLE_VERBOSE_LIB_LOGS", "false").lower() in {"1", "true", "yes"}
+if not verbose_lib_logs:
+    for noisy in [
+        "telegram",
+        "telegram.ext",
+        "telegram.request",
+        "httpx",
+        "httpcore",
+        "aiohttp",
+        "apscheduler",
+    ]:
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
 # --- Основная задача ---
@@ -88,9 +109,18 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
                 
                 # 4. Публикация в Telegram
                 message = f"<b>{article_data['title']}</b>\n\n{summary} {channel_username}"
-                await context.bot.send_message(
-                    chat_id=TELEGRAM_CHANNEL_ID, text=message, parse_mode=ParseMode.HTML
-                )
+                try:
+                    await context.bot.send_message(
+                        chat_id=TELEGRAM_CHANNEL_ID, text=message, parse_mode=ParseMode.HTML
+                    )
+                except TelegramError as e:
+                    logger.error("Ошибка отправки сообщения в канал: %s", e, exc_info=True)
+                    await notify_admin(
+                        context.bot,
+                        f"❌ Ошибка отправки сообщения в канал: {e}",
+                        throttle_key="error:send_message",
+                    )
+                    continue
                 logger.info(f"Статья '{article_data['title']}' успешно опубликована.")
                 
                 # 5. Сохранение в БД ПОСЛЕ публикации
@@ -107,12 +137,22 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
 
             except Exception as e:
                 logger.error(f"Ошибка при полной обработке статьи {article_data['link']}: {e}", exc_info=True)
+                await notify_admin(
+                    context.bot,
+                    f"❗ Ошибка обработки статьи: {type(e).__name__}: {str(e)[:200]}",
+                    throttle_key="error:process_article",
+                )
         
         if posted_count == 0:
             logger.info("[TASK] Новых статей для публикации не найдено.")
 
     except Exception as e:
         logger.error(f"[TASK] Критическая ошибка в задаче 'check_and_post_news': {e}", exc_info=True)
+        await notify_admin(
+            context.bot,
+            f"⛔ Критическая ошибка задачи check_and_post_news: {type(e).__name__}: {str(e)[:200]}",
+            throttle_key="error:check_and_post_news",
+        )
 
 
 # --- Команды бота ---
@@ -188,6 +228,11 @@ async def healthcheck(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Ошибка при проверке доступности сайта: {e}")
         await update.message.reply_text(f"❌ Не удалось подключиться к сайту: {e}")
+        await notify_admin(
+            context.bot,
+            f"⚠️ Healthcheck: недоступен сайт новостей: {type(e).__name__}: {str(e)[:200]}",
+            throttle_key="error:healthcheck",
+        )
 
 
 # --- Digest Commands ---
@@ -347,6 +392,29 @@ def main():
 
     logger.info("Создание и запуск приложения-бота...")
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).post_init(post_init).build()
+
+    # Глобальный обработчик ошибок PTB
+    async def on_error(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        err = context.error
+        logger.error("Global handler caught an exception", exc_info=True)
+
+        throttle_key = "error:generic"
+        if isinstance(err, RetryAfter):
+            throttle_key = "error:retry_after"
+        elif isinstance(err, TimedOut):
+            throttle_key = "error:timeout"
+        elif isinstance(err, NetworkError):
+            throttle_key = "error:network"
+        elif isinstance(err, BadRequest):
+            throttle_key = "error:bad_request"
+
+        summary = f"❗ Ошибка бота: {type(err).__name__}: {str(err)[:300]}"
+        try:
+            await notify_admin(application.bot, summary, throttle_key=throttle_key)
+        except Exception:
+            logger.exception("Не удалось уведомить администратора об ошибке")
+
+    application.add_error_handler(on_error)
 
     # Регистрация обработчиков команд
     application.add_handler(CommandHandler("start", start))
