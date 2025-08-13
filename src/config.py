@@ -12,7 +12,7 @@ dotenv_path = os.path.join(project_root, '.env')
 
 # Загружаем переменные из найденного .env файла
 # Этот подход надежнее, чем find_dotenv(), при запусках из разных директорий.
-load_dotenv(dotenv_path=dotenv_path, override=True)
+# load_dotenv(dotenv_path=dotenv_path, override=True) # ОТКЛЮЧЕНО: переменные должны подгружаться из docker-compose
 
 # --- Основные переменные окружения ---
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -22,14 +22,22 @@ TELEGRAM_ADMIN_ID = os.getenv("TELEGRAM_ADMIN_ID")
 # --- Ключи API ---
 # Динамически собираем все ключи Google API из переменных окружения
 GOOGLE_API_KEYS = []
-for i in range(1, 10): # Проверяем ключи от GOOGLE_API_KEY_1 до GOOGLE_API_KEY_9
-    key = os.getenv(f"GOOGLE_API_KEY_{i}")
-    if key:
-        GOOGLE_API_KEYS.append(key)
-# Добавляем основной ключ, если он есть
-main_key = os.getenv("GOOGLE_API_KEY")
-if main_key:
-    GOOGLE_API_KEYS.insert(0, main_key) # Вставляем его в начало для приоритета
+
+# Сначала пытаемся прочитать переменную GOOGLE_API_KEYS, которая может содержать несколько ключей через запятую
+keys_from_env = os.getenv("GOOGLE_API_KEYS")
+if keys_from_env:
+    GOOGLE_API_KEYS = [key.strip() for key in keys_from_env.split(',') if key.strip()]
+
+# Если переменная GOOGLE_API_KEYS не найдена, используем старый метод для обратной совместимости
+if not GOOGLE_API_KEYS:
+    for i in range(1, 10): # Проверяем ключи от GOOGLE_API_KEY_1 до GOOGLE_API_KEY_9
+        key = os.getenv(f"GOOGLE_API_KEY_{i}")
+        if key:
+            GOOGLE_API_KEYS.append(key)
+    # Добавляем основной ключ, если он есть
+    main_key = os.getenv("GOOGLE_API_KEY")
+    if main_key:
+        GOOGLE_API_KEYS.insert(0, main_key) # Вставляем его в начало для приоритета
 
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 
