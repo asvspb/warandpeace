@@ -10,6 +10,9 @@
 - d7eee68 - Fix: Loosen mistralai version requirement in requirements.txt (2025-08-12 23:59:41 +0300)
 - 21b4742 - fix(summarizer): Implement Mistral AI as fallback for Gemini (2025-08-12 23:20:51 +0300)
 
+**Версионирование:**
+    *   Проекту присвоена новая версия `v1.4.0`.
+
 ---
 
 ### 2025-08-12 - fix: Исправлена работа резервного API (Mistral) и обновлена документация
