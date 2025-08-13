@@ -1,3 +1,17 @@
+### 2025-08-13 - v1.4.0 - feat(release): bump version to 1.4.0
+
+**Описание:**
+Выполнено слияние ветки `develop` в `main`. Версия проекта обновлена до v1.4.0.
+
+**Изменения:**
+- 84ab7c1 - Merge branch 'develop' (2025-08-13 10:45:12 +0300)
+- d39d5f1 - docs(log): обновить лог разработки (2025-08-13 10:42:43 +0300)
+- 931a693 - feat(release): bump version to 1.4.0 (2025-08-13 10:17:40 +0300)
+- 7bffd2a - feat(observability): implement configurable logging and admin alerts (2025-08-13 09:51:30 +0300)
+- e925915 - chore(db): Исключить файл БД из контроля версий (2025-08-13 08:10:56 +0300)
+
+---
+
 ### 2025-08-13 - feat(observability): implement configurable logging and admin alerts
 
 **Описание:**
