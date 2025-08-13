@@ -68,8 +68,15 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
         # Ограничение, чтобы не публиковать слишком много за раз
         max_posts_per_run = 3 
 
-        chat = await context.bot.get_chat(chat_id=TELEGRAM_CHANNEL_ID)
-        channel_username = f"@{chat.username}"
+        try:
+            chat = await context.bot.get_chat(chat_id=TELEGRAM_CHANNEL_ID)
+            channel_username = f"@{chat.username}"
+        except TimedOut:
+            logger.warning("Тайм-аут при получении информации о канале. Использую ID канала.")
+            channel_username = f"@{TELEGRAM_CHANNEL_ID}"
+        except Exception as e:
+            logger.error(f"Не удалось получить информацию о канале: {e}", exc_info=True)
+            channel_username = f"@{TELEGRAM_CHANNEL_ID}" # Fallback
 
         for article_data in articles_from_site:
             if posted_count >= max_posts_per_run:
@@ -153,6 +160,7 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
             f"⛔ Критическая ошибка задачи check_and_post_news: {type(e).__name__}: {str(e)[:200]}",
             throttle_key="error:check_and_post_news",
         )
+
 
 
 # --- Команды бота ---
