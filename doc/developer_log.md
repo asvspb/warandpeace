@@ -1,3 +1,17 @@
+### 2025-08-13 - feat(observability): implement configurable logging and admin alerts
+
+**Описание:**
+Добавлена система логирования и оповещений для администратора.
+
+**Изменения:**
+- 7bffd2a - feat(observability): implement configurable logging and admin alerts (2025-08-13 09:51:30 +0300)
+- e925915 - chore(db): Исключить файл БД из контроля версий (2025-08-13 08:10:56 +0300)
+- b813b5c - fix(config): Исправлена загрузка ключей API в Docker-окружении (2025-08-13 08:05:22 +0300)
+- d7eee68 - Fix: Loosen mistralai version requirement in requirements.txt (2025-08-12 23:59:41 +0300)
+- 21b4742 - fix(summarizer): Implement Mistral AI as fallback for Gemini (2025-08-12 23:20:51 +0300)
+
+---
+
 ### 2025-08-12 - fix: Исправлена работа резервного API (Mistral) и обновлена документация
 
 **Описание:**
