@@ -83,7 +83,6 @@ async def notify_admin(
             await bot.send_message(
                 chat_id=admin_id,
                 text=message,
-                parse_mode=ParseMode.MARKDOWN,
                 disable_web_page_preview=True,
             )
         except Exception as e:

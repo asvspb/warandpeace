@@ -1,15 +1,24 @@
 import sqlite3
 from contextlib import contextmanager
 import logging
+import os
 from typing import Optional, Dict, Any, List
 
-DATABASE_NAME = "database/articles.db"
+DATABASE_NAME = "/app/database/articles.db"
 logger = logging.getLogger(__name__)
 
 @contextmanager
 def get_db_connection():
-    """Контекстный менеджер для соединения с БД."""
+    """Контекстный менеджер для соединения с БД.
+
+    Гарантирует существование директории БД и безопасно закрывает соединение.
+    """
+    conn = None
     try:
+        db_dir = os.path.dirname(DATABASE_NAME)
+        if db_dir and not os.path.exists(db_dir):
+            os.makedirs(db_dir, exist_ok=True)
+
         conn = sqlite3.connect(DATABASE_NAME)
         conn.row_factory = sqlite3.Row
         yield conn
@@ -17,8 +26,11 @@ def get_db_connection():
         logger.error(f"Database connection error: {e}")
         raise
     finally:
-        if conn:
-            conn.close()
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
 
 def init_db():
     """
