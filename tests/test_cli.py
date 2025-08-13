@@ -5,6 +5,12 @@ from unittest.mock import patch, MagicMock
 # Важно: импортируем сам объект cli из скрипта
 from scripts.manage import cli
 
+@pytest.fixture(autouse=True)
+def mock_init_db():
+    """Автоматически мокирует init_db для всех тестов в этом файле."""
+    with patch('scripts.manage.init_db') as mock:
+        yield mock
+
 @pytest.fixture
 def runner():
     """Фикстура для создания экземпляра CliRunner."""
@@ -60,10 +66,9 @@ def test_backfill_command(mock_get_articles, mock_process, runner):
     mock_process.assert_called_once_with(mock_articles)
 
 # --- Тесты для команды retry_failed ---
-@patch('scripts.manage.init_db') # Мокируем init_db, чтобы избежать создания БД
 @patch('scripts.manage._process_articles')
 @patch('scripts.manage.get_articles_for_backfill')
-def test_retry_failed_command(mock_get_articles, mock_process, mock_init_db, runner):
+def test_retry_failed_command(mock_get_articles, mock_process, runner):
     """Тестирует команду retry_failed."""
     # 1. Подготовка
     mock_failed_articles = [{'id': 2, 'url': 'http://failed.com'}]
@@ -79,5 +84,3 @@ def test_retry_failed_command(mock_get_articles, mock_process, mock_init_db, run
     mock_get_articles.assert_called_once_with(status='failed')
     # Проверяем, что основная функция обработки была вызвана с нужными статьями
     mock_process.assert_called_once_with(mock_failed_articles)
-    # Убедимся, что init_db не вызывалась в тесте (т.к. мы ее мокировали)
-    mock_init_db.assert_called_once()

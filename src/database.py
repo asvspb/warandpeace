@@ -3,12 +3,13 @@ from contextlib import contextmanager
 import logging
 from typing import Optional, Dict, Any, List
 
-DATABASE_NAME = "database/articles.db"
+DATABASE_NAME = "/app/database/articles.db"
 logger = logging.getLogger(__name__)
 
 @contextmanager
 def get_db_connection():
     """Контекстный менеджер для соединения с БД."""
+    conn = None
     try:
         conn = sqlite3.connect(DATABASE_NAME)
         conn.row_factory = sqlite3.Row
