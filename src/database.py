@@ -3,6 +3,8 @@ import hashlib
 from contextlib import contextmanager
 import logging
 import os
+import shutil
+from datetime import datetime
 from typing import Optional, Dict, Any, List
 
 DATABASE_NAME = "/app/database/articles.db"
@@ -54,6 +56,14 @@ def init_db():
         if need_recreate:
             logger.info("Миграция схемы 'articles' до новой версии (canonical_link, content, индексы)...")
 
+            # Пытаемся сделать резервную копию файла БД перед сложной миграцией
+            try:
+                _ = backup_database_copy()
+            except Exception:
+                pass
+
+            # Транзакция для миграции
+            cursor.execute("BEGIN")
             cursor.execute(
                 """
                 CREATE TABLE IF NOT EXISTS articles_new (
@@ -85,35 +95,46 @@ def init_db():
                 except sqlite3.OperationalError:
                     logger.info("Старая таблица 'articles' отсутствует, создаём с нуля")
             cursor.execute("ALTER TABLE articles_new RENAME TO articles")
+            conn.commit()
         else:
             # Лёгкая миграция: добавляем недостающие колонки для старой схемы
             missing_columns = set([
                 'canonical_link', 'content', 'content_hash', 'updated_at'
             ]) - set(columns)
 
-            if 'canonical_link' in missing_columns:
-                cursor.execute("ALTER TABLE articles ADD COLUMN canonical_link TEXT")
-                # Заполняем canonical_link из url для уже существующих записей
+            if missing_columns:
+                # Резервная копия перед изменением структуры
                 try:
-                    cursor.execute(
-                        "UPDATE articles SET canonical_link = url WHERE canonical_link IS NULL OR TRIM(canonical_link) = ''"
-                    )
-                except sqlite3.OperationalError:
+                    _ = backup_database_copy()
+                except Exception:
                     pass
 
-            if 'content' in missing_columns:
-                cursor.execute("ALTER TABLE articles ADD COLUMN content TEXT")
+                cursor.execute("BEGIN")
 
-            if 'content_hash' in missing_columns:
-                cursor.execute("ALTER TABLE articles ADD COLUMN content_hash TEXT")
+                if 'canonical_link' in missing_columns:
+                    cursor.execute("ALTER TABLE articles ADD COLUMN canonical_link TEXT")
+                    # Заполняем canonical_link из url для уже существующих записей
+                    try:
+                        cursor.execute(
+                            "UPDATE articles SET canonical_link = url WHERE canonical_link IS NULL OR TRIM(canonical_link) = ''"
+                        )
+                    except sqlite3.OperationalError:
+                        pass
 
-            if 'updated_at' in missing_columns:
-                # В SQLite нельзя добавлять колонку с неконстантным DEFAULT через ALTER TABLE
-                cursor.execute("ALTER TABLE articles ADD COLUMN updated_at TIMESTAMP")
-                try:
-                    cursor.execute("UPDATE articles SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL")
-                except sqlite3.OperationalError:
-                    pass
+                if 'content' in missing_columns:
+                    cursor.execute("ALTER TABLE articles ADD COLUMN content TEXT")
+
+                if 'content_hash' in missing_columns:
+                    cursor.execute("ALTER TABLE articles ADD COLUMN content_hash TEXT")
+
+                if 'updated_at' in missing_columns:
+                    # В SQLite нельзя добавлять колонку с неконстантным DEFAULT через ALTER TABLE
+                    cursor.execute("ALTER TABLE articles ADD COLUMN updated_at TIMESTAMP")
+                    try:
+                        cursor.execute("UPDATE articles SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL")
+                    except sqlite3.OperationalError:
+                        pass
+                conn.commit()
 
         # 3. Индексы
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_articles_published_at ON articles (published_at)")
@@ -150,7 +171,6 @@ def init_db():
             )
         """)
         
-        conn.commit()
         logger.info("Инициализация базы данных завершена.")
 
 
@@ -314,6 +334,26 @@ def list_articles_without_summary_in_range(start_iso: str, end_iso: str) -> List
         )
         rows = cursor.fetchall()
         return [dict(row) for row in rows]
+
+
+def backup_database_copy() -> Optional[str]:
+    """Делает файловую резервную копию SQLite-BD рядом с исходником.
+
+    Возвращает путь к бэкапу или None, если файла БД ещё нет.
+    Не выбрасывает исключения наружу — логирует и возвращает None.
+    """
+    try:
+        if not os.path.exists(DATABASE_NAME):
+            return None
+        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        backup_path = f"{DATABASE_NAME}.bak-{timestamp}"
+        os.makedirs(os.path.dirname(backup_path) or ".", exist_ok=True)
+        shutil.copy2(DATABASE_NAME, backup_path)
+        logger.info(f"Создан бэкап БД: {backup_path}")
+        return backup_path
+    except Exception as e:
+        logger.warning(f"Не удалось создать бэкап БД: {e}")
+        return None
 
 
 def set_article_summary(article_id: int, summary_text: str) -> None:
