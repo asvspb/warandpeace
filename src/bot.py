@@ -9,6 +9,7 @@ from telegram import BotCommand, BotCommandScopeChat, Update
 from telegram.constants import ParseMode
 from telegram.error import NetworkError, TimedOut, RetryAfter, BadRequest, TelegramError
 from telegram.ext import Application, CommandHandler, ContextTypes, filters
+from telegram.request import HTTPXRequest
 
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID, TELEGRAM_ADMIN_ID, NEWS_URL
 from database import (
@@ -83,7 +84,7 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
         examples_str = ", ".join(examples)
         if hidden_count > 0:
             examples_str += f" и еще {hidden_count} скрыто."
-        logger.info(f"Найдены новые статьи: {len(new_articles)} шт. Примеры: [{examples_str}]")
+        logger.info(f"Найдены новые статьи: {len(new_articles)} шт. [{examples_str}]")
 
         # 4. Обработка и публикация
         posted_count = 0
@@ -184,7 +185,19 @@ async def post_init(application: Application):
             logger.error(f"Не удалось установить команды для администратора: {e}")
 
     # Запуск единой задачи
-    application.job_queue.run_repeating(check_and_post_news, interval=300, first=10, name="CheckAndPostNews")
+    job_kwargs = {
+        "misfire_grace_time": int(os.getenv("JOB_MISFIRE_GRACE", "60")),
+        "coalesce": True,
+        "max_instances": 1,
+        "jitter": int(os.getenv("JOB_JITTER", "3")),
+    }
+    application.job_queue.run_repeating(
+        check_and_post_news,
+        interval=300,
+        first=10,
+        name="CheckAndPostNews",
+        job_kwargs=job_kwargs,
+    )
     logger.info("Единая фоновая задача для проверки и публикации новостей запущена.")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -394,12 +407,33 @@ def main():
     init_db()
 
     logger.info("Создание и запуск приложения-бота...")
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).post_init(post_init).build()
+    # Тюнинг HTTP-клиента Telegram для устойчивости к сетевым сбоям
+    request = HTTPXRequest(
+        read_timeout=float(os.getenv("TG_READ_TIMEOUT", "30")),
+        write_timeout=float(os.getenv("TG_WRITE_TIMEOUT", "30")),
+        connect_timeout=float(os.getenv("TG_CONNECT_TIMEOUT", "10")),
+        pool_timeout=float(os.getenv("TG_POOL_TIMEOUT", "5")),
+        http_version=os.getenv("TG_HTTP_VERSION", "1.1"),
+    )
+    application = (
+        Application.builder()
+        .token(TELEGRAM_BOT_TOKEN)
+        .request(request)
+        .post_init(post_init)
+        .build()
+    )
 
     # Глобальный обработчик ошибок PTB
     async def on_error(update: Update, context: ContextTypes.DEFAULT_TYPE):
         err = context.error
-        logger.error("Global handler caught an exception", exc_info=True)
+        if err is not None:
+            # Логируем стек конкретного исключения, не "NoneType: None"
+            logger.error(
+                "Global handler caught an exception",
+                exc_info=(type(err), err, getattr(err, "__traceback__", None)),
+            )
+        else:
+            logger.error("Global handler caught an exception, but context.error is None")
 
         throttle_key = "error:generic"
         if isinstance(err, RetryAfter):
@@ -431,7 +465,7 @@ def main():
         application.add_handler(CommandHandler("monthly_digest", monthly_digest_command, filters=admin_filter))
         application.add_handler(CommandHandler("annual_digest", annual_digest_command, filters=admin_filter))
 
-    application.run_polling()
+    application.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()

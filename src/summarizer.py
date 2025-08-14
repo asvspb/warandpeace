@@ -61,7 +61,12 @@ def _make_gemini_request(prompt: str) -> str | None:
             raise genai.types.BlockedPromptException("Пустой ответ или блокировка по безопасности.")
 
     except Exception as e:
-        logger.error(f"Ошибка с ключом #{current_gemini_key_index + 1}: {e}")
+        message_text = str(e)
+        logger.error(f"Ошибка с ключом #{current_gemini_key_index + 1}: {message_text}")
+        # Если регион недоступен для Gemini — нет смысла перебирать ключи
+        if 'location is not supported' in message_text.lower():
+            logger.warning("Регион не поддерживается для Gemini API. Переходим к запасному провайдеру без повторов.")
+            return None
         # Переключаем ключ и перевыбрасываем исключение для retry
         current_gemini_key_index = (current_gemini_key_index + 1) % len(GOOGLE_API_KEYS)
         raise
@@ -168,7 +173,6 @@ def summarize_with_mistral(text_to_summarize: str) -> str | None:
     Суммирует предоставленный текст с помощью модели Mistral.
     """
     from mistralai.client import MistralClient
-    from mistralai.models.chat_completion import ChatMessage
 
     if not MISTRAL_API_KEY:
         logger.error("API-ключ для Mistral не найден.")
@@ -178,7 +182,8 @@ def summarize_with_mistral(text_to_summarize: str) -> str | None:
         client = MistralClient(api_key=MISTRAL_API_KEY)
 
         prompt = create_summarization_prompt(text_to_summarize)
-        messages = [ChatMessage(role="user", content=prompt)]
+        # Используем универсальный формат сообщений без зависимости от моделей SDK
+        messages = [{"role": "user", "content": prompt}]
 
         chat_response = client.chat(
             model=MISTRAL_MODEL_NAME,
