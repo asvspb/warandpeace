@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import time
 from datetime import datetime, timedelta
 import requests
 
@@ -8,6 +9,7 @@ from telegram import BotCommand, BotCommandScopeChat, Update
 from telegram.constants import ParseMode
 from telegram.error import NetworkError, TimedOut, RetryAfter, BadRequest, TelegramError
 from telegram.ext import Application, CommandHandler, ContextTypes, filters
+from telegram.request import HTTPXRequest
 
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID, TELEGRAM_ADMIN_ID, NEWS_URL
 from database import (
@@ -53,7 +55,8 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
     """
     Основная задача: проверяет наличие новых статей, обрабатывает и публикует их.
     """
-    logger.info("[TASK] Запущена задача проверки и публикации новостей...")
+    logger.debug("[TASK] Запущена задача проверки и публикации новостей...")
+    start_time = time.time()
     try:
         # 1. Получаем последние статьи с сайта
         articles_from_site = await asyncio.to_thread(get_articles_from_page, 1)
@@ -63,101 +66,94 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
 
         # Сортируем статьи от старых к новым, чтобы публиковать в хронологическом порядке
         articles_from_site.reverse()
-        
+
+        # 2. Отбираем только новые статьи
+        new_articles = []
+        for article in articles_from_site:
+            if not await asyncio.to_thread(is_article_posted, article["link"]):
+                new_articles.append(article)
+
+        if not new_articles:
+            logger.debug("[TASK] Новых статей для публикации не найдено.")
+            return
+
+        # 3. Логируем информацию о найденных статьях
+        log_post_examples = int(os.getenv("LOG_POST_EXAMPLES", 3))
+        examples = [f'"{a["title"]}" ({a["link"]})' for a in new_articles[:log_post_examples]]
+        hidden_count = len(new_articles) - len(examples)
+        examples_str = ", ".join(examples)
+        if hidden_count > 0:
+            examples_str += f" и еще {hidden_count} скрыто."
+        logger.info(f"Найдены новые статьи: {len(new_articles)} шт. [{examples_str}]")
+
+        # 4. Обработка и публикация
         posted_count = 0
-        # Ограничение, чтобы не публиковать слишком много за раз
-        max_posts_per_run = 3 
+        max_posts_per_run = int(os.getenv("MAX_POSTS_PER_RUN", 3))
 
         try:
             chat = await context.bot.get_chat(chat_id=TELEGRAM_CHANNEL_ID)
             channel_username = f"@{chat.username}"
-        except TimedOut:
-            logger.warning("Тайм-аут при получении информации о канале. Использую ID канала.")
-            channel_username = f"@{TELEGRAM_CHANNEL_ID}"
         except Exception as e:
             logger.error(f"Не удалось получить информацию о канале: {e}", exc_info=True)
-            channel_username = f"@{TELEGRAM_CHANNEL_ID}" # Fallback
+            channel_username = f"@{TELEGRAM_CHANNEL_ID}"  # Fallback
 
-        for article_data in articles_from_site:
+        for article_data in new_articles:
             if posted_count >= max_posts_per_run:
                 logger.info(f"Достигнут лимит публикаций ({max_posts_per_run}) за один запуск.")
                 break
 
-            # 2. Проверяем, была ли статья уже опубликована
-            if await asyncio.to_thread(is_article_posted, article_data["link"]):
-                continue
-
-            logger.info(f"Найдена новая статья для обработки: {article_data['title']}")
-            
+            logger.debug(f"Обработка статьи: {article_data['title']}")
             try:
-                # 3. Полный цикл обработки и публикации
                 full_text = await asyncio.to_thread(get_article_text, article_data["link"])
                 if not full_text:
                     logger.error(f"Не удалось получить текст статьи: {article_data['link']}")
                     continue
 
-                try:
-                    summary = await asyncio.to_thread(summarize_text_local, full_text)
-                except Exception as e:
-                    logger.error(f"Ошибка при получении резюме от Gemini: {e}")
-                    summary = None
+                summary = await asyncio.to_thread(summarize_text_local, full_text)
+                if not summary:
+                    logger.warning(f"Резюме от Gemini не получено, пробую Mistral: {article_data['link']}")
+                    summary = await asyncio.to_thread(summarize_with_mistral, full_text)
 
                 if not summary:
-                    logger.warning(f"Не удалось получить резюме от Gemini, пробую Mistral: {article_data['link']}")
-                    try:
-                        summary = await asyncio.to_thread(summarize_with_mistral, full_text)
-                    except Exception as e:
-                        logger.error(f"Ошибка при получении резюме от Mistral: {e}")
-                        summary = None
-
-                if not summary:
-                    logger.error(f"Не удалось сгенерировать резюме ни одним из сервисов: {article_data['link']}")
+                    logger.error(f"Не удалось сгенерировать резюме: {article_data['link']}")
                     continue
-                
-                # 4. Публикация в Telegram
+
                 message = f"<b>{article_data['title']}</b>\n\n{summary} {channel_username}"
-                try:
-                    await context.bot.send_message(
-                        chat_id=TELEGRAM_CHANNEL_ID, text=message, parse_mode=ParseMode.HTML
-                    )
-                except TelegramError as e:
-                    logger.error("Ошибка отправки сообщения в канал: %s", e, exc_info=True)
-                    await notify_admin(
-                        context.bot,
-                        f"❌ Ошибка отправки сообщения в канал: {e}",
-                        throttle_key="error:send_message",
-                    )
-                    continue
-                logger.info(f"Статья '{article_data['title']}' успешно опубликована.")
-                
-                # 5. Сохранение в БД ПОСЛЕ публикации
-                await asyncio.to_thread(
-                    add_article, 
-                    article_data["link"], 
-                    article_data["title"], 
-                    article_data["published_at"],
-                    summary
+                await context.bot.send_message(
+                    chat_id=TELEGRAM_CHANNEL_ID, text=message, parse_mode=ParseMode.HTML
                 )
-                
+                logger.info(f"Статья '{article_data['title']}' успешно опубликована.")
+
+                await asyncio.to_thread(
+                    add_article,
+                    article_data["link"],
+                    article_data["title"],
+                    article_data["published_at"],
+                    summary,
+                )
                 posted_count += 1
-                await asyncio.sleep(10) # Пауза между публикациями
+                await asyncio.sleep(10)  # Пауза
 
             except Exception as e:
-                logger.error(f"Ошибка при полной обработке статьи {article_data['link']}: {e}", exc_info=True)
+                logger.error(f"Ошибка при обработке статьи {article_data['link']}: {e}", exc_info=True)
                 await notify_admin(
                     context.bot,
                     f"❗ Ошибка обработки статьи: {type(e).__name__}: {str(e)[:200]}",
-                    throttle_key="error:process_article",
+                    throttle_key=f"error:process:{article_data['link']}",
                 )
-        
-        if posted_count == 0:
-            logger.info("[TASK] Новых статей для публикации не найдено.")
+
+        if posted_count > 0:
+            duration = time.time() - start_time
+            logger.info(
+                f"Публикация завершена: опубликовано={posted_count}; "
+                f"кандидатов={len(new_articles)}; длительность={duration:.2f}с"
+            )
 
     except Exception as e:
         logger.error(f"[TASK] Критическая ошибка в задаче 'check_and_post_news': {e}", exc_info=True)
         await notify_admin(
             context.bot,
-            f"⛔ Критическая ошибка задачи check_and_post_news: {type(e).__name__}: {str(e)[:200]}",
+            f"⛔ Критическая ошибка задачи: {type(e).__name__}: {str(e)[:200]}",
             throttle_key="error:check_and_post_news",
         )
 
@@ -189,7 +185,19 @@ async def post_init(application: Application):
             logger.error(f"Не удалось установить команды для администратора: {e}")
 
     # Запуск единой задачи
-    application.job_queue.run_repeating(check_and_post_news, interval=300, first=10, name="CheckAndPostNews")
+    job_kwargs = {
+        "misfire_grace_time": int(os.getenv("JOB_MISFIRE_GRACE", "60")),
+        "coalesce": True,
+        "max_instances": 1,
+        "jitter": int(os.getenv("JOB_JITTER", "3")),
+    }
+    application.job_queue.run_repeating(
+        check_and_post_news,
+        interval=300,
+        first=10,
+        name="CheckAndPostNews",
+        job_kwargs=job_kwargs,
+    )
     logger.info("Единая фоновая задача для проверки и публикации новостей запущена.")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -399,12 +407,33 @@ def main():
     init_db()
 
     logger.info("Создание и запуск приложения-бота...")
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).post_init(post_init).build()
+    # Тюнинг HTTP-клиента Telegram для устойчивости к сетевым сбоям
+    request = HTTPXRequest(
+        read_timeout=float(os.getenv("TG_READ_TIMEOUT", "30")),
+        write_timeout=float(os.getenv("TG_WRITE_TIMEOUT", "30")),
+        connect_timeout=float(os.getenv("TG_CONNECT_TIMEOUT", "10")),
+        pool_timeout=float(os.getenv("TG_POOL_TIMEOUT", "5")),
+        http_version=os.getenv("TG_HTTP_VERSION", "1.1"),
+    )
+    application = (
+        Application.builder()
+        .token(TELEGRAM_BOT_TOKEN)
+        .request(request)
+        .post_init(post_init)
+        .build()
+    )
 
     # Глобальный обработчик ошибок PTB
     async def on_error(update: Update, context: ContextTypes.DEFAULT_TYPE):
         err = context.error
-        logger.error("Global handler caught an exception", exc_info=True)
+        if err is not None:
+            # Логируем стек конкретного исключения, не "NoneType: None"
+            logger.error(
+                "Global handler caught an exception",
+                exc_info=(type(err), err, getattr(err, "__traceback__", None)),
+            )
+        else:
+            logger.error("Global handler caught an exception, but context.error is None")
 
         throttle_key = "error:generic"
         if isinstance(err, RetryAfter):
@@ -436,7 +465,7 @@ def main():
         application.add_handler(CommandHandler("monthly_digest", monthly_digest_command, filters=admin_filter))
         application.add_handler(CommandHandler("annual_digest", annual_digest_command, filters=admin_filter))
 
-    application.run_polling()
+    application.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()
