@@ -30,7 +30,6 @@ from database import (
 from parser import get_articles_from_page, get_article_text
 from summarizer import summarize_text_local, create_digest, create_annual_digest, summarize_with_mistral
 from notifications import notify_admin
-from connectivity import circuit_breaker
 
 # Настройка логирования (тихий режим для сторонних библиотек и управляемый уровень для приложения)
 log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -38,8 +37,22 @@ log_level = getattr(logging, log_level_name, logging.INFO)
 
 logging.basicConfig(
     level=log_level,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    datefmt="%d-%m.%y - [%H:%M]",
+    force=True,
 )
+
+# Явно переназначаем форматтер всем текущим обработчикам корневого логгера
+_root = logging.getLogger()
+_formatter = logging.Formatter(
+    fmt="%(asctime)s - %(levelname)s - %(message)s",
+    datefmt="%d-%m.%y - [%H:%M]",
+)
+for _h in list(_root.handlers):
+    try:
+        _h.setFormatter(_formatter)
+    except Exception:
+        pass
 
 verbose_lib_logs = os.getenv("ENABLE_VERBOSE_LIB_LOGS", "false").lower() in {"1", "true", "yes"}
 if not verbose_lib_logs:
@@ -55,6 +68,10 @@ if not verbose_lib_logs:
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
+
+# Импортируем предохранитель после настройки логирования,
+# чтобы первое сообщение тоже было в новом формате
+from connectivity import circuit_breaker  # noqa: E402
 
 # --- Утилиты с ретраями и Circuit Breaker ---
 

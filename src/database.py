@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Optional, Dict, Any, List
 
 DATABASE_NAME = "/app/database/articles.db"
-logger = logging.getLogger(__name__)
+logger = logging.getLogger()
 
 @contextmanager
 def get_db_connection():

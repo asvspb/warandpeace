@@ -15,7 +15,7 @@ STATE_CLOSED = "CLOSED"  # Соединение считается стабил�
 STATE_OPEN = "OPEN"      # Соединение разорвано, запросы блокируются.
 STATE_HALF_OPEN = "HALF_OPEN" # Пробный период, разрешен один запрос для проверки.
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger()
 
 class TelegramCircuitBreaker:
     """
