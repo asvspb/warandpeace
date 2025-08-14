@@ -170,6 +170,22 @@ def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
+        # 6. Создаем таблицу для отложенных публикаций
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS pending_publications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                url TEXT NOT NULL UNIQUE,
+                title TEXT NOT NULL,
+                published_at TIMESTAMP NOT NULL,
+                summary_text TEXT NOT NULL,
+                attempts INTEGER DEFAULT 0,
+                last_error TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_pending_publications_created_at ON pending_publications (created_at)")
         
         logger.info("Инициализация базы данных завершена.")
 
@@ -576,3 +592,56 @@ def list_recent_articles(days: int = 7, limit: int = 200) -> List[Dict[str, Any]
             (days, limit),
         )
         return [dict(row) for row in cursor.fetchall()]
+
+
+# --- Функции для очереди публикаций ---
+
+def enqueue_publication(url: str, title: str, published_at: str, summary_text: str):
+    """Добавляет статью в очередь на публикацию."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                """
+                INSERT INTO pending_publications (url, title, published_at, summary_text, updated_at)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """,
+                (url, title, published_at, summary_text)
+            )
+            conn.commit()
+            logger.info(f"Статья '{title}' добавлена в очередь на публикацию.")
+        except sqlite3.IntegrityError:
+            logger.warning(f"Статья '{title}' уже находится в очереди на публикацию.")
+        except sqlite3.Error as e:
+            logger.error(f"Ошибка при добавлении статьи '{title}' в очередь: {e}")
+
+def dequeue_batch(limit: int = 5) -> List[Dict[str, Any]]:
+    """Извлекает из очереди старейшие записи для отправки."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM pending_publications ORDER BY created_at ASC LIMIT ?",
+            (limit,)
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+def delete_sent_publication(publication_id: int):
+    """Удаляет успешно отправленную публикацию из очереди."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM pending_publications WHERE id = ?", (publication_id,))
+        conn.commit()
+
+def increment_attempt_count(publication_id: int, last_error: str):
+    """Увеличивает счетчик попыток и записывает последнюю ошибку."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE pending_publications
+            SET attempts = attempts + 1, last_error = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (last_error, publication_id)
+        )
+        conn.commit()

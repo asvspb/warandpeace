@@ -5,10 +5,11 @@ import time
 from datetime import datetime, timedelta
 import requests
 
+from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
 from telegram import BotCommand, BotCommandScopeChat, Update
 from telegram.constants import ParseMode
 from telegram.error import NetworkError, TimedOut, RetryAfter, BadRequest, TelegramError
-from telegram.ext import Application, CommandHandler, ContextTypes, filters
+from telegram.ext import Application, CommandHandler, ContextTypes, filters, JobQueue
 from telegram.request import HTTPXRequest
 
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID, TELEGRAM_ADMIN_ID, NEWS_URL
@@ -21,10 +22,15 @@ from database import (
     get_digests_for_period,
     add_digest,
     get_stats,
+    enqueue_publication,
+    dequeue_batch,
+    delete_sent_publication,
+    increment_attempt_count,
 )
 from parser import get_articles_from_page, get_article_text
 from summarizer import summarize_text_local, create_digest, create_annual_digest, summarize_with_mistral
 from notifications import notify_admin
+from connectivity import circuit_breaker
 
 # Настройка логирования (тихий режим для сторонних библиотек и управляемый уровень для приложения)
 log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -50,6 +56,63 @@ if not verbose_lib_logs:
 
 logger = logging.getLogger(__name__)
 
+# --- Утилиты с ретраями и Circuit Breaker ---
+
+class CircuitBreakerOpenError(Exception):
+    """Исключение, выбрасываемое, когда Circuit Breaker находится в состоянии OPEN."""
+    pass
+
+def _on_retry_before_sleep(retry_state):
+    """Логирует информацию перед повторной попыткой и фиксирует сбой для CB."""
+    exc = retry_state.outcome.exception()
+    logger.warning(
+        "Retrying Telegram API call due to %s. Attempt #%d...",
+        exc,
+        retry_state.attempt_number,
+    )
+    circuit_breaker.note_failure()
+
+# Ретраим только сетевые/временные ошибки Telegram
+_retry_condition = retry_if_exception_type((NetworkError, TimedOut, RetryAfter))
+
+# Настройка для повторных попыток с экспоненциальной задержкой
+telegram_api_retry = retry(
+    stop=stop_after_attempt(int(os.getenv("TG_RETRY_ATTEMPTS", "4"))),  # 1 основная + 3 повторных
+    wait=wait_exponential(multiplier=1, min=2, max=15),
+    retry=_retry_condition,
+    before_sleep=_on_retry_before_sleep,
+)
+
+async def _execute_telegram_call(func, **kwargs):
+    """
+    Выполняет вызов к Telegram API, проверяя состояние Circuit Breaker.
+    """
+    if circuit_breaker.is_open():
+        logger.warning("Circuit Breaker is OPEN. Skipping Telegram API call.")
+        raise CircuitBreakerOpenError("Circuit Breaker is open")
+    
+    try:
+        result = await func(**kwargs)
+        circuit_breaker.note_success()
+        return result
+    except (NetworkError, TimedOut, RetryAfter) as e:
+        # Отметим сбой и пробросим для ретраев tenacity
+        circuit_breaker.note_failure()
+        raise e
+    except Exception:
+        # Другие ошибки (например, BadRequest) — без ретраев
+        raise
+
+@telegram_api_retry
+async def send_message_with_retry(bot, **kwargs):
+    """Обертка для bot.send_message с логикой Circuit Breaker и ретраями."""
+    return await _execute_telegram_call(bot.send_message, **kwargs)
+
+@telegram_api_retry
+async def get_chat_with_retry(bot, **kwargs):
+    """Обертка для bot.get_chat с логикой Circuit Breaker и ретраями."""
+    return await _execute_telegram_call(bot.get_chat, **kwargs)
+
 # --- Основная задача ---
 
 async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
@@ -57,6 +120,11 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
     Основная задача: проверяет наличие новых статей, обрабатывает и публикует их.
     """
     logger.debug("[TASK] Запущена задача проверки и публикации новостей...")
+    
+    if circuit_breaker.is_open():
+        logger.warning("[TASK] Circuit Breaker находится в состоянии OPEN. Пропуск основного цикла задачи.")
+        return
+        
     start_time = time.time()
     try:
         # 1. Получаем последние статьи с сайта
@@ -92,10 +160,10 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
         max_posts_per_run = int(os.getenv("MAX_POSTS_PER_RUN", 3))
 
         try:
-            chat = await context.bot.get_chat(chat_id=TELEGRAM_CHANNEL_ID)
+            chat = await get_chat_with_retry(bot=context.bot, chat_id=TELEGRAM_CHANNEL_ID)
             channel_username = f"@{chat.username}"
         except Exception as e:
-            logger.error(f"Не удалось получить информацию о канале: {e}", exc_info=True)
+            logger.error(f"Не удалось получить информацию о канале после нескольких попыток: {e}", exc_info=True)
             channel_username = f"@{TELEGRAM_CHANNEL_ID}"  # Fallback
 
         for article_data in new_articles:
@@ -105,6 +173,8 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
 
             logger.debug(f"Обработка статьи: {article_data['title']}")
             try:
+                full_text = None
+                summary = None
                 full_text = await asyncio.to_thread(get_article_text, article_data["link"])
                 if not full_text:
                     logger.error(f"Не удалось получить текст статьи: {article_data['link']}")
@@ -120,8 +190,8 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
                     continue
 
                 message = f"<b>{article_data['title']}</b>\n\n{summary} {channel_username}"
-                await context.bot.send_message(
-                    chat_id=TELEGRAM_CHANNEL_ID, text=message, parse_mode=ParseMode.HTML
+                await send_message_with_retry(
+                    bot=context.bot, chat_id=TELEGRAM_CHANNEL_ID, text=message, parse_mode=ParseMode.HTML
                 )
                 logger.info(f"Статья '{article_data['title']}' успешно опубликована.")
                 ARTICLES_POSTED.inc()
@@ -136,11 +206,28 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
                 posted_count += 1
                 await asyncio.sleep(10)  # Пауза
 
+            except CircuitBreakerOpenError:
+                logger.warning(f"Отправка статьи '{article_data['title']}' отложена (Circuit Breaker OPEN).")
+                await asyncio.to_thread(
+                    enqueue_publication,
+                    url=article_data["link"],
+                    title=article_data["title"],
+                    published_at=article_data["published_at"],
+                    summary_text=(summary or ""),
+                )
             except Exception as e:
-                logger.error(f"Ошибка при обработке статьи {article_data['link']}: {e}", exc_info=True)
+                error_message = f"Ошибка при обработке статьи {article_data['link']}: {e}"
+                logger.error(error_message, exc_info=True)
+                await asyncio.to_thread(
+                    enqueue_publication,
+                    url=article_data["link"],
+                    title=article_data["title"],
+                    published_at=article_data["published_at"],
+                    summary_text=(summary or ""),
+                )
                 await notify_admin(
                     context.bot,
-                    f"❗ Ошибка обработки статьи: {type(e).__name__}: {str(e)[:200]}",
+                    f"❗ Ошибка обработки статьи (статья добавлена в очередь): {type(e).__name__}: {str(e)[:200]}",
                     throttle_key=f"error:process:{article_data['link']}",
                 )
 
@@ -171,6 +258,63 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
 
 
 # --- Команды бота ---
+
+async def flush_pending_publications(context: ContextTypes.DEFAULT_TYPE):
+    """
+    Отправляет отложенные публикации из очереди.
+    """
+    logger.debug("[TASK] Запущена задача отправки отложенных публикаций...")
+    
+    if circuit_breaker.is_open():
+        logger.warning("[TASK] Circuit Breaker находится в состоянии OPEN. Пропуск отправки из очереди.")
+        return
+
+    pending_articles = await asyncio.to_thread(dequeue_batch, limit=5)
+    if not pending_articles:
+        logger.debug("[TASK] Очередь отложенных публикаций пуста.")
+        return
+
+    logger.info(f"Найдено {len(pending_articles)} отложенных публикаций. Начинаю отправку.")
+    
+    try:
+        chat = await get_chat_with_retry(bot=context.bot, chat_id=TELEGRAM_CHANNEL_ID)
+        channel_username = f"@{chat.username}"
+    except Exception as e:
+        logger.error(f"Не удалось получить информацию о канале для отправки из очереди: {e}", exc_info=True)
+        channel_username = f"@{TELEGRAM_CHANNEL_ID}"  # Fallback
+
+    for article in pending_articles:
+        try:
+            message = f"<b>{article['title']}</b>\n\n{article['summary_text']} {channel_username}"
+            await send_message_with_retry(
+                bot=context.bot,
+                chat_id=TELEGRAM_CHANNEL_ID,
+                text=message,
+                parse_mode=ParseMode.HTML
+            )
+            
+            # Если успешно, добавляем в основную таблицу и удаляем из очереди
+            await asyncio.to_thread(
+                add_article,
+                article["url"],
+                article["title"],
+                article["published_at"],
+                article["summary_text"],
+            )
+            await asyncio.to_thread(delete_sent_publication, article["id"])
+            logger.info(f"Отложенная статья '{article['title']}' успешно опубликована.")
+            ARTICLES_POSTED.inc()
+            await asyncio.sleep(10) # Пауза
+
+        except Exception as e:
+            error_message = f"Не удалось отправить отложенную статью ID {article['id']}: {e}"
+            logger.error(error_message, exc_info=True)
+            await asyncio.to_thread(increment_attempt_count, article["id"], str(e))
+            # Если это была ошибка из-за Circuit Breaker, прерываем цикл, чтобы не долбиться в закрытую дверь
+            if isinstance(e, CircuitBreakerOpenError):
+                logger.warning("Останавливаю задачу отправки из очереди, т.к. Circuit Breaker перешел в OPEN.")
+                break
+
 
 async def post_init(application: Application):
     """Устанавливает команды и запускает фоновую задачу."""
@@ -210,6 +354,16 @@ async def post_init(application: Application):
         job_kwargs=job_kwargs,
     )
     logger.info("Единая фоновая задача для проверки и публикации новостей запущена.")
+
+    # Запуск задачи для отправки из очереди
+    application.job_queue.run_repeating(
+        flush_pending_publications,
+        interval=120,  # Каждые 2 минуты
+        first=20,
+        name="FlushPendingPublications",
+        job_kwargs=job_kwargs,
+    )
+    logger.info("Фоновая задача для отправки отложенных публикаций запущена.")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Отправляет приветственное сообщение."""
@@ -267,7 +421,7 @@ async def healthcheck(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def daily_digest_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Создает и отправляет дайджест за предыдущий календарный день."""
     user_id = update.effective_user.id
-    await context.bot.send_message(chat_id=user_id, text="Начинаю подготовку дайджеста за вчерашний день...")
+    await send_message_with_retry(bot=context.bot, chat_id=user_id, text="Начинаю подготовку дайджеста за вчерашний день...")
 
     try:
         today = datetime.now()
@@ -282,31 +436,32 @@ async def daily_digest_command(update: Update, context: ContextTypes.DEFAULT_TYP
         )
 
         if not summaries:
-            await context.bot.send_message(chat_id=user_id, text=f"За {yesterday.strftime('%d.%m.%Y')} не найдено статей для создания дайджеста.")
+            await send_message_with_retry(bot=context.bot, chat_id=user_id, text=f"За {yesterday.strftime('%d.%m.%Y')} не найдено статей для создания дайджеста.")
             return
 
         period_name = f"вчера, {yesterday.strftime('%d %B %Y')}"
         digest_content = await asyncio.to_thread(create_digest, summaries, period_name)
 
         if not digest_content:
-            await context.bot.send_message(chat_id=user_id, text="Не удалось создать аналитическую сводку.")
+            await send_message_with_retry(bot=context.bot, chat_id=user_id, text="Не удалось создать аналитическую сводку.")
             return
 
         await asyncio.to_thread(add_digest, f"daily_{yesterday.strftime('%Y-%m-%d')}", digest_content)
-        await context.bot.send_message(
+        await send_message_with_retry(
+            bot=context.bot,
             chat_id=user_id,
             text=f"**Аналитический дайджест за {period_name}:**\n\n{digest_content}",
             parse_mode=ParseMode.MARKDOWN
         )
     except Exception as e:
         logger.error(f"Ошибка при создании суточного дайджеста: {e}", exc_info=True)
-        await context.bot.send_message(chat_id=user_id, text=f"Произошла ошибка при создании сводки: {e}")
+        await send_message_with_retry(bot=context.bot, chat_id=user_id, text=f"Произошла ошибка при создании сводки: {e}")
 
 
 async def weekly_digest_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Создает и отправляет дайджест за предыдущую полную неделю (Пн-Вс)."""
     user_id = update.effective_user.id
-    await context.bot.send_message(chat_id=user_id, text="Начинаю подготовку дайджеста за прошлую неделю...")
+    await send_message_with_retry(bot=context.bot, chat_id=user_id, text="Начинаю подготовку дайджеста за прошлую неделю...")
 
     try:
         today = datetime.now()
@@ -321,31 +476,32 @@ async def weekly_digest_command(update: Update, context: ContextTypes.DEFAULT_TY
         )
 
         if not summaries:
-            await context.bot.send_message(chat_id=user_id, text="За прошлую неделю не найдено статей для создания дайджеста.")
+            await send_message_with_retry(bot=context.bot, chat_id=user_id, text="За прошлую неделю не найдено статей для создания дайджеста.")
             return
 
         period_name = f"прошлую неделю ({start_of_last_week.strftime('%d.%m')} - {end_of_last_week.strftime('%d.%m.%Y')})"
         digest_content = await asyncio.to_thread(create_digest, summaries, period_name)
 
         if not digest_content:
-            await context.bot.send_message(chat_id=user_id, text="Не удалось создать аналитическую сводку.")
+            await send_message_with_retry(bot=context.bot, chat_id=user_id, text="Не удалось создать аналитическую сводку.")
             return
 
         await asyncio.to_thread(add_digest, f"weekly_{start_of_last_week.strftime('%Y-%m-%d')}", digest_content)
-        await context.bot.send_message(
+        await send_message_with_retry(
+            bot=context.bot,
             chat_id=user_id,
             text=f"**Аналитический дайджест за {period_name}:**\n\n{digest_content}",
             parse_mode=ParseMode.MARKDOWN
         )
     except Exception as e:
         logger.error(f"Ошибка при создании недельного дайджеста: {e}", exc_info=True)
-        await context.bot.send_message(chat_id=user_id, text=f"Произошла ошибка при создании сводки: {e}")
+        await send_message_with_retry(bot=context.bot, chat_id=user_id, text=f"Произошла ошибка при создании сводки: {e}")
 
 
 async def monthly_digest_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Создает и отправляет дайджест за предыдущий полный месяц."""
     user_id = update.effective_user.id
-    await context.bot.send_message(chat_id=user_id, text="Начинаю подготовку дайджеста за прошлый месяц...")
+    await send_message_with_retry(bot=context.bot, chat_id=user_id, text="Начинаю подготовку дайджеста за прошлый месяц...")
 
     try:
         today = datetime.now()
@@ -363,53 +519,55 @@ async def monthly_digest_command(update: Update, context: ContextTypes.DEFAULT_T
         )
 
         if not summaries:
-            await context.bot.send_message(chat_id=user_id, text="За прошлый месяц не найдено статей для создания дайджеста.")
+            await send_message_with_retry(bot=context.bot, chat_id=user_id, text="За прошлый месяц не найдено статей для создания дайджеста.")
             return
 
         period_name = f"прошлый месяц ({start_date.strftime('%B %Y')})"
         digest_content = await asyncio.to_thread(create_digest, summaries, period_name)
 
         if not digest_content:
-            await context.bot.send_message(chat_id=user_id, text="Не удалось создать аналитическую сводку.")
+            await send_message_with_retry(bot=context.bot, chat_id=user_id, text="Не удалось создать аналитическую сводку.")
             return
 
         await asyncio.to_thread(add_digest, f"monthly_{start_date.strftime('%Y-%m')}", digest_content)
-        await context.bot.send_message(
+        await send_message_with_retry(
+            bot=context.bot,
             chat_id=user_id,
             text=f"**Аналитический дайджест за {period_name}:**\n\n{digest_content}",
             parse_mode=ParseMode.MARKDOWN
         )
     except Exception as e:
         logger.error(f"Ошибка при создании месячного дайджеста: {e}", exc_info=True)
-        await context.bot.send_message(chat_id=user_id, text=f"Произошла ошибка при создании сводки: {e}")
+        await send_message_with_retry(bot=context.bot, chat_id=user_id, text=f"Произошла ошибка при создании сводки: {e}")
 
 
 async def annual_digest_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Создает и отправляет годовой дайджест на основе дайджестов за год."""
     user_id = update.effective_user.id
-    await context.bot.send_message(chat_id=user_id, text="Начинаю подготовку итоговой годовой сводки...")
+    await send_message_with_retry(bot=context.bot, chat_id=user_id, text="Начинаю подготовку итоговой годовой сводки...")
 
     try:
         digests = await asyncio.to_thread(get_digests_for_period, 365)
         if not digests:
-            await context.bot.send_message(chat_id=user_id, text="Нет дайджестов за год для анализа.")
+            await send_message_with_retry(bot=context.bot, chat_id=user_id, text="Нет дайджестов за год для анализа.")
             return
 
         digest_content = await asyncio.to_thread(create_annual_digest, digests)
         if not digest_content:
-            await context.bot.send_message(chat_id=user_id, text="Не удалось создать годовую сводку.")
+            await send_message_with_retry(bot=context.bot, chat_id=user_id, text="Не удалось создать годовую сводку.")
             return
 
         year = datetime.now().year - 1
         await asyncio.to_thread(add_digest, f"annual_{year}", digest_content)
-        await context.bot.send_message(
+        await send_message_with_retry(
+            bot=context.bot,
             chat_id=user_id,
             text=f"**Итоговая аналитическая сводка за {year} год:**\n\n{digest_content}",
             parse_mode=ParseMode.MARKDOWN
         )
     except Exception as e:
         logger.error(f"Ошибка при создании годового дайджеста: {e}", exc_info=True)
-        await context.bot.send_message(chat_id=user_id, text=f"Произошла ошибка при создании сводки: {e}")
+        await send_message_with_retry(bot=context.bot, chat_id=user_id, text=f"Произошла ошибка при создании сводки: {e}")
 
 
 def main():
@@ -421,16 +579,17 @@ def main():
     start_metrics_server()
     # Тюнинг HTTP-клиента Telegram для устойчивости к сетевым сбоям
     request = HTTPXRequest(
-        read_timeout=float(os.getenv("TG_READ_TIMEOUT", "30")),
-        write_timeout=float(os.getenv("TG_WRITE_TIMEOUT", "30")),
-        connect_timeout=float(os.getenv("TG_CONNECT_TIMEOUT", "10")),
-        pool_timeout=float(os.getenv("TG_POOL_TIMEOUT", "5")),
+        read_timeout=float(os.getenv("TG_READ_TIMEOUT", "60")),
+        write_timeout=float(os.getenv("TG_WRITE_TIMEOUT", "60")),
+        connect_timeout=float(os.getenv("TG_CONNECT_TIMEOUT", "30")),
+        pool_timeout=float(os.getenv("TG_POOL_TIMEOUT", "60")),
         http_version=os.getenv("TG_HTTP_VERSION", "1.1"),
     )
     application = (
         Application.builder()
         .token(TELEGRAM_BOT_TOKEN)
         .request(request)
+        .job_queue(JobQueue())
         .post_init(post_init)
         .build()
     )
