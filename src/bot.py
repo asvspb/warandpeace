@@ -12,6 +12,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes, filters
 from telegram.request import HTTPXRequest
 
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID, TELEGRAM_ADMIN_ID, NEWS_URL
+from metrics import start_metrics_server, JOB_DURATION, ARTICLES_POSTED, ERRORS_TOTAL, update_last_article_age
 from database import (
     init_db,
     add_article,
@@ -123,6 +124,7 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
                     chat_id=TELEGRAM_CHANNEL_ID, text=message, parse_mode=ParseMode.HTML
                 )
                 logger.info(f"Статья '{article_data['title']}' успешно опубликована.")
+                ARTICLES_POSTED.inc()
 
                 await asyncio.to_thread(
                     add_article,
@@ -148,9 +150,18 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
                 f"Публикация завершена: опубликовано={posted_count}; "
                 f"кандидатов={len(new_articles)}; длительность={duration:.2f}с"
             )
+            # Обновляем метрику возраста последней статьи
+            try:
+                from database import get_stats
+                stats = await asyncio.to_thread(get_stats)
+                last = stats.get('last_posted_article', {})
+                update_last_article_age(last.get('published_at'))
+            except Exception:
+                pass
 
     except Exception as e:
         logger.error(f"[TASK] Критическая ошибка в задаче 'check_and_post_news': {e}", exc_info=True)
+        ERRORS_TOTAL.labels(type=type(e).__name__).inc()
         await notify_admin(
             context.bot,
             f"⛔ Критическая ошибка задачи: {type(e).__name__}: {str(e)[:200]}",
@@ -407,6 +418,7 @@ def main():
     init_db()
 
     logger.info("Создание и запуск приложения-бота...")
+    start_metrics_server()
     # Тюнинг HTTP-клиента Telegram для устойчивости к сетевым сбоям
     request = HTTPXRequest(
         read_timeout=float(os.getenv("TG_READ_TIMEOUT", "30")),

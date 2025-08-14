@@ -166,4 +166,30 @@ cython_debug/
 .qodo
 .vscode/
 
+# OS / Editor cruft
+.DS_Store
+Thumbs.db
+.idea/
+
+# Local env variants
+.env.local
+.env.*
+!.env.example
+
+# Local databases and backups
+database/*.db
+database/*.db-*
+database/*.db.*
+database/*-wal
+database/*-shm
+database/*-journal
+database/*.bak-*
+test_articles.db
+*.db.bak-*
+
+# Logs and temp files
+logs/
+temp/
+
+# Legacy specific file (kept for compatibility)
 database/articles.db
