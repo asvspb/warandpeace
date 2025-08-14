@@ -3,7 +3,28 @@ import time
 from datetime import datetime, timezone
 from typing import Optional
 
-from prometheus_client import Counter, Gauge, Histogram, start_http_server
+try:
+    from prometheus_client import Counter, Gauge, Histogram, start_http_server  # type: ignore
+except Exception:  # pragma: no cover - graceful fallback for test env
+    class _NoopMetric:
+        def __init__(self, *args, **kwargs):
+            pass
+        def inc(self, *args, **kwargs):
+            return None
+        def set(self, *args, **kwargs):
+            return None
+        def observe(self, *args, **kwargs):
+            return None
+        def labels(self, *args, **kwargs):
+            return self
+
+    # Fallback shims
+    Counter = _NoopMetric  # type: ignore
+    Gauge = _NoopMetric  # type: ignore
+    Histogram = _NoopMetric  # type: ignore
+
+    def start_http_server(*args, **kwargs):  # type: ignore
+        return None
 
 
 # Metrics definitions

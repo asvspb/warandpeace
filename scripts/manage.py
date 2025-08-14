@@ -30,10 +30,16 @@ from src.database import (  # noqa: E402
     get_content_hash_groups,
     list_articles_by_content_hash,
 )
+from src.database import list_recent_articles  # noqa: E402
 from src.parser import get_article_text, get_articles_from_page  # noqa: E402
 from src.async_parser import fetch_articles_for_date  # noqa: E402
 from src.summarizer import summarize_text_local as summarize  # noqa: E402
 from src.url_utils import canonicalize_url  # noqa: E402
+from src.metrics import (
+    ARTICLES_INGESTED,
+    ERRORS_TOTAL,
+    DLQ_SIZE,
+)
 
 # --- Загрузка переменных окружения ---
 dotenv_path = os.path.join(project_root, '.env')
@@ -79,6 +85,22 @@ def cli():
     """Инструмент для управления новостным ботом."""
     init_db()
     pass
+
+
+def _echo_with_dlq_tail(prefix: str) -> None:
+    """Печатает строку с добавлением DLQ=SIZE, если возможно.
+
+    Избегает падений в окружениях без прав на каталог БД.
+    """
+    try:
+        dlq_size = get_dlq_size()
+        try:
+            DLQ_SIZE.set(dlq_size)
+        except Exception:
+            pass
+        click.echo(f"{prefix}; DLQ={dlq_size}")
+    except Exception:
+        click.echo(prefix)
 
 
 @cli.command()
@@ -148,10 +170,12 @@ def ingest_page(page: int, limit: int):
                 raise ValueError("Контент пустой")
             upsert_raw_article(a['link'], a['title'], a['published_at'], text)
             added += 1
+            ARTICLES_INGESTED.inc()
         except Exception as e:
             logging.error(f"Ошибка инжеста {a['link']}: {e}")
             dlq_record('article', a['link'], error_code=type(e).__name__, error_payload=str(e)[:500])
-    click.echo(f"Инжест завершён. Добавлено/обновлено: {added}; DLQ={get_dlq_size()}")
+            ERRORS_TOTAL.labels(type=type(e).__name__).inc()
+    _echo_with_dlq_tail(f"Инжест завершён. Добавлено/обновлено: {added}")
 
 
 @cli.command('backfill-range')
@@ -177,11 +201,13 @@ def backfill_range(from_date: str, to_date: str, max_workers: int):
                     raise ValueError("Контент пустой")
                 upsert_raw_article(link, title, f"{current} 00:00:00", text)
                 total_added += 1
+                ARTICLES_INGESTED.inc()
             except Exception as e:
                 logging.error(f"Backfill: ошибка для {link}: {e}")
                 dlq_record('article', link, error_code=type(e).__name__, error_payload=str(e)[:500])
+                ERRORS_TOTAL.labels(type=type(e).__name__).inc()
         current += timedelta(days=1)
-    click.echo(f"Backfill завершён. Обработано статей: {total_added}")
+    _echo_with_dlq_tail(f"Backfill завершён. Обработано статей: {total_added}")
 
 
 @cli.command('reconcile')
@@ -202,12 +228,14 @@ def reconcile(since_days: int):
                     raise ValueError("Контент пустой")
                 upsert_raw_article(link, title, f"{d} 00:00:00", text)
                 day_missing += 1
+                ARTICLES_INGESTED.inc()
             except Exception as e:
                 logging.error(f"Reconcile: ошибка для {link}: {e}")
                 dlq_record('article', link, error_code=type(e).__name__, error_payload=str(e)[:500])
+                ERRORS_TOTAL.labels(type=type(e).__name__).inc()
         missing_total += day_missing
         click.echo(f"{d.isoformat()}: дозагружено {day_missing}")
-    click.echo(f"Reconcile завершён. Дозагружено суммарно: {missing_total}")
+    _echo_with_dlq_tail(f"Reconcile завершён. Дозагружено суммарно: {missing_total}")
 
 
 @cli.command('summarize-range')
@@ -232,6 +260,7 @@ def summarize_range(from_date: str, to_date: str):
         set_article_summary(row['id'], summary)
         done += 1
     click.echo(f"Суммаризации выполнены: {done}")
+    # метрики ошибок суммаризации пока опускаем, чтобы не плодить label-cardinality
 
 
 # --- DLQ: просмотр и повтор ---
@@ -303,6 +332,55 @@ def content_hash_report(min_count: int, details: bool):
             rows = list_articles_by_content_hash(h)
             for r in rows:
                 click.echo(f"  - id={r['id']} [{r['published_at']}] {r['title']} ({r['canonical_link']})")
+
+
+@cli.command('near-duplicates')
+@click.option('--days', type=int, default=7, help='Сколько дней анализировать')
+@click.option('--limit', type=int, default=200, help='Максимум статей для анализа')
+@click.option('--threshold', type=float, default=0.8, help='Порог схожести (0..1)')
+def near_duplicates(days: int, limit: int, threshold: float):
+    """Быстрый поиск почти-дубликатов по шинглам (Jaccard)."""
+    import re
+    from collections import defaultdict
+
+    def normalize(text: str) -> list[str]:
+        text = text.lower()
+        words = re.findall(r"[a-zа-яё0-9]+", text)
+        return words
+
+    def shingles(words: list[str], k: int = 5) -> set[tuple[str, ...]]:
+        if len(words) < k:
+            return set()
+        return {tuple(words[i:i+k]) for i in range(len(words) - k + 1)}
+
+    rows = list_recent_articles(days=days, limit=limit)
+    sigs: list[tuple[int, str, set[tuple[str, ...]]]] = []
+    for r in rows:
+        w = normalize(r['content'] or '')
+        sh = shingles(w)
+        if sh:
+            sigs.append((r['id'], r['title'], sh))
+
+    pairs = []
+    n = len(sigs)
+    for i in range(n):
+        for j in range(i + 1, n):
+            s1 = sigs[i][2]
+            s2 = sigs[j][2]
+            inter = len(s1 & s2)
+            union = len(s1 | s2)
+            if union == 0:
+                continue
+            jacc = inter / union
+            if jacc >= threshold:
+                pairs.append((sigs[i][0], sigs[j][0], jacc, sigs[i][1], sigs[j][1]))
+
+    if not pairs:
+        click.echo("Почти-дубликаты не найдены")
+        return
+    pairs.sort(key=lambda x: x[2], reverse=True)
+    for a_id, b_id, sim, a_title, b_title in pairs[:200]:
+        click.echo(f"{sim:.2f}: id={a_id} ~ id={b_id} | '{a_title}' ~ '{b_title}'")
 
 if __name__ == '__main__':
     cli()

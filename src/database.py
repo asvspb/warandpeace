@@ -518,3 +518,21 @@ def get_stats() -> Dict[str, Any]:
             }
             
     return stats
+
+
+def list_recent_articles(days: int = 7, limit: int = 200) -> List[Dict[str, Any]]:
+    """Возвращает последние статьи за N дней (для анализа почти-дубликатов)."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, title, canonical_link, content, published_at
+            FROM articles
+            WHERE published_at >= datetime('now', '-' || ? || ' days')
+              AND content IS NOT NULL AND TRIM(content) <> ''
+            ORDER BY published_at DESC
+            LIMIT ?
+            """,
+            (days, limit),
+        )
+        return [dict(row) for row in cursor.fetchall()]
