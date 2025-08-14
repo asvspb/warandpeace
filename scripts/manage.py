@@ -181,8 +181,9 @@ def ingest_page(page: int, limit: int):
 @cli.command('backfill-range')
 @click.option('--from-date', 'from_date', required=True, help='Начало периода (YYYY-MM-DD)')
 @click.option('--to-date', 'to_date', required=True, help='Конец периода (YYYY-MM-DD)')
+@click.option('--archive-only', is_flag=True, help='Использовать только архив (быстрее для старых дат).')
 @click.option('--max-workers', type=int, default=4, help='Ограничение параллелизма (в разработке: используется последовательная обработка).')
-def backfill_range(from_date: str, to_date: str, max_workers: int):
+def backfill_range(from_date: str, to_date: str, archive_only: bool, max_workers: int):
     """Backfill «сырых» статей за диапазон дат (без суммаризации)."""
     from datetime import datetime, timedelta
     start = datetime.fromisoformat(from_date).date()
@@ -193,7 +194,7 @@ def backfill_range(from_date: str, to_date: str, max_workers: int):
     current = start
     while current <= end:
         click.echo(f"Сбор статей за {current.isoformat()}...")
-        pairs = asyncio.run(fetch_articles_for_date(current))
+        pairs = asyncio.run(fetch_articles_for_date(current, archive_only=archive_only))
         for title, link in pairs:
             try:
                 text = get_article_text(link)

@@ -106,42 +106,44 @@ async def get_articles_from_archive(client: httpx.AsyncClient, target_date_str: 
         logger.error(f"Произошла непредвиденная ошибка при парсинге страницы архива {search_url}: {e}")
         return [], 0
 
-async def fetch_articles_for_date(target_date: date) -> list[tuple[str, str]]:
+async def fetch_articles_for_date(target_date: date, archive_only: bool = False) -> list[tuple[str, str]]:
     """
     Универсальная функция для сбора всех статей за определенную дату.
     Сначала ищет на главной странице, затем в архиве.
     """
-    logger.info(f"Начинаю универсальный сбор статей за {target_date.strftime('%d.%m.%Y')}")
+    mode = "archive-only" if archive_only else "universal"
+    logger.info(f"Начинаю сбор статей за {target_date.strftime('%d.%m.%Y')} (mode={mode})")
     all_articles = {}
 
     async with httpx.AsyncClient() as client:
-        # 1. Поиск на главной странице
-        logger.info("Этап 1: Поиск на главных страницах новостей...")
-        page = 1
-        stop_search = False
-        while not stop_search:
-            logger.info(f"Загружаю главную страницу {page}...")
-            articles_on_page = await get_articles_from_main_page(client, page)
-            if not articles_on_page:
-                logger.info("На главной странице больше нет статей. Завершаю поиск.")
-                break
-
-            for article in articles_on_page:
-                article_date = article["published_at"].date()
-                logger.info(f"Найдена статья: {article['title']} с датой {article_date.strftime('%Y-%m-%d')}. Сравнение с {target_date.strftime('%Y-%m-%d')}: Равно? {article_date == target_date}")
-                if article_date == target_date:
-                    all_articles[article["link"]] = article["title"]
-                elif article_date < target_date:
-                    # Если пошли статьи за предыдущие дни, останавливаем поиск
-                    logger.info("Достигнуты статьи за предыдущие даты. Завершаю поиск на главных страницах.")
-                    stop_search = True
+        # 1. Поиск на главной странице (если не архив-онли)
+        if not archive_only:
+            logger.info("Этап 1: Поиск на главных страницах новостей...")
+            page = 1
+            stop_search = False
+            while not stop_search:
+                logger.info(f"Загружаю главную страницу {page}...")
+                articles_on_page = await get_articles_from_main_page(client, page)
+                if not articles_on_page:
+                    logger.info("На главной странице больше нет статей. Завершаю поиск.")
                     break
-            
-            await asyncio.sleep(1)
-            page += 1
+
+                for article in articles_on_page:
+                    article_date = article["published_at"].date()
+                    logger.info(f"Найдена статья: {article['title']} с датой {article_date.strftime('%Y-%m-%d')}. Сравнение с {target_date.strftime('%Y-%m-%d')}: Равно? {article_date == target_date}")
+                    if article_date == target_date:
+                        all_articles[article["link"]] = article["title"]
+                    elif article_date < target_date:
+                        # Если пошли статьи за предыдущие дни, останавливаем поиск
+                        logger.info("Достигнуты статьи за предыдущие даты. Завершаю поиск на главных страницах.")
+                        stop_search = True
+                        break
+                
+                await asyncio.sleep(1)
+                page += 1
 
         # 2. Поиск в архиве для полноты
-        logger.info("Этап 2: Поиск в архиве для гарантии полноты...")
+        logger.info("Этап 2: Поиск в архиве...")
         page = 1
         total_pages = 1
         target_date_str = target_date.strftime("%d.%m.%Y")
