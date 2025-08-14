@@ -48,13 +48,8 @@ NEWS_URL = "https://www.warandpeace.ru/ru/news/"
 GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "models/gemini-1.5-flash-latest")
 MISTRAL_MODEL_NAME = os.getenv("MISTRAL_MODEL_NAME", "mistral-large-latest")
 
-# --- Проверка ключевых переменных ---
-if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID, TELEGRAM_ADMIN_ID]):
-    missing_vars = []
-    if not TELEGRAM_BOT_TOKEN: missing_vars.append("TELEGRAM_BOT_TOKEN")
-    if not TELEGRAM_CHANNEL_ID: missing_vars.append("TELEGRAM_CHANNEL_ID")
-    if not TELEGRAM_ADMIN_ID: missing_vars.append("TELEGRAM_ADMIN_ID")
-    raise ValueError(f"Ключевые переменные Telegram не заданы: {', '.join(missing_vars)}. Проверьте ваш .env файл.")
-
-if not GOOGLE_API_KEYS:
-    raise ValueError("Не найден ни один ключ Google API (GOOGLE_API_KEY, GOOGLE_API_KEY_1 и т.д.). Проверьте ваш .env файл.")
+# --- Проверка ключевых переменных (мягкая) ---
+# Не прерываем импорт модулей при отсутствии переменных — это важно для тестов и
+# для использования библиотечных функций вне основного процесса бота.
+MISSING_TG_VARS = not all([TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID, TELEGRAM_ADMIN_ID])
+MISSING_GOOGLE_KEYS = not bool(GOOGLE_API_KEYS)

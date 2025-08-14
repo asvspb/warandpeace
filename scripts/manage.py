@@ -12,16 +12,24 @@ if project_root not in sys.path:
 # Все импорты размещены здесь, после модификации пути,
 # чтобы обеспечить корректную загрузку модулей из 'src'.
 import logging  # noqa: E402
+import asyncio  # noqa: E402
 import click  # noqa: E402
 from dotenv import load_dotenv  # noqa: E402
 from src.database import (  # noqa: E402
     init_db,
     get_articles_for_backfill,
     update_article_backfill_status,
-    get_stats
+    get_stats,
+    upsert_raw_article,
+    list_articles_without_summary_in_range,
+    set_article_summary,
+    dlq_record,
+    get_dlq_size,
 )
-from src.parser import get_article_text  # noqa: E402
+from src.parser import get_article_text, get_articles_from_page  # noqa: E402
+from src.async_parser import fetch_articles_for_date  # noqa: E402
 from src.summarizer import summarize_text_local as summarize  # noqa: E402
+from src.url_utils import canonicalize_url  # noqa: E402
 
 # --- Загрузка переменных окружения ---
 dotenv_path = os.path.join(project_root, '.env')
@@ -117,6 +125,109 @@ def retry_failed(force):
     failed_articles = get_articles_for_backfill(status='failed')
     _process_articles(failed_articles)
     click.echo("Повторная обработка завершена.")
+
+
+# --- Новые команды: инжест и суммаризация раздельно ---
+
+@cli.command('ingest-page')
+@click.option('--page', type=int, default=1, help='Страница ленты новостей для инжеста.')
+@click.option('--limit', type=int, default=10, help='Максимум статей для инжеста за запуск.')
+def ingest_page(page: int, limit: int):
+    """Загружает «сырые» статьи с указанной страницы и сохраняет content в БД."""
+    click.echo(f"Инжест страницы {page} (limit={limit})...")
+    articles = get_articles_from_page(page=page)
+    added = 0
+    for a in articles[:limit]:
+        try:
+            text = get_article_text(a['link'])
+            if not text:
+                raise ValueError("Контент пустой")
+            upsert_raw_article(a['link'], a['title'], a['published_at'], text)
+            added += 1
+        except Exception as e:
+            logging.error(f"Ошибка инжеста {a['link']}: {e}")
+            dlq_record('article', a['link'], error_code=type(e).__name__, error_payload=str(e)[:500])
+    click.echo(f"Инжест завершён. Добавлено/обновлено: {added}; DLQ={get_dlq_size()}")
+
+
+@cli.command('backfill-range')
+@click.option('--from-date', 'from_date', required=True, help='Начало периода (YYYY-MM-DD)')
+@click.option('--to-date', 'to_date', required=True, help='Конец периода (YYYY-MM-DD)')
+@click.option('--max-workers', type=int, default=4, help='Ограничение параллелизма (в разработке: используется последовательная обработка).')
+def backfill_range(from_date: str, to_date: str, max_workers: int):
+    """Backfill «сырых» статей за диапазон дат (без суммаризации)."""
+    from datetime import datetime, timedelta
+    start = datetime.fromisoformat(from_date).date()
+    end = datetime.fromisoformat(to_date).date()
+    assert start <= end, "from_date должен быть меньше или равен to_date"
+
+    total_added = 0
+    current = start
+    while current <= end:
+        click.echo(f"Сбор статей за {current.isoformat()}...")
+        pairs = asyncio.run(fetch_articles_for_date(current))
+        for title, link in pairs:
+            try:
+                text = get_article_text(link)
+                if not text:
+                    raise ValueError("Контент пустой")
+                upsert_raw_article(link, title, f"{current} 00:00:00", text)
+                total_added += 1
+            except Exception as e:
+                logging.error(f"Backfill: ошибка для {link}: {e}")
+                dlq_record('article', link, error_code=type(e).__name__, error_payload=str(e)[:500])
+        current += timedelta(days=1)
+    click.echo(f"Backfill завершён. Обработано статей: {total_added}")
+
+
+@cli.command('reconcile')
+@click.option('--since-days', type=int, default=7, help='Период к проверке, в днях.')
+def reconcile(since_days: int):
+    """Сверка последних N дней: сайт vs БД. Загружает недостающее."""
+    from datetime import date, timedelta
+    today = date.today()
+    start = today - timedelta(days=since_days)
+    missing_total = 0
+    for d in (start + timedelta(days=i) for i in range((today - start).days + 1)):
+        pairs = asyncio.run(fetch_articles_for_date(d))
+        day_missing = 0
+        for title, link in pairs:
+            try:
+                text = get_article_text(link)
+                if not text:
+                    raise ValueError("Контент пустой")
+                upsert_raw_article(link, title, f"{d} 00:00:00", text)
+                day_missing += 1
+            except Exception as e:
+                logging.error(f"Reconcile: ошибка для {link}: {e}")
+                dlq_record('article', link, error_code=type(e).__name__, error_payload=str(e)[:500])
+        missing_total += day_missing
+        click.echo(f"{d.isoformat()}: дозагружено {day_missing}")
+    click.echo(f"Reconcile завершён. Дозагружено суммарно: {missing_total}")
+
+
+@cli.command('summarize-range')
+@click.option('--from-date', 'from_date', required=True, help='Начало периода (YYYY-MM-DD)')
+@click.option('--to-date', 'to_date', required=True, help='Конец периода (YYYY-MM-DD)')
+def summarize_range(from_date: str, to_date: str):
+    """Создаёт сводки для статей без резюме за указанный период."""
+    start_iso = f"{from_date} 00:00:00"
+    end_iso = f"{to_date} 23:59:59"
+    rows = list_articles_without_summary_in_range(start_iso, end_iso)
+    click.echo(f"Найдено статей без сводки: {len(rows)}")
+    done = 0
+    for row in rows:
+        content = row['content']
+        if not content:
+            logging.warning(f"Нет контента для статьи id={row['id']}, пропуск")
+            continue
+        summary = summarize(content)
+        if not summary:
+            logging.warning(f"Суммаризация не удалась для id={row['id']}")
+            continue
+        set_article_summary(row['id'], summary)
+        done += 1
+    click.echo(f"Суммаризации выполнены: {done}")
 
 
 if __name__ == '__main__':

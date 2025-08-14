@@ -1,5 +1,6 @@
 import asyncio
 import httpx
+from url_utils import canonicalize_url
 from bs4 import BeautifulSoup
 from datetime import datetime, date, timedelta
 import logging
@@ -38,7 +39,7 @@ async def get_articles_from_main_page(client: httpx.AsyncClient, page: int = 1):
             time_element = item.select_one('.topic_info_top')
             
             if title_element and time_element and title_element.has_attr('href'):
-                article_url = urljoin(BASE_URL, title_element['href'])
+                article_url = canonicalize_url(urljoin(BASE_URL, title_element['href']))
                 title = title_element.get_text(strip=True)
                 time_str = time_element.get_text(strip=True)
                 try:
@@ -86,7 +87,7 @@ async def get_articles_from_archive(client: httpx.AsyncClient, target_date_str: 
         for item in news_tables:
             title_element = item.select_one('.topic_caption a')
             if title_element and title_element.has_attr('href'):
-                article_url = urljoin(BASE_URL, title_element['href'])
+                article_url = canonicalize_url(urljoin(BASE_URL, title_element['href']))
                 title = title_element.get_text(strip=True)
                 articles.append({"title": title, "link": article_url})
 

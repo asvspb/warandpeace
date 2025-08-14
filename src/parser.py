@@ -8,6 +8,7 @@ from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 import logging
 from urllib.parse import urljoin
+from url_utils import canonicalize_url
 
 from config import NEWS_URL
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
@@ -83,7 +84,8 @@ def get_articles_from_page(page=1):
             time_element = item.select_one('.topic_info_top')
             
             if title_element and time_element and title_element.has_attr('href'):
-                article_url = urljoin(base_url, title_element['href'])
+                raw_url = urljoin(base_url, title_element['href'])
+                article_url = canonicalize_url(raw_url)
                 
                 # Извлечение и парсинг даты и времени
                 time_str = time_element.get_text(strip=True)
