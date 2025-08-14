@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}War & Peace DB{% endblock %}</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <nav>
+        <a href="/" class="brand"><strong>W&P DB</strong></a>
+        <div>
+            <a href="/articles">Статьи</a>
+            <a href="/duplicates">Дубликаты</a>
+            <a href="/dlq">DLQ</a>
+        </div>
+    </nav>
+    <main class="container">
+        {% block content %}
+        {% endblock %}
+    </main>
+    <footer class="container" style="text-align: center; color: var(--muted); margin-top: 40px;">
+        <p>&copy; 2025. War & Peace News Bot.</p>
+    </footer>
+</body>
+</html>
