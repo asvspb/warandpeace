@@ -16,6 +16,12 @@ python scripts/manage.py ingest-page --page 1 --limit 10
 ```bash
 python scripts/manage.py backfill-range --from-date 2025-08-01 --to-date 2025-08-07
 ```
+— Быстрый рецепт: «с начала года по сегодня» (Docker Compose):
+```bash
+docker-compose run --rm telegram-bot \
+  python3 scripts/manage.py backfill-range \
+  --from-date "$(date +%Y)-01-01" --to-date "$(date +%F)"
+```
 - Ночной reconcile (сверка и дозагрузка за последние N дней):
 ```bash
 python scripts/manage.py reconcile --since-days 7
@@ -84,6 +90,17 @@ python scripts/manage.py summarize-range --from-date 2025-08-13 --to-date 2025-0
 python scripts/manage.py dlq-show --type all --limit 100
 python scripts/manage.py content-hash-report --min-count 2 --details
 python scripts/manage.py near-duplicates --days 14 --limit 300 --threshold 0.75
+```
+
+— Бэкфилл с начала года по сегодняшнюю дату и последующая суммаризация (Docker Compose):
+```bash
+docker-compose run --rm telegram-bot \
+  python3 scripts/manage.py backfill-range \
+  --from-date "$(date +%Y)-01-01" --to-date "$(date +%F)"
+
+docker-compose run --rm telegram-bot \
+  python3 scripts/manage.py summarize-range \
+  --from-date "$(date +%Y)-01-01" --to-date "$(date +%F)"
 ```
 
 #### 8) Ограничения и планы

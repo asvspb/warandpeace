@@ -142,3 +142,10 @@ docker-compose up -d --build
 - Summarise range: `python scripts/manage.py summarize-range --from-date 2025-08-01 --to-date 2025-08-07`
 - DLQ: `dlq-show`, `dlq-retry`
 - Duplicate reports: `content-hash-report`, `near-duplicates`
+
+Tip: backfill «с начала года по сегодня» (Docker Compose):
+```bash
+docker-compose run --rm telegram-bot \
+  python3 scripts/manage.py backfill-range \
+  --from-date "$(date +%Y)-01-01" --to-date "$(date +%F)"
+```

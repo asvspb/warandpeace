@@ -152,3 +152,34 @@ ADMIN_ALERTS_COOLDOWN_SEC=900
 ```
 
 Подробнее см. `doc/LOGGING_AND_ALERTS_RU.md`.
+
+## 7. Наполнение БД с начала года до сегодняшнего дня (Backfill)
+
+Для исторической загрузки «сырых» статей за период с 1 января текущего года по текущую дату используйте встроенную CLI-команду `backfill-range`.
+
+Рекомендуемый запуск через Docker (использует примонтированный каталог `./database`):
+
+```bash
+docker-compose run --rm telegram-bot \
+  python3 scripts/manage.py backfill-range \
+  --from-date "$(date +%Y)-01-01" --to-date "$(date +%F)"
+```
+
+Полезные последующие действия:
+
+- Проверить базовую статистику:
+```bash
+docker-compose run --rm telegram-bot python3 scripts/manage.py status
+```
+
+- Запустить суммаризацию для загруженных статей за тот же период:
+```bash
+docker-compose run --rm telegram-bot \
+  python3 scripts/manage.py summarize-range \
+  --from-date "$(date +%Y)-01-01" --to-date "$(date +%F)"
+```
+
+Заметки:
+- Команда идемпотентна: повторный запуск не создаст дублей (используется `canonical_link`).
+- Операция может занять значительное время; прогресс и ошибки отражаются в логах и DLQ (`dlq-show`).
+- Локальный запуск вне Docker не рекомендуется, т.к. путь БД зашит как `/app/database/articles.db` и предполагает контейнер.
