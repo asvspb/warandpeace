@@ -25,6 +25,10 @@ from src.database import (  # noqa: E402
     set_article_summary,
     dlq_record,
     get_dlq_size,
+    list_dlq_items,
+    delete_dlq_item,
+    get_content_hash_groups,
+    list_articles_by_content_hash,
 )
 from src.parser import get_article_text, get_articles_from_page  # noqa: E402
 from src.async_parser import fetch_articles_for_date  # noqa: E402
@@ -229,6 +233,76 @@ def summarize_range(from_date: str, to_date: str):
         done += 1
     click.echo(f"Суммаризации выполнены: {done}")
 
+
+# --- DLQ: просмотр и повтор ---
+
+@cli.command('dlq-show')
+@click.option('--type', 'entity_type', type=click.Choice(['article', 'summary', 'all']), default='all', help='Фильтр по типу сущности')
+@click.option('--limit', type=int, default=50, help='Максимум записей к показу')
+def dlq_show(entity_type: str, limit: int):
+    """Показывает содержимое DLQ."""
+    et = None if entity_type == 'all' else entity_type
+    items = list_dlq_items(entity_type=et, limit=limit)
+    click.echo(f"DLQ записей: {len(items)} (limit={limit})")
+    for it in items:
+        click.echo(f"- #{it['id']} [{it['entity_type']}] {it['entity_ref']} attempts={it['attempts']} code={it.get('error_code')}")
+
+
+@cli.command('dlq-retry')
+@click.option('--type', 'entity_type', type=click.Choice(['article', 'summary']), default='article', help='Тип сущности для ретрая')
+@click.option('--limit', type=int, default=20, help='Максимум элементов для ретрая за запуск')
+def dlq_retry(entity_type: str, limit: int):
+    """Повторяет обработку элементов из DLQ. Сейчас поддерживаются только статьи."""
+    items = list_dlq_items(entity_type=entity_type, limit=limit)
+    if not items:
+        click.echo("DLQ пуст для заданного фильтра.")
+        return
+    retried = 0
+    succeeded = 0
+    for it in items:
+        retried += 1
+        if it['entity_type'] != 'article':
+            # Для summary пока не реализовано
+            dlq_record(it['entity_type'], it['entity_ref'], error_code='NotImplemented', error_payload='dlq-retry supports only article for now')
+            continue
+        link = it['entity_ref']
+        try:
+            text = get_article_text(link)
+            if not text:
+                raise ValueError('Контент пустой')
+            # В DLQ нет заголовка/даты — в крайнем случае используем сам URL и текущую дату
+            title = canonicalize_url(link)
+            from datetime import datetime
+            published_at = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+            upsert_raw_article(link, title, published_at, text)
+            delete_dlq_item(it['id'])
+            succeeded += 1
+        except Exception as e:
+            logging.error(f"DLQ retry error for {link}: {e}")
+            dlq_record('article', link, error_code=type(e).__name__, error_payload=str(e)[:500])
+    click.echo(f"DLQ retry завершён. Успехов: {succeeded} / попыток: {retried}")
+
+
+# --- Отчёт по дубликатам контента ---
+
+@cli.command('content-hash-report')
+@click.option('--min-count', type=int, default=2, help='Минимальная размерность группы для показа')
+@click.option('--details', is_flag=True, help='Показать статьи в каждой группе')
+def content_hash_report(min_count: int, details: bool):
+    """Показывает группы статей с одинаковым content_hash (возможные дубликаты)."""
+    groups = get_content_hash_groups(min_count=min_count)
+    if not groups:
+        click.echo("Групп дубликатов не найдено.")
+        return
+    click.echo(f"Найдено групп: {len(groups)} (min_count={min_count})")
+    for g in groups:
+        h = g['hash']
+        cnt = g['cnt']
+        click.echo(f"hash={h} cnt={cnt}")
+        if details:
+            rows = list_articles_by_content_hash(h)
+            for r in rows:
+                click.echo(f"  - id={r['id']} [{r['published_at']}] {r['title']} ({r['canonical_link']})")
 
 if __name__ == '__main__':
     cli()

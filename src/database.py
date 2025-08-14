@@ -362,6 +362,84 @@ def get_dlq_size() -> int:
         row = cursor.fetchone()
         return int(row[0]) if row else 0
 
+
+def list_dlq_items(entity_type: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
+    """Возвращает элементы DLQ с необязательной фильтрацией по типу.
+
+    Args:
+        entity_type: 'article' | 'summary' | None
+        limit: максимальное число записей
+
+    Returns:
+        Список словарей с полями dlq.
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        if entity_type:
+            cursor.execute(
+                """
+                SELECT id, entity_type, entity_ref, error_code, error_payload, attempts, first_seen_at, last_seen_at
+                FROM dlq
+                WHERE entity_type = ?
+                ORDER BY last_seen_at DESC
+                LIMIT ?
+                """,
+                (entity_type, limit),
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT id, entity_type, entity_ref, error_code, error_payload, attempts, first_seen_at, last_seen_at
+                FROM dlq
+                ORDER BY last_seen_at DESC
+                LIMIT ?
+                """,
+                (limit,),
+            )
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def delete_dlq_item(item_id: int) -> None:
+    """Удаляет запись из DLQ по id."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM dlq WHERE id = ?", (item_id,))
+        conn.commit()
+
+
+def get_content_hash_groups(min_count: int = 2) -> List[Dict[str, Any]]:
+    """Возвращает группы дубликатов по content_hash с количеством записей."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT content_hash AS hash, COUNT(*) AS cnt
+            FROM articles
+            WHERE content_hash IS NOT NULL AND TRIM(content_hash) <> ''
+            GROUP BY content_hash
+            HAVING COUNT(*) >= ?
+            ORDER BY cnt DESC
+            """,
+            (min_count,),
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def list_articles_by_content_hash(content_hash: str) -> List[Dict[str, Any]]:
+    """Список статей для заданного content_hash (для отчётов по дубликатам)."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, title, canonical_link, published_at
+            FROM articles
+            WHERE content_hash = ?
+            ORDER BY published_at DESC
+            """,
+            (content_hash,),
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
 def get_summaries_for_date_range(start_date: str, end_date: str) -> List[str]:
     """
     Извлекает тексты резюме статей за указанный диапазон дат.
