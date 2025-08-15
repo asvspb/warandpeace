@@ -131,7 +131,7 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
 
         # Получаем имя канала, используя кэш
         now = time.time()
-        if channel_info_cache["username"] and (now - channel_info_cache["timestamp"] < CACHE_TTL_SECONDS):
+        if channel_info_cache["username"] and (now - channel_info_cache["timestamp"] < TELEGRAM_CACHE_TTL_SEC):
             channel_username = channel_info_cache["username"]
             logger.debug(f"Имя канала '{channel_username}' взято из кэша.")
         else:

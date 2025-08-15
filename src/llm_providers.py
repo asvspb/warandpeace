@@ -78,6 +78,7 @@ class GeminiProvider(LLMProvider):
 
         prompt = create_summarization_prompt(text)
         key_statuses = _load_key_status()
+        error_log_entries = []
         
         start_index = self.current_key_index
         for i in range(len(GOOGLE_API_KEYS)):
@@ -99,7 +100,7 @@ class GeminiProvider(LLMProvider):
                     generation_config={"max_output_tokens": LLM_MAX_TOKENS}
                 )
                 
-                logger.info(f"Запрос к Gemini API с ключом #{idx + 1}...")
+                logger.debug(f"Запрос к Gemini API с ключом #{idx + 1}...")
                 response = model.generate_content(
                     prompt,
                     request_options={'timeout': LLM_TIMEOUT_SEC}
@@ -110,32 +111,39 @@ class GeminiProvider(LLMProvider):
                     LLM_REQUESTS_TOTAL.labels(provider="gemini", status="success", reason="ok").inc()
                     return response.text.strip()
                 else:
-                    logger.warning(f"Gemini API вернул пустой ответ (safety block).")
+                    error_log_entries.append(f"Ключ #{idx + 1}: Пустой ответ (safety block)")
                     LLM_REQUESTS_TOTAL.labels(provider="gemini", status="failure", reason="blocked").inc()
                     continue
 
-            except ResourceExhausted:
-                logger.warning(f"Ключ Gemini #{idx + 1} исчерпал квоту. Отключаю на 5 минут.")
+            except ResourceExhausted as e:
+                retry_delay_seconds = getattr(e, 'retry_delay', 300)
+                cooldown_until = datetime.now() + timedelta(seconds=retry_delay_seconds)
+                error_log_entries.append(f"Ключ #{idx + 1}: Квота исчерпана (отключен до {cooldown_until.isoformat()})")
                 LLM_REQUESTS_TOTAL.labels(provider="gemini", status="failure", reason="quota_exceeded").inc()
-                key_statuses[key_hash] = {"reason": "quota_exceeded", "cooldown_until": (datetime.now() + timedelta(minutes=5)).isoformat()}
+                key_statuses[key_hash] = {"reason": "quota_exceeded", "cooldown_until": cooldown_until.isoformat()}
                 _save_key_status(key_statuses)
                 continue
             except Exception as e:
                 message = str(e).lower()
                 if 'location is not supported' in message:
-                    logger.warning(f"Ключ Gemini #{idx + 1} не поддерживается в регионе. Отключаю на 24 часа.")
+                    error_log_entries.append(f"Ключ #{idx + 1}: Регион не поддерживается")
                     LLM_REQUESTS_TOTAL.labels(provider="gemini", status="failure", reason="geo_unsupported").inc()
                     key_statuses[key_hash] = {"reason": "geo_unsupported", "timestamp": datetime.now().isoformat()}
                     _save_key_status(key_statuses)
                 else:
-                    logger.error(f"Неизвестная ошибка с ключом Gemini #{idx + 1}: {e}")
+                    error_log_entries.append(f"Ключ #{idx + 1}: Неизвестная ошибка ({e})")
+                    logger.error(f"Неизвестная ошибка с ключом Gemini #{idx + 1}: {e}", exc_info=True)
                     LLM_REQUESTS_TOTAL.labels(provider="gemini", status="failure", reason="unknown").inc()
                 continue
             finally:
                 duration = time.time() - start_time
                 LLM_LATENCY_SECONDS.labels(provider="gemini", model=GEMINI_MODEL_NAME).observe(duration)
         
-        logger.error("Не удалось получить ответ от Gemini после перебора всех ключей.")
+        if error_log_entries:
+            logger.warning(f"Не удалось получить ответ от Gemini. Ошибки по ключам: {'; '.join(error_log_entries)}")
+        else:
+            logger.error("Не удалось получить ответ от Gemini после перебора всех ключей по неизвестной причине.")
+            
         return None
 
 class MistralProvider(LLMProvider):

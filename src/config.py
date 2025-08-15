@@ -44,7 +44,14 @@ MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 # --- Настройки парсера ---
 NEWS_URL = "https://www.warandpeace.ru/ru/news/"
 
-# --- Настройки AI моделей ---
+# --- Настройки сети Telegram (опционально) ---
+TG_READ_TIMEOUT = float(os.getenv("TG_READ_TIMEOUT", "30"))
+TG_WRITE_TIMEOUT = float(os.getenv("TG_WRITE_TIMEOUT", "30"))
+TG_CONNECT_TIMEOUT = float(os.getenv("TG_CONNECT_TIMEOUT", "10"))
+TG_POOL_TIMEOUT = float(os.getenv("TG_POOL_TIMEOUT", "5"))
+TELEGRAM_CACHE_TTL_SEC = int(os.getenv("TELEGRAM_CACHE_TTL_SEC", "3600"))
+
+# --- AI Models ---
 GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 MISTRAL_MODEL_NAME = os.getenv("MISTRAL_MODEL_NAME", "mistral-large-latest")
 LLM_TIMEOUT_SEC = int(os.getenv("LLM_TIMEOUT_SEC", "30"))
