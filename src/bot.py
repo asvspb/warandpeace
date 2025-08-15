@@ -80,7 +80,7 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
 
         # 3. Логируем информацию о найденных статьях
         log_post_examples = int(os.getenv("LOG_POST_EXAMPLES", 3))
-        examples = [f'"{a["title"]}" ({a["link"]})' for a in new_articles[:log_post_examples]]
+        examples = [f'\"{a["title"]}\" ({a["link"]})' for a in new_articles[:log_post_examples]]
         hidden_count = len(new_articles) - len(examples)
         examples_str = ", ".join(examples)
         if hidden_count > 0:
