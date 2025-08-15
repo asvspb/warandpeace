@@ -27,13 +27,13 @@ def mock_gemini():
 @pytest.fixture
 def mock_mistral():
     """Мокает ответ от Mistral API."""
-    with patch('mistralai.client.MistralClient') as mock_client:
+    with patch('mistralai.client.MistralClient.chat') as mock_chat:
         mock_choice = MagicMock()
         mock_choice.message.content = "Резюме от Mistral"
         mock_response = MagicMock()
         mock_response.choices = [mock_choice]
-        mock_client.return_value.chat.return_value = mock_response
-        yield mock_client
+        mock_chat.return_value = mock_response
+        yield mock_chat
 
 # --- Тесты GeminiProvider ---
 
@@ -51,7 +51,7 @@ def test_mistral_provider_success(mock_mistral):
     provider = MistralProvider()
     summary = provider.summarize("Тестовый текст")
     assert summary == "Резюме от Mistral"
-    mock_mistral.return_value.chat.assert_called_once()
+    mock_mistral.assert_called_once()
 
 # --- Тесты summarize_with_fallback (оркестратор) ---
 
@@ -64,7 +64,7 @@ def test_fallback_gemini_to_mistral(mock_gemini, mock_mistral):
     
     assert summary == "Резюме от Mistral"
     assert mock_gemini.return_value.generate_content.call_count > 0
-    mock_mistral.return_value.chat.assert_called_once()
+    mock_mistral.assert_called_once()
 
 def test_fallback_primary_mistral(mock_gemini, mock_mistral):
     """Тест, когда Mistral является первичным провайдером."""
@@ -72,7 +72,7 @@ def test_fallback_primary_mistral(mock_gemini, mock_mistral):
     summary = summarize_with_fallback("Тестовый текст")
     
     assert summary == "Резюме от Mistral"
-    mock_mistral.return_value.chat.assert_called_once()
+    mock_mistral.assert_called_once()
     mock_gemini.return_value.generate_content.assert_not_called()
 
 def test_fallback_both_disabled():

@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 try:
-    from prometheus_client import Counter, Gauge, Histogram, start_http_server  # type: ignore
+    from prometheus_client import Counter, Gauge, Histogram, start_http_server, REGISTRY
 except Exception:  # pragma: no cover - graceful fallback for test env
     class _NoopMetric:
         def __init__(self, *args, **kwargs):
@@ -22,50 +22,73 @@ except Exception:  # pragma: no cover - graceful fallback for test env
     Counter = _NoopMetric  # type: ignore
     Gauge = _NoopMetric  # type: ignore
     Histogram = _NoopMetric  # type: ignore
+    REGISTRY = None # type: ignore
 
     def start_http_server(*args, **kwargs):  # type: ignore
         return None
 
+# --- Idempotent Metric Registration ---
+def _get_or_create_metric(metric_class, name, documentation, labelnames=()):
+    """
+    Gets an existing metric from the registry or creates a new one.
+    This prevents 'Duplicated timeseries' errors during test collection.
+    """
+    if REGISTRY and name in REGISTRY._names_to_collectors:
+        return REGISTRY._names_to_collectors[name]
+    
+    # If labelnames is an empty tuple, don't pass it to the constructor
+    if labelnames:
+        return metric_class(name, documentation, labelnames)
+    else:
+        return metric_class(name, documentation)
 
-# Metrics definitions
-ARTICLES_INGESTED = Counter(
+# --- Metrics definitions ---
+ARTICLES_INGESTED = _get_or_create_metric(
+    Counter,
     "articles_ingested_total", "Total number of raw articles ingested"
 )
-ARTICLES_POSTED = Counter(
+ARTICLES_POSTED = _get_or_create_metric(
+    Counter,
     "articles_posted_total", "Total number of articles posted to Telegram"
 )
-ERRORS_TOTAL = Counter(
+ERRORS_TOTAL = _get_or_create_metric(
+    Counter,
     "errors_total", "Total number of errors by type", labelnames=("type",)
 )
-JOB_DURATION = Histogram(
+JOB_DURATION = _get_or_create_metric(
+    Histogram,
     "job_duration_seconds", "Duration of the scheduled job check_and_post_news"
 )
-LAST_ARTICLE_AGE_MIN = Gauge(
+LAST_ARTICLE_AGE_MIN = _get_or_create_metric(
+    Gauge,
     "last_article_age_minutes", "Age (in minutes) of the last article in DB"
 )
-DLQ_SIZE = Gauge("dlq_size", "Number of items in the DLQ")
+DLQ_SIZE = _get_or_create_metric(Gauge, "dlq_size", "Number of items in the DLQ")
 
 # --- LLM Metrics ---
-LLM_REQUESTS_TOTAL = Counter(
+LLM_REQUESTS_TOTAL = _get_or_create_metric(
+    Counter,
     "llm_requests_total",
     "Total number of requests to LLM providers",
-    labelnames=("provider", "status", "reason"), # status: success, failure. reason: e.g., quota_exceeded, geo_unsupported
+    labelnames=("provider", "status", "reason"),
 )
-LLM_FALLBACKS_TOTAL = Counter(
+LLM_FALLBACKS_TOTAL = _get_or_create_metric(
+    Counter,
     "llm_fallbacks_total",
     "Total number of fallbacks from one LLM provider to another",
     labelnames=("from_provider", "to_provider", "reason"),
 )
-LLM_LATENCY_SECONDS = Histogram(
+LLM_LATENCY_SECONDS = _get_or_create_metric(
+    Histogram,
     "llm_latency_seconds",
     "Latency of LLM provider requests",
     labelnames=("provider", "model"),
 )
-TELEGRAM_SEND_SECONDS = Histogram(
+TELEGRAM_SEND_SECONDS = _get_or_create_metric(
+    Histogram,
     "telegram_send_seconds",
     "Latency of sending messages to Telegram",
 )
-
 
 def start_metrics_server() -> None:
     """Starts Prometheus metrics HTTP server if enabled by env."""
@@ -74,7 +97,6 @@ def start_metrics_server() -> None:
         return
     port = int(os.getenv("METRICS_PORT", "8000"))
     start_http_server(port)
-
 
 def update_last_article_age(published_at_iso: Optional[str]) -> None:
     """Update LAST_ARTICLE_AGE_MIN gauge from ISO datetime string.
