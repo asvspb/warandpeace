@@ -34,6 +34,7 @@ log_level = getattr(logging, log_level_name, logging.INFO)
 logging.basicConfig(
     level=log_level,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    datefmt="%d/%m-%y - [%H:%M]",
 )
 
 verbose_lib_logs = os.getenv("ENABLE_VERBOSE_LIB_LOGS", "false").lower() in {"1", "true", "yes"}
@@ -319,7 +320,7 @@ async def daily_digest_command(update: Update, context: ContextTypes.DEFAULT_TYP
     await context.bot.send_message(chat_id=user_id, text="Начинаю подготовку дайджеста за вчерашний день...")
 
     try:
-        today = datetime.now()
+        today = datetime.now(MOSCOW_TZ)
         yesterday = today - timedelta(days=1)
         start_date = yesterday.replace(hour=0, minute=0, second=0, microsecond=0)
         end_date = yesterday.replace(hour=23, minute=59, second=59, microsecond=999999)
@@ -358,7 +359,7 @@ async def weekly_digest_command(update: Update, context: ContextTypes.DEFAULT_TY
     await context.bot.send_message(chat_id=user_id, text="Начинаю подготовку дайджеста за прошлую неделю...")
 
     try:
-        today = datetime.now()
+        today = datetime.now(MOSCOW_TZ)
         last_sunday = today - timedelta(days=today.isoweekday())
         end_of_last_week = last_sunday.replace(hour=23, minute=59, second=59, microsecond=999999)
         start_of_last_week = (end_of_last_week - timedelta(days=6)).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -397,7 +398,7 @@ async def monthly_digest_command(update: Update, context: ContextTypes.DEFAULT_T
     await context.bot.send_message(chat_id=user_id, text="Начинаю подготовку дайджеста за прошлый месяц...")
 
     try:
-        today = datetime.now()
+        today = datetime.now(MOSCOW_TZ)
         first_day_of_current_month = today.replace(day=1)
         last_day_of_last_month = first_day_of_current_month - timedelta(days=1)
         first_day_of_last_month = last_day_of_last_month.replace(day=1)
@@ -449,7 +450,7 @@ async def annual_digest_command(update: Update, context: ContextTypes.DEFAULT_TY
             await context.bot.send_message(chat_id=user_id, text="Не удалось создать годовую сводку.")
             return
 
-        year = datetime.now().year - 1
+        year = datetime.now(MOSCOW_TZ).year - 1
         await asyncio.to_thread(add_digest, f"annual_{year}", digest_content)
         await context.bot.send_message(
             chat_id=user_id,

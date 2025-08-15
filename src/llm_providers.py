@@ -70,7 +70,11 @@ class GeminiProvider(LLMProvider):
 
     @property
     def is_enabled(self) -> bool:
-        return os.getenv("GEMINI_ENABLED", "true").lower() in {"1", "true", "yes"} and bool(GOOGLE_API_KEYS)
+        # Читаем актуальные ENV на момент вызова, чтобы поддерживать тесты и рантайм-переключения
+        enabled = os.getenv("GEMINI_ENABLED", "true").lower() in {"1", "true", "yes"}
+        keys_env = os.getenv("GOOGLE_API_KEYS")
+        keys_list = [k.strip() for k in keys_env.split(",") if k.strip()] if keys_env else GOOGLE_API_KEYS
+        return enabled and bool(keys_list)
 
     def summarize(self, text: str) -> Optional[str]:
         if not self.is_enabled:
@@ -81,9 +85,15 @@ class GeminiProvider(LLMProvider):
         error_log_entries = []
         
         start_index = self.current_key_index
-        for i in range(len(GOOGLE_API_KEYS)):
-            idx = (start_index + i) % len(GOOGLE_API_KEYS)
-            api_key = GOOGLE_API_KEYS[idx]
+        keys_env = os.getenv("GOOGLE_API_KEYS")
+        keys_list = [k.strip() for k in keys_env.split(",") if k.strip()] if keys_env else GOOGLE_API_KEYS
+        if not keys_list:
+            logger.warning("Список ключей Google API пуст.")
+            return None
+
+        for i in range(len(keys_list)):
+            idx = (start_index + i) % len(keys_list)
+            api_key = keys_list[idx]
             key_hash = hashlib.sha256(api_key.encode()).hexdigest()
 
             if _is_key_disabled(key_hash, key_statuses):
@@ -149,7 +159,10 @@ class GeminiProvider(LLMProvider):
 class MistralProvider(LLMProvider):
     @property
     def is_enabled(self) -> bool:
-        return os.getenv("MISTRAL_ENABLED", "true").lower() in {"1", "true", "yes"} and bool(MISTRAL_API_KEY)
+        # Читаем актуальные ENV на момент вызова, чтобы поддерживать тесты и рантайм-переключения
+        enabled = os.getenv("MISTRAL_ENABLED", "true").lower() in {"1", "true", "yes"}
+        api_key = os.getenv("MISTRAL_API_KEY", MISTRAL_API_KEY)
+        return enabled and bool(api_key)
 
     def summarize(self, text: str) -> Optional[str]:
         if not self.is_enabled:
@@ -158,7 +171,8 @@ class MistralProvider(LLMProvider):
         prompt = create_summarization_prompt(text)
         start_time = time.time()
         try:
-            client = MistralClient(api_key=MISTRAL_API_KEY, timeout=LLM_TIMEOUT_SEC)
+            api_key = os.getenv("MISTRAL_API_KEY", MISTRAL_API_KEY)
+            client = MistralClient(api_key=api_key, timeout=LLM_TIMEOUT_SEC)
             messages = [{"role": "user", "content": prompt}]
             
             logger.info("Запрос к Mistral API...")

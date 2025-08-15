@@ -10,6 +10,7 @@ services:
     environment:
       - METRICS_ENABLED=${METRICS_ENABLED:-true}
       - METRICS_PORT=${METRICS_PORT:-8000}
+      - TZ=Europe/Moscow
     volumes:
       - ./database:/app/database
     ports:

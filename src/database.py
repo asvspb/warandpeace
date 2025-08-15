@@ -6,9 +6,11 @@ import os
 import shutil
 from datetime import datetime
 from typing import Optional, Dict, Any, List
+import pytz
 
 DATABASE_NAME = "/app/database/articles.db"
 logger = logging.getLogger(__name__)
+MOSCOW_TZ = pytz.timezone('Europe/Moscow')
 
 @contextmanager
 def get_db_connection():
@@ -345,7 +347,7 @@ def backup_database_copy() -> Optional[str]:
     try:
         if not os.path.exists(DATABASE_NAME):
             return None
-        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        timestamp = datetime.now(MOSCOW_TZ).strftime("%Y%m%d%H%M%S")
         backup_path = f"{DATABASE_NAME}.bak-{timestamp}"
         os.makedirs(os.path.dirname(backup_path) or ".", exist_ok=True)
         shutil.copy2(DATABASE_NAME, backup_path)

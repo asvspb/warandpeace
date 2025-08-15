@@ -14,7 +14,11 @@ from config import NEWS_URL
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 # Настройка логирования
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%d/%m-%y - [%H:%M]'
+)
 logger = logging.getLogger(__name__)
 
 ARCHIVE_SEARCH_BASE_URL = "https://www.warandpeace.ru/ru/archive/search/_/"

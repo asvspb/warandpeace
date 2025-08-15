@@ -1,7 +1,7 @@
 python-telegram-bot[job-queue]
 requests
 beautifulsoup4
-
+pytz
 python-dotenv
 google-generativeai
 tenacity>=8.0.0
