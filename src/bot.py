@@ -10,7 +10,7 @@ from telegram.constants import ParseMode
 from telegram.error import NetworkError, TimedOut, RetryAfter, BadRequest, TelegramError
 from telegram.ext import Application, CommandHandler, ContextTypes, filters
 from telegram.request import HTTPXRequest
-from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type, retry_if_not_exception_type
+from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
 
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID, TELEGRAM_ADMIN_ID, NEWS_URL
 from metrics import start_metrics_server, JOB_DURATION, ARTICLES_POSTED, ERRORS_TOTAL, update_last_article_age, TELEGRAM_SEND_SECONDS
@@ -53,23 +53,27 @@ logger = logging.getLogger(__name__)
 
 
 # --- Кэш для данных о канале ---
+TELEGRAM_CACHE_TTL_SEC = int(os.getenv("TELEGRAM_CACHE_TTL_SEC", "3600"))  # 1 час по умолчанию
 channel_info_cache = {
     "username": None,
-    "timestamp": None,
+    "timestamp": 0.0,
 }
-CACHE_TTL_SECONDS = 3600  # 1 час
 
 
 # --- Устойчивые вызовы к Telegram API с помощью Tenacity ---
+
+def _should_retry(exc: BaseException) -> bool:
+    # Повторяем только при сетевых таймаутах/ошибках
+    return isinstance(exc, (TimedOut, NetworkError))
 
 telegram_api_retry = retry(
     wait=wait_exponential(multiplier=1, min=2, max=10),
     stop=stop_after_attempt(3),
     retry=retry_if_exception_type((TimedOut, NetworkError)),
-    retry_error_callback=lambda retry_state: logger.warning(f"Попытка вызова Telegram API #{retry_state.attempt_number} не удалась."),
-    # Не повторяем при ошибках BadRequest, т.к. они указывают на проблему в запросе
-    retry_if_not_exception_type=BadRequest,
-    reraise=True, # Перевыбрасываем исключение после последней попытки
+    retry_error_callback=lambda retry_state: logger.warning(
+        f"Попытка вызова Telegram API #{retry_state.attempt_number} не удалась."
+    ),
+    reraise=True,
 )
 
 @telegram_api_retry
@@ -118,7 +122,7 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
 
         # 3. Логируем информацию о найденных статьях
         log_post_examples = int(os.getenv("LOG_POST_EXAMPLES", 3))
-        examples = [f'\"{a[\"title\"]}\" ({a[\"link\"]})' for a in new_articles[:log_post_examples]]
+        examples = [f'"{a["title"]}" ({a["link"]})' for a in new_articles[:log_post_examples]]
         hidden_count = len(new_articles) - len(examples)
         examples_str = ", ".join(examples)
         if hidden_count > 0:
