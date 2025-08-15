@@ -45,6 +45,27 @@ LAST_ARTICLE_AGE_MIN = Gauge(
 )
 DLQ_SIZE = Gauge("dlq_size", "Number of items in the DLQ")
 
+# --- LLM Metrics ---
+LLM_REQUESTS_TOTAL = Counter(
+    "llm_requests_total",
+    "Total number of requests to LLM providers",
+    labelnames=("provider", "status", "reason"), # status: success, failure. reason: e.g., quota_exceeded, geo_unsupported
+)
+LLM_FALLBACKS_TOTAL = Counter(
+    "llm_fallbacks_total",
+    "Total number of fallbacks from one LLM provider to another",
+    labelnames=("from_provider", "to_provider", "reason"),
+)
+LLM_LATENCY_SECONDS = Histogram(
+    "llm_latency_seconds",
+    "Latency of LLM provider requests",
+    labelnames=("provider", "model"),
+)
+TELEGRAM_SEND_SECONDS = Histogram(
+    "telegram_send_seconds",
+    "Latency of sending messages to Telegram",
+)
+
 
 def start_metrics_server() -> None:
     """Starts Prometheus metrics HTTP server if enabled by env."""

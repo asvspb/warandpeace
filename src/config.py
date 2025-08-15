@@ -45,8 +45,10 @@ MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 NEWS_URL = "https://www.warandpeace.ru/ru/news/"
 
 # --- Настройки AI моделей ---
-GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "models/gemini-1.5-flash-latest")
+GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 MISTRAL_MODEL_NAME = os.getenv("MISTRAL_MODEL_NAME", "mistral-large-latest")
+LLM_TIMEOUT_SEC = int(os.getenv("LLM_TIMEOUT_SEC", "30"))
+LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "512"))
 
 # --- Проверка ключевых переменных (мягкая) ---
 # Не прерываем импорт модулей при отсутствии переменных — это важно для тестов и

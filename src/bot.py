@@ -10,9 +10,10 @@ from telegram.constants import ParseMode
 from telegram.error import NetworkError, TimedOut, RetryAfter, BadRequest, TelegramError
 from telegram.ext import Application, CommandHandler, ContextTypes, filters
 from telegram.request import HTTPXRequest
+from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type, retry_if_not_exception_type
 
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID, TELEGRAM_ADMIN_ID, NEWS_URL
-from metrics import start_metrics_server, JOB_DURATION, ARTICLES_POSTED, ERRORS_TOTAL, update_last_article_age
+from metrics import start_metrics_server, JOB_DURATION, ARTICLES_POSTED, ERRORS_TOTAL, update_last_article_age, TELEGRAM_SEND_SECONDS
 from database import (
     init_db,
     add_article,
@@ -23,7 +24,7 @@ from database import (
     get_stats,
 )
 from parser import get_articles_from_page, get_article_text
-from summarizer import summarize_text_local, create_digest, create_annual_digest, summarize_with_mistral
+from summarizer import summarize_with_fallback, create_digest, create_annual_digest
 from notifications import notify_admin
 
 # Настройка логирования (тихий режим для сторонних библиотек и управляемый уровень для приложения)
@@ -49,6 +50,43 @@ if not verbose_lib_logs:
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
+
+
+# --- Кэш для данных о канале ---
+channel_info_cache = {
+    "username": None,
+    "timestamp": None,
+}
+CACHE_TTL_SECONDS = 3600  # 1 час
+
+
+# --- Устойчивые вызовы к Telegram API с помощью Tenacity ---
+
+telegram_api_retry = retry(
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    stop=stop_after_attempt(3),
+    retry=retry_if_exception_type((TimedOut, NetworkError)),
+    retry_error_callback=lambda retry_state: logger.warning(f"Попытка вызова Telegram API #{retry_state.attempt_number} не удалась."),
+    # Не повторяем при ошибках BadRequest, т.к. они указывают на проблему в запросе
+    retry_if_not_exception_type=BadRequest,
+    reraise=True, # Перевыбрасываем исключение после последней попытки
+)
+
+@telegram_api_retry
+async def get_chat_with_retry(bot, chat_id: str):
+    """Получает информацию о чате с повторными попытками."""
+    return await bot.get_chat(chat_id=chat_id)
+
+@telegram_api_retry
+async def send_message_with_retry(bot, *args, **kwargs):
+    """Отправляет сообщение с повторными попытками и измерением времени."""
+    start_time = time.time()
+    try:
+        return await bot.send_message(*args, **kwargs)
+    finally:
+        duration = time.time() - start_time
+        TELEGRAM_SEND_SECONDS.observe(duration)
+
 
 # --- Основная задача ---
 
@@ -80,7 +118,7 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
 
         # 3. Логируем информацию о найденных статьях
         log_post_examples = int(os.getenv("LOG_POST_EXAMPLES", 3))
-        examples = [f'\"{a["title"]}\" ({a["link"]})' for a in new_articles[:log_post_examples]]
+        examples = [f'\"{a[\"title\"]}\" ({a[\"link\"]})' for a in new_articles[:log_post_examples]]
         hidden_count = len(new_articles) - len(examples)
         examples_str = ", ".join(examples)
         if hidden_count > 0:
@@ -91,12 +129,22 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
         posted_count = 0
         max_posts_per_run = int(os.getenv("MAX_POSTS_PER_RUN", 3))
 
-        try:
-            chat = await context.bot.get_chat(chat_id=TELEGRAM_CHANNEL_ID)
-            channel_username = f"@{chat.username}"
-        except Exception as e:
-            logger.error(f"Не удалось получить информацию о канале: {e}", exc_info=True)
-            channel_username = f"@{TELEGRAM_CHANNEL_ID}"  # Fallback
+        # Получаем имя канала, используя кэш
+        now = time.time()
+        if channel_info_cache["username"] and (now - channel_info_cache["timestamp"] < CACHE_TTL_SECONDS):
+            channel_username = channel_info_cache["username"]
+            logger.debug(f"Имя канала '{channel_username}' взято из кэша.")
+        else:
+            try:
+                logger.info("Кэш имени канала пуст или устарел, запрашиваю информацию о канале...")
+                chat = await get_chat_with_retry(context.bot, chat_id=TELEGRAM_CHANNEL_ID)
+                channel_username = f"@{chat.username}"
+                channel_info_cache["username"] = channel_username
+                channel_info_cache["timestamp"] = now
+                logger.info(f"Информация о канале обновлена: '{channel_username}'.")
+            except Exception as e:
+                logger.error(f"Не удалось получить информацию о канале после нескольких попыток: {e}", exc_info=True)
+                channel_username = f"@{TELEGRAM_CHANNEL_ID}"  # Fallback
 
         for article_data in new_articles:
             if posted_count >= max_posts_per_run:
@@ -110,18 +158,15 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
                     logger.error(f"Не удалось получить текст статьи: {article_data['link']}")
                     continue
 
-                summary = await asyncio.to_thread(summarize_text_local, full_text)
-                if not summary:
-                    logger.warning(f"Резюме от Gemini не получено, пробую Mistral: {article_data['link']}")
-                    summary = await asyncio.to_thread(summarize_with_mistral, full_text)
+                summary = await asyncio.to_thread(summarize_with_fallback, full_text)
 
                 if not summary:
                     logger.error(f"Не удалось сгенерировать резюме: {article_data['link']}")
                     continue
 
                 message = f"<b>{article_data['title']}</b>\n\n{summary} {channel_username}"
-                await context.bot.send_message(
-                    chat_id=TELEGRAM_CHANNEL_ID, text=message, parse_mode=ParseMode.HTML
+                await send_message_with_retry(
+                    context.bot, chat_id=TELEGRAM_CHANNEL_ID, text=message, parse_mode=ParseMode.HTML
                 )
                 logger.info(f"Статья '{article_data['title']}' успешно опубликована.")
                 ARTICLES_POSTED.inc()
@@ -438,8 +483,12 @@ def main():
     # Глобальный обработчик ошибок PTB
     async def on_error(update: Update, context: ContextTypes.DEFAULT_TYPE):
         err = context.error
-        if err is not None:
-            # Логируем стек конкретного исключения, не "NoneType: None"
+        
+        # Ожидаемые сетевые ошибки логируем как WARNING, чтобы не засорять лог
+        if isinstance(err, (TimedOut, NetworkError)):
+            logger.warning(f"Перехвачена ожидаемая сетевая ошибка: {err}", exc_info=True)
+        elif err is not None:
+            # Все остальные ошибки — как ERROR
             logger.error(
                 "Global handler caught an exception",
                 exc_info=(type(err), err, getattr(err, "__traceback__", None)),
