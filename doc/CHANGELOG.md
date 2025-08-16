@@ -14,16 +14,17 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
-- Circuit Breaker для Telegram API с простыми и понятными сообщениями в логах.
-- Ретраи на сетевые/временные ошибки (`NetworkError`, `TimedOut`, `RetryAfter`) c экспоненциальной задержкой (tenacity).
-- Очередь отложенных публикаций (`pending_publications`) и фоновая задача флашера.
-- Явная инициализация JobQueue для фоновых задач.
+- Web-based database browser (FastAPI + Jinja2): list/detail pages, duplicates, DLQ; Basic Auth and metrics.
+- Gemini CLI for console orchestration: `scripts/gemini_cli.py` (prompt, summarize-file, models:list, keys:check, keys:rotate) plus ops runbook.
+- Metrics endpoint and reinforced DB migrations with standard Prometheus metrics.
+- `--archive-only` flag to speed up historical ingestion/backup flows.
 
 ### Changed
-- Улучшены сообщения логов предохранителя (понятный язык).
-- Обновлена документация (`DEPLOYMENT.md`) по новым env-параметрам и надёжности сети.
-- Обновлена зависимость: `python-telegram-bot[job-queue]==21.4`.
+- Unified log format across the application for better readability and analysis.
+- Migrated to timezone‑aware datetimes: UTC storage, MSK presentation; `TZ` configured in containers.
+- Docs updated: `GEMINI.md` refined, AI playbooks added (execution and review/planning).
+- Dependencies updated: `click` (CLI), `mistralai` (summarization fallback).
 
 ### Fixed
-- Ряд потенциальных ошибок при недоступности Telegram: корректная буферизация, повторная доставка, отсутствие бесконечных ретраев.
+- Reliable summary generation for scheduled publications (improved resilience and retries).
 
