@@ -2,7 +2,7 @@ import asyncio
 import logging
 import os
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import requests
 
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
@@ -12,7 +12,14 @@ from telegram.error import NetworkError, TimedOut, RetryAfter, BadRequest, Teleg
 from telegram.ext import Application, CommandHandler, ContextTypes, filters, JobQueue
 from telegram.request import HTTPXRequest
 
-from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID, TELEGRAM_ADMIN_ID, NEWS_URL
+from config import (
+    TELEGRAM_BOT_TOKEN,
+    TELEGRAM_CHANNEL_ID,
+    TELEGRAM_ADMIN_ID,
+    NEWS_URL,
+    APP_TZ,
+)
+from time_utils import now_msk, to_utc, utc_to_local
 from metrics import start_metrics_server, JOB_DURATION, ARTICLES_POSTED, ERRORS_TOTAL, update_last_article_age
 from database import (
     init_db,
@@ -189,6 +196,9 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
                 break
 
             logger.debug(f"Обработка статьи: {article_data['title']}")
+            
+            published_at_utc_iso = to_utc(article_data["published_at"], APP_TZ).isoformat()
+
             try:
                 full_text = None
                 summary = None
@@ -217,7 +227,7 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
                     add_article,
                     article_data["link"],
                     article_data["title"],
-                    article_data["published_at"],
+                    published_at_utc_iso,
                     summary,
                 )
                 posted_count += 1
@@ -231,8 +241,8 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
                     enqueue_publication,
                     url=article_data["link"],
                     title=article_data["title"],
-                    published_at=article_data["published_at"],
-                    summary_text=(summary if summary else ""),
+                    published_at=published_at_utc_iso,
+                    summary_text=(summary if summary else "")
                 )
             except Exception as e:
                 error_message = f"Ошибка при обработке статьи {article_data['link']}: {e}"
@@ -242,8 +252,8 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
                     enqueue_publication,
                     url=article_data["link"],
                     title=article_data["title"],
-                    published_at=article_data["published_at"],
-                    summary_text=(summary if summary else ""),
+                    published_at=published_at_utc_iso,
+                    summary_text=(summary if summary else "")
                 )
                 await notify_admin(
                     context.bot,
@@ -274,7 +284,6 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
             f"⛔ Критическая ошибка задачи: {type(e).__name__}: {str(e)[:200]}",
             throttle_key="error:check_and_post_news",
         )
-
 
 
 # --- Команды бота ---
@@ -347,6 +356,7 @@ async def flush_pending_publications(context: ContextTypes.DEFAULT_TYPE):
             )
             
             # Если успешно, добавляем в основную таблицу и удаляем из очереди
+            # published_at уже в UTC из очереди
             await asyncio.to_thread(
                 add_article,
                 article["url"],
@@ -434,10 +444,10 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     last_posted = stats.get('last_posted_article', {})
     if last_posted and last_posted.get('title') != 'Нет':
         try:
-            # Преобразование строки ISO в объект datetime
-            dt_obj = datetime.fromisoformat(last_posted['published_at'])
-            # Форматирование для вывода
-            date_str = dt_obj.strftime('%d %B %Y в %H:%M')
+            # Строка из БД — в UTC. Конвертируем в aware datetime UTC, затем в MSK.
+            utc_dt = datetime.fromisoformat(last_posted['published_at'].replace("Z", "+00:00"))
+            local_dt = utc_to_local(utc_dt, APP_TZ)
+            date_str = local_dt.strftime('%d %B %Y в %H:%M')
         except (ValueError, TypeError):
             date_str = last_posted['published_at'] # Fallback
         
@@ -477,15 +487,18 @@ async def daily_digest_command(update: Update, context: ContextTypes.DEFAULT_TYP
     await send_message_with_retry(bot=context.bot, chat_id=user_id, text="Начинаю подготовку дайджеста за вчерашний день...")
 
     try:
-        today = datetime.now()
-        yesterday = today - timedelta(days=1)
+        now = now_msk(APP_TZ)
+        yesterday = now - timedelta(days=1)
         start_date = yesterday.replace(hour=0, minute=0, second=0, microsecond=0)
         end_date = yesterday.replace(hour=23, minute=59, second=59, microsecond=999999)
 
+        start_utc_iso = to_utc(start_date, APP_TZ).isoformat()
+        end_utc_iso = to_utc(end_date, APP_TZ).isoformat()
+
         summaries = await asyncio.to_thread(
             get_summaries_for_date_range,
-            start_date.isoformat(),
-            end_date.isoformat()
+            start_utc_iso,
+            end_utc_iso
         )
 
         if not summaries:
@@ -517,15 +530,18 @@ async def weekly_digest_command(update: Update, context: ContextTypes.DEFAULT_TY
     await send_message_with_retry(bot=context.bot, chat_id=user_id, text="Начинаю подготовку дайджеста за прошлую неделю...")
 
     try:
-        today = datetime.now()
-        last_sunday = today - timedelta(days=today.isoweekday())
+        now = now_msk(APP_TZ)
+        last_sunday = now - timedelta(days=now.isoweekday())
         end_of_last_week = last_sunday.replace(hour=23, minute=59, second=59, microsecond=999999)
         start_of_last_week = (end_of_last_week - timedelta(days=6)).replace(hour=0, minute=0, second=0, microsecond=0)
 
+        start_utc_iso = to_utc(start_of_last_week, APP_TZ).isoformat()
+        end_utc_iso = to_utc(end_of_last_week, APP_TZ).isoformat()
+
         summaries = await asyncio.to_thread(
             get_summaries_for_date_range,
-            start_of_last_week.isoformat(),
-            end_of_last_week.isoformat()
+            start_utc_iso,
+            end_utc_iso
         )
 
         if not summaries:
@@ -557,18 +573,21 @@ async def monthly_digest_command(update: Update, context: ContextTypes.DEFAULT_T
     await send_message_with_retry(bot=context.bot, chat_id=user_id, text="Начинаю подготовку дайджеста за прошлый месяц...")
 
     try:
-        today = datetime.now()
-        first_day_of_current_month = today.replace(day=1)
+        now = now_msk(APP_TZ)
+        first_day_of_current_month = now.replace(day=1)
         last_day_of_last_month = first_day_of_current_month - timedelta(days=1)
         first_day_of_last_month = last_day_of_last_month.replace(day=1)
 
         start_date = first_day_of_last_month.replace(hour=0, minute=0, second=0, microsecond=0)
         end_date = last_day_of_last_month.replace(hour=23, minute=59, second=59, microsecond=999999)
 
+        start_utc_iso = to_utc(start_date, APP_TZ).isoformat()
+        end_utc_iso = to_utc(end_date, APP_TZ).isoformat()
+
         summaries = await asyncio.to_thread(
             get_summaries_for_date_range,
-            start_date.isoformat(),
-            end_date.isoformat()
+            start_utc_iso,
+            end_utc_iso
         )
 
         if not summaries:

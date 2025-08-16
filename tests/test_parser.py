@@ -1,9 +1,13 @@
 import pytest
 from unittest.mock import patch, MagicMock
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 # Добавляем путь к src в sys.path для импорта
 from src.parser import get_articles_from_page, get_article_text, _parse_custom_date
+
+# Определяем таймзону для тестов, чтобы они не зависили от системной
+APP_TZ = ZoneInfo("Europe/Moscow")
 
 # --- Фикстуры и моки ---
 
@@ -57,12 +61,14 @@ def mock_article_html():
 def test_parse_custom_date_short_year():
     """Тест парсинга даты с 2-значным годом."""
     dt = _parse_custom_date("04.08.25 12:00")
-    assert dt == datetime(2025, 8, 4, 12, 0)
+    expected_dt = datetime(2025, 8, 4, 12, 0, tzinfo=APP_TZ)
+    assert dt == expected_dt
 
 def test_parse_custom_date_long_year():
     """Тест парсинга даты с 4-значным годом."""
     dt = _parse_custom_date("04.08.2024 13:00")
-    assert dt == datetime(2024, 8, 4, 13, 0)
+    expected_dt = datetime(2024, 8, 4, 13, 0, tzinfo=APP_TZ)
+    assert dt == expected_dt
 
 def test_parse_custom_date_invalid_format():
     """Тест на неверный формат даты."""
@@ -88,10 +94,10 @@ def test_get_articles_from_page_success(mock_requests_get, mock_news_list_html):
     assert len(articles) == 2
     assert articles[0]['title'] == "Заголовок 1"
     assert articles[0]['link'] == "https://www.warandpeace.ru/news/2025/8/4/article1.html"
-    assert articles[0]['published_at'] == "2025-08-04T12:00:00"
+    assert articles[0]['published_at'] == datetime(2025, 8, 4, 12, 0, tzinfo=APP_TZ)
     assert articles[1]['title'] == "Заголовок 2"
     assert articles[1]['link'] == "https://www.warandpeace.ru/news/2024/8/4/article2.html"
-    assert articles[1]['published_at'] == "2024-08-04T13:00:00"
+    assert articles[1]['published_at'] == datetime(2024, 8, 4, 13, 0, tzinfo=APP_TZ)
 
 # --- Тесты для get_article_text ---
 
