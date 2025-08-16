@@ -46,14 +46,14 @@ log_level = getattr(logging, log_level_name, logging.INFO)
 logging.basicConfig(
     level=log_level,
     format="%(asctime)s - %(levelname)s - %(message)s",
-    datefmt="%d-%m.%y - [%H:%M]",
+    datefmt="%d/%m-%y - [%H:%M]",
     force=True,
 )
 
 _root = logging.getLogger()
 _formatter = logging.Formatter(
     fmt="%(asctime)s - %(levelname)s - %(message)s",
-    datefmt="%d-%m.%y - [%H:%M]",
+    datefmt="%d/%m-%y - [%H:%M]",
 )
 for _h in list(_root.handlers):
     try:
