@@ -43,7 +43,7 @@ Checklist:
 - Target minimums known to support 3.11:
   - `tenacity>=8.2`, `APScheduler>=3.10`, `click>=8.1`, `sqlalchemy>=2.0` (if/when moving to SQLA 2.x API), `prometheus-client>=0.16`, `requests>=2.31`.
 - Actions:
-  - [ ] Create a branch; bump non-breaking versions with changelog notes.
+  - [ ] Create a branch; bump non-breaking versions and document changes in release notes.
   - [ ] Run `pip-compile` (optional) or freeze to ensure reproducibility.
 
 #### 6) Testing Strategy
