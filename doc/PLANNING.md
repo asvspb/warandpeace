@@ -60,15 +60,6 @@
 
 Ниже перечислены детальные планы, вынесенные в отдельные файлы. При создании нового плана добавляйте сюда ссылку и краткий статус.
 
-- [TIMEZONE_MOSCOW_MIGRATION_PLAN_RU.md](TIMEZONE_MOSCOW_MIGRATION_PLAN_RU.md)
-  - Цель: перевод проекта на Europe/Moscow при хранении времени в UTC.
-  - Статус: в работе.
-  - Чек-лист внедрения (см. документ):
-    - [ ] Проброс `TZ` в `docker-compose.yml`
-    - [ ] `tzdata` в образе
-    - [ ] `APP_TZ` и `time_utils` в коде
-    - [ ] Конвертация UTC↔MSK в БД/выводе
-    - [ ] Тесты границ периодов
 
 - [WIREGUARD_INTEGRATION_PLAN_RU.md](WIREGUARD_INTEGRATION_PLAN_RU.md)
   - Цель: интеграция WireGuard и egress через VPN.
@@ -80,15 +71,44 @@
   - Статус: план составлен, ожидает начала работ.
   - Ключевые шаги: базовый образ 3.11, проверка зависимостей, тесты, релиз.
 
-- [GEMINI_ORCHESTRATION_PLAN_RU.md](GEMINI_ORCHESTRATION_PLAN_RU.md)
-  - Цель: оркестрация работы Gemini в Linux через CLI.
-  - Статус: готов к внедрению.
-  - Ключевые шаги: настроить `.env`, проверить `models:list`, `keys:check`, настроить алиасы/systemd.
 
 - [GEMINI_MAIN_MERGE_PLAN_RU.md](GEMINI_MAIN_MERGE_PLAN_RU.md)
   - Цель: подготовить и провести релиз Gemini‑изменений в `main`.
   - Статус: план составлен.
   - Ключевые шаги: проверки в `develop`, оформить релиз в `CHANGELOG.md`/`RELEASELOG.md`, PR в `main`, тег, пост‑релизная синхронизация.
+
+- [POSTGRES_MIGRATION_PLAN_RU.md](POSTGRES_MIGRATION_PLAN_RU.md)
+  - Цель: переход на PostgreSQL c SQLAlchemy/Alembic.
+  - Статус: план составлен.
+
+- [ARCHIVE_SYNC_AND_DASHBOARD_PLAN_RU.md](ARCHIVE_SYNC_AND_DASHBOARD_PLAN_RU.md)
+  - Цель: фоновая синхронизация архива и дашборд состояния.
+  - Статус: план составлен.
+
+- [CLOUD_BACKUP_PLAN_RU.md](CLOUD_BACKUP_PLAN_RU.md)
+  - Цель: резервное копирование в облако.
+  - Статус: план составлен.
+
+- [BOT_MENU_AND_DEBUG_FEATURES_PLAN_RU.md](BOT_MENU_AND_DEBUG_FEATURES_PLAN_RU.md)
+  - Цель: меню бота, debug‑режим, постинг ленты.
+  - Статус: план составлен.
+
+- [API_KEYS_HEALTH_PERSISTENCE_PLAN_RU.md](API_KEYS_HEALTH_PERSISTENCE_PLAN_RU.md)
+  - Цель: хранить здоровье API‑ключей и выбирать без пробных запросов.
+  - Статус: план составлен.
+
+- [SUMMARIZATION_CONTROL_AND_TAGGING_PLAN_RU.md](SUMMARIZATION_CONTROL_AND_TAGGING_PLAN_RU.md)
+  - Цель: управление суммаризацией и тегирование.
+  - Статус: план составлен.
+
+- [ZETTELKASTEN_AND_RELATED_ARTICLES_PLAN_RU.md](ZETTELKASTEN_AND_RELATED_ARTICLES_PLAN_RU.md)
+  - Цель: граф связей и заметок (Zettelkasten).
+  - Статус: план составлен.
+
+## Справочные/концептуальные документы
+- [BEST_PRACTICES.md](BEST_PRACTICES.md)
+- [GEMINI.md](GEMINI.md)
+- [GPT5.md](GPT5.md)
 
 # Дорожная карта развития: Архитектура идеального новостного Telegram-агрегатора (Не удалять)
 
