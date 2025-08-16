@@ -1,3 +1,6 @@
+Last updated: 2025-08-16
+Status: ready
+
 ### Python 3.11+ Migration Plan
 
 #### 1) Goals and Scope
