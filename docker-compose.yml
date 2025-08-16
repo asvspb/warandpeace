@@ -8,6 +8,7 @@ services:
     env_file:
       - .env
     environment:
+      - TZ=${TZ:-Europe/Moscow}
       - METRICS_ENABLED=${METRICS_ENABLED:-true}
       - METRICS_PORT=${METRICS_PORT:-8000}
     volumes:
@@ -21,6 +22,7 @@ services:
     command: uvicorn src.webapp.server:app --host 0.0.0.0 --port ${WEB_PORT:-8080}
     env_file: .env
     environment:
+      - TZ=${TZ:-Europe/Moscow}
       - WEB_ENABLED=true
       - WEB_PORT=${WEB_PORT:-8080}
       - WEB_BASIC_AUTH_USER=${WEB_BASIC_AUTH_USER}

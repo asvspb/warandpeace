@@ -1,8 +1,8 @@
 # 1. Базовый образ с нужной версией Python
 FROM python:3.10-slim
 
-# 2. Установка curl
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+# 2. Установка системных зависимостей (curl для healthcheck, tzdata для часовых поясов)
+RUN apt-get update && apt-get install -y curl tzdata && rm -rf /var/lib/apt/lists/*
 
 # 3. Установка рабочей директории внутри контейнера
 WORKDIR /app
