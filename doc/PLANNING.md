@@ -90,6 +90,34 @@
   - Статус: план составлен.
   - Ключевые шаги: проверки в `develop`, оформить релиз в `CHANGELOG.md`/`RELEASELOG.md`, PR в `main`, тег, пост‑релизная синхронизация.
 
+- [POSTGRES_MIGRATION_PLAN_RU.md](POSTGRES_MIGRATION_PLAN_RU.md)
+  - Цель: переход на PostgreSQL c SQLAlchemy/Alembic.
+  - Статус: план составлен.
+
+- [ARCHIVE_SYNC_AND_DASHBOARD_PLAN_RU.md](ARCHIVE_SYNC_AND_DASHBOARD_PLAN_RU.md)
+  - Цель: фоновая синхронизация архива и дашборд состояния.
+  - Статус: план составлен.
+
+- [CLOUD_BACKUP_PLAN_RU.md](CLOUD_BACKUP_PLAN_RU.md)
+  - Цель: резервное копирование в облако.
+  - Статус: план составлен.
+
+- [BOT_MENU_AND_DEBUG_FEATURES_PLAN_RU.md](BOT_MENU_AND_DEBUG_FEATURES_PLAN_RU.md)
+  - Цель: меню бота, debug‑режим, постинг ленты.
+  - Статус: план составлен.
+
+- [API_KEYS_HEALTH_PERSISTENCE_PLAN_RU.md](API_KEYS_HEALTH_PERSISTENCE_PLAN_RU.md)
+  - Цель: хранить здоровье API‑ключей и выбирать без пробных запросов.
+  - Статус: план составлен.
+
+- [SUMMARIZATION_CONTROL_AND_TAGGING_PLAN_RU.md](SUMMARIZATION_CONTROL_AND_TAGGING_PLAN_RU.md)
+  - Цель: управление суммаризацией и тегирование.
+  - Статус: план составлен.
+
+- [ZETTELKASTEN_AND_RELATED_ARTICLES_PLAN_RU.md](ZETTELKASTEN_AND_RELATED_ARTICLES_PLAN_RU.md)
+  - Цель: граф связей и заметок (Zettelkasten).
+  - Статус: план составлен.
+
 # Дорожная карта развития: Архитектура идеального новостного Telegram-агрегатора (Не удалять)
 
 Этот документ разработан как дорожная карта, которая позволит:
