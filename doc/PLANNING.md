@@ -63,12 +63,12 @@
 
 - [WIREGUARD_INTEGRATION_PLAN_RU.md](WIREGUARD_INTEGRATION_PLAN_RU.md)
   - Цель: интеграция WireGuard и egress через VPN.
-  - Статус: черновик/готов к внедрению по шагам.
+  - Статус: ready.
   - Ключевые шаги: сервер `wg0`, `wg-client` в Compose, killswitch, мониторинг.
 
 - [PY311_MIGRATION_PLAN.md](PY311_MIGRATION_PLAN.md)
   - Цель: переход на Python 3.11+.
-  - Статус: план составлен, ожидает начала работ.
+  - Статус: ready.
   - Ключевые шаги: базовый образ 3.11, проверка зависимостей, тесты, релиз.
 
 
@@ -89,6 +89,10 @@
   - Цель: резервное копирование в облако.
   - Статус: план составлен.
 
+- [MEDIA_FROM_ORIGINAL_SOURCE_PLAN_RU.md](MEDIA_FROM_ORIGINAL_SOURCE_PLAN_RU.md)
+  - Цель: извлечение медиа непосредственно из оригинальных источников.
+  - Статус: план составлен.
+
 - [BOT_MENU_AND_DEBUG_FEATURES_PLAN_RU.md](BOT_MENU_AND_DEBUG_FEATURES_PLAN_RU.md)
   - Цель: меню бота, debug‑режим, постинг ленты.
   - Статус: план составлен.
@@ -105,9 +109,39 @@
   - Цель: граф связей и заметок (Zettelkasten).
   - Статус: план составлен.
 
-- [MEDIA_FROM_ORIGINAL_SOURCE_PLAN_RU.md](MEDIA_FROM_ORIGINAL_SOURCE_PLAN_RU.md)
-  - Цель: извлекать медиа с оригинального источника новости и использовать их в постах/UI.
-  - Статус: план составлен.
+
+## Порядок реализации (приоритеты)
+
+1. [CLOUD_BACKUP_PLAN_RU.md](CLOUD_BACKUP_PLAN_RU.md)
+   - Почему: Защита данных — базовая гигиена проекта.
+   - Сложность: Низкая; скрипт + cron.
+2. [WIREGUARD_INTEGRATION_PLAN_RU.md](WIREGUARD_INTEGRATION_PLAN_RU.md)
+   - Почему: Защищенный egress, снижение рисков блокировок.
+   - Сложность: Средняя; в основном DevOps.
+3. [PY311_MIGRATION_PLAN.md](PY311_MIGRATION_PLAN.md)
+   - Почему: Актуальный стек = безопасность и производительность.
+   - Сложность: Низкая; обновление образа и зависимостей.
+4. [POSTGRES_MIGRATION_PLAN_RU.md](POSTGRES_MIGRATION_PLAN_RU.md)
+   - Почему: Масштабирование и надежность, основа будущих фич.
+   - Сложность: Высокая; рефакторинг слоя данных (БД v3/Alembic).
+5. [API_KEYS_HEALTH_PERSISTENCE_PLAN_RU.md](API_KEYS_HEALTH_PERSISTENCE_PLAN_RU.md)
+   - Почему: Снижение сбоев суммаризации за счет выбора здоровых ключей.
+   - Сложность: Средняя; изменения схемы и логики выбора.
+6. [BOT_MENU_AND_DEBUG_FEATURES_PLAN_RU.md](BOT_MENU_AND_DEBUG_FEATURES_PLAN_RU.md)
+   - Почему: Улучшение UX и поддерживаемости.
+   - Сложность: Низкая.
+7. [ARCHIVE_SYNC_AND_DASHBOARD_PLAN_RU.md](ARCHIVE_SYNC_AND_DASHBOARD_PLAN_RU.md)
+   - Почему: Наблюдаемость и контроль данных.
+   - Сложность: Средняя; фоновая синхронизация + дашборд.
+8. [MEDIA_FROM_ORIGINAL_SOURCE_PLAN_RU.md](MEDIA_FROM_ORIGINAL_SOURCE_PLAN_RU.md)
+   - Почему: Качество контента.
+   - Сложность: Высокая; парсинг и устойчивость.
+9. [SUMMARIZATION_CONTROL_AND_TAGGING_PLAN_RU.md](SUMMARIZATION_CONTROL_AND_TAGGING_PLAN_RU.md)
+   - Почему: Контроль качества выдачи.
+   - Сложность: Средняя.
+10. [ZETTELKASTEN_AND_RELATED_ARTICLES_PLAN_RU.md](ZETTELKASTEN_AND_RELATED_ARTICLES_PLAN_RU.md)
+    - Почему: R&D-функция уровня AI-платформы.
+    - Сложность: Очень высокая.
 
 ## Справочные/концептуальные документы
 - [BEST_PRACTICES.md](BEST_PRACTICES.md)

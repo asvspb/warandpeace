@@ -23,6 +23,7 @@ All notable changes to this project will be documented in this file.
 - Unified log format across the application for better readability and analysis.
 - Migrated to timezone‑aware datetimes: UTC storage, MSK presentation; `TZ` configured in containers.
 - Docs updated: `GEMINI.md` refined, AI playbooks added (execution and review/planning).
+- Documentation standardized: added meta-blocks (Last updated/Status) to plans, synchronized `doc/PLANNING.md` aggregator and added prioritized execution order.
 - Dependencies updated: `click` (CLI), `mistralai` (summarization fallback).
 
 ### Fixed
