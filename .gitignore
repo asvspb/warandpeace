@@ -191,5 +191,11 @@ test_articles.db
 logs/
 temp/
 
+# Backup artifacts and temp dirs
+/backups/
+/backup_temp/
+/local_backups/
+*.bak-*
+
 # Legacy specific file (kept for compatibility)
 database/articles.db

@@ -6,13 +6,14 @@ services:
     container_name: warandpeace-bot
     command: python3 src/bot.py
     env_file:
-      - .env
+      - .env.test
     environment:
       - TZ=${TZ:-Europe/Moscow}
       - METRICS_ENABLED=${METRICS_ENABLED:-true}
       - METRICS_PORT=${METRICS_PORT:-8000}
     volumes:
-      - ./database:/app/database
+      - ./database_test:/app/database
+      - ./backups:/var/backups/warandpeace
     ports:
       - "${METRICS_PORT:-8000}:8000"
     restart: unless-stopped
