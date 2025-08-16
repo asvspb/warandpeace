@@ -8,6 +8,18 @@ from datetime import datetime
 from typing import Optional, Dict, Any, List
 from zoneinfo import ZoneInfo
 
+# --- Safe import for URL canonicalization ---
+try:
+    # When running as a package (e.g. tests with pythonpath), this works
+    from src.url_utils import canonicalize_url as _canonicalize_url  # type: ignore
+except Exception:
+    try:
+        # When running as top-level module (python src/bot.py), import sibling
+        from url_utils import canonicalize_url as _canonicalize_url  # type: ignore
+    except Exception:
+        def _canonicalize_url(u: str) -> str:  # type: ignore
+            return u
+
 DATABASE_NAME = "/app/database/articles.db"
 logger = logging.getLogger(__name__)
 # Используем системную таймзону, которая должна быть установлена в Europe/Moscow в Docker
@@ -162,8 +174,7 @@ def update_article_backfill_status(article_id: int, status: str, summary: Option
 def add_article(url: str, title: str, published_at_iso: str, summary: str) -> Optional[int]:
     with get_db_connection() as conn:
         try:
-            from .url_utils import canonicalize_url
-            canonical_link = canonicalize_url(url)
+            canonical_link = _canonicalize_url(url)
             cursor = conn.cursor()
             cursor.execute(
                 "INSERT INTO articles (url, canonical_link, title, published_at, summary_text) VALUES (?, ?, ?, ?, ?)",
@@ -179,8 +190,7 @@ def add_article(url: str, title: str, published_at_iso: str, summary: str) -> Op
 
 def is_article_posted(url: str) -> bool:
     with get_db_connection() as conn:
-        from .url_utils import canonicalize_url
-        canonical_link = canonicalize_url(url)
+        canonical_link = _canonicalize_url(url)
         cursor = conn.cursor()
         cursor.execute("SELECT 1 FROM articles WHERE canonical_link = ?", (canonical_link,))
         return cursor.fetchone() is not None
@@ -192,8 +202,7 @@ def upsert_raw_article(url: str, title: str, published_at_iso: str, content: str
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
-            from .url_utils import canonicalize_url
-            canonical_link = canonicalize_url(url)
+            canonical_link = _canonicalize_url(url)
             content_hash = _sha256(content) if content else None
             cursor.execute("SELECT id FROM articles WHERE canonical_link = ?", (canonical_link,))
             row = cursor.fetchone()
