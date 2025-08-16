@@ -9,6 +9,7 @@ import os
 import subprocess
 import tarfile
 import hashlib
+import sqlite3
 from pathlib import Path
 from dotenv import load_dotenv
 import shutil
@@ -140,7 +141,19 @@ def restore_sqlite_local(at_timestamp, dry_run):
 
         # 7. Perform integrity check on the restored DB
         logging.info("Performing integrity check on the restored database file.")
-        run_command(['sqlite3', str(restored_db_path), 'PRAGMA integrity_check;'])
+        try:
+            # Prefer CLI if available for parity with prod images
+            if shutil.which('sqlite3'):
+                run_command(['sqlite3', str(restored_db_path), 'PRAGMA integrity_check;'])
+            else:
+                with sqlite3.connect(str(restored_db_path)) as conn:
+                    result = conn.execute('PRAGMA integrity_check;').fetchone()
+                    if not result or result[0] != 'ok':
+                        logging.error(f"Integrity check failed: {result}")
+                        exit(1)
+        except Exception as e:
+            logging.error(f"Integrity check error: {e}")
+            exit(1)
 
         # 8. Replace the live database file
         if dry_run:

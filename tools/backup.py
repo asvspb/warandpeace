@@ -10,6 +10,7 @@ import re
 import subprocess
 import tarfile
 import hashlib
+import sqlite3
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from dotenv import load_dotenv
@@ -41,6 +42,10 @@ def run_command(command, **kwargs):
         logging.error(f"STDOUT: {e.stdout.strip()}")
         logging.error(f"STDERR: {e.stderr.strip()}")
         raise
+
+def is_executable_available(executable_name: str) -> bool:
+    """Check if an executable exists in PATH."""
+    return shutil.which(executable_name) is not None
 
 def calculate_sha256(file_path):
     """Calculate and return the SHA256 checksum of a file."""
@@ -125,7 +130,8 @@ def backup_env_local():
     local_backup_dir = Path(get_env_var("LOCAL_BACKUP_DIR"))
     age_public_keys_str = get_env_var("AGE_PUBLIC_KEYS", required=True) # Encryption is mandatory
 
-    # Check free space before proceeding
+    # Ensure destination root exists and check free space before proceeding
+    local_backup_dir.mkdir(parents=True, exist_ok=True)
     min_free_gb_str = get_env_var("LOCAL_MIN_FREE_GB", required=False, default="0")
     check_free_space(local_backup_dir, min_free_gb_str)
 
@@ -216,7 +222,8 @@ def backup_sqlite_local(encrypt_policy):
     local_backup_dir = Path(get_env_var("LOCAL_BACKUP_DIR"))
     age_public_keys_str = get_env_var("AGE_PUBLIC_KEYS", required=False)
 
-    # Check free space before proceeding
+    # Ensure destination root exists and check free space before proceeding
+    local_backup_dir.mkdir(parents=True, exist_ok=True)
     min_free_gb_str = get_env_var("LOCAL_MIN_FREE_GB", required=False, default="0")
     check_free_space(local_backup_dir, min_free_gb_str)
 
@@ -239,7 +246,14 @@ def backup_sqlite_local(encrypt_policy):
 
         # 4. Create a consistent database snapshot
         logging.info(f"Creating SQLite snapshot from {db_path} to {tmp_db_snapshot_path}")
-        run_command(['sqlite3', str(db_path), f".backup '{tmp_db_snapshot_path}'"])
+        if is_executable_available('sqlite3'):
+            # Pass the dot-command as a single argument without shell quotes
+            run_command(['sqlite3', str(db_path), f".backup {tmp_db_snapshot_path}"])
+        else:
+            # Fallback to Python API
+            logging.info("sqlite3 CLI not found. Using Python sqlite3 backup API.")
+            with sqlite3.connect(str(db_path)) as src_conn, sqlite3.connect(str(tmp_db_snapshot_path)) as dst_conn:
+                src_conn.backup(dst_conn)
 
         # 5. Create a tarball
         logging.info(f"Creating tarball: {archive_path}")
@@ -270,7 +284,7 @@ def backup_sqlite_local(encrypt_policy):
         logging.info(f"Calculating SHA256 checksum for {final_artifact_path}")
         checksum = calculate_sha256(final_artifact_path)
         checksum_path = tmp_dir / f"{final_artifact_path.name}.sha256"
-        with open(checksum_path, 'w'). as f:
+        with open(checksum_path, 'w') as f:
             f.write(f"{checksum}  {final_artifact_path.name}\n")
         logging.info(f"Checksum: {checksum}")
         
