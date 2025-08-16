@@ -1,118 +1,151 @@
-### 📘 Лучшие практики проекта
+### 📘 Project Best Practices
 
-#### 1. Назначение проекта
-Проект представляет собой Telegram-бота, который отслеживает новостной сайт о российской геополитике "warandpeace.ru", парсит новые статьи, генерирует краткие резюме на основе ИИ (используя Google Gemini & OpenRouter LLM) и автоматически публикует их в Telegram-канал.
-Дополнительные функции включают периодические дайджесты, проверки работоспособности парсера и ключей API, статистику и рабочий процесс развертывания с помощью Docker.
+#### 1. Project Purpose
+This repository hosts a Telegram bot and data-processing pipeline that tracks new articles on the Russian geopolitical news website “warandpeace.ru”, stores raw articles in a local database, generates AI-based summaries (Google Gemini / OpenRouter LLM), and posts both instant updates and periodic digests to a Telegram channel.
 
-#### 2. Структура проекта
-- `src/` – код рабочего приложения
-  - `bot.py` – основная точка входа; запускает Telegram-бота, планирует задачи и обработчики команд.
-  - `parser.py` / `async_parser.py` – скрейпинг веб-сайта, преобразование дат, возврат метаданных и полного текста статей.
-  - `summarizer.py` – утилиты для локального и удаленного суммирования с помощью LLM.
-  - `database.py` – вспомогательные функции для SQLite (инициализация, CRUD, статистика), используемые ботом.
-  - `config.py` – загружает переменные окружения, ключи API и настройки.
-  - `healthcheck.py` – проверяет, что CSS-селекторы парсера все еще соответствуют целевому сайту.
-  - Вспомогательные файлы (`get_todays_articles.py` и т.д.) – одноразовые помощники.
-- `tests/` – набор тестов pytest для парсера, суммаризатора и помощников БД.
-- `scripts/` – вспомогательные утилиты командной строки (например, миграции БД, ручные запуски).
-- `database/` – здесь находится файл базы данных SQLite (монтируемый том в Docker).
-- `logs/` – логи времени выполнения (том Docker).
-- `Dockerfile`, `docker-compose.yml` – контейнеризация и оркестрация.
-- `.env` – секреты и конфигурация времени выполнения (никогда не коммитьте реальные значения).
+#### 2. Project Structure
+- `src/` – production source code
+  - `bot.py` – main entry-point; starts the Telegram bot and schedules background jobs.
+  - `parser.py`, `async_parser.py` – scrape web pages, normalise dates, return metadata + full text.
+  - `summarizer.py` – helpers to call external LLM providers and compose prompts.
+  - `database.py` – low-level persistence helpers (SQLite today, PostgreSQL planned).
+  - `config.py` – loads `.env` variables and centralises runtime configuration.
+  - `healthcheck.py` – verifies that CSS selectors still match the target site.
+- `tests/` – pytest suite covering parsing, summarisation and DB helpers.
+- `scripts/` – one-off CLI tools (DB migrations, manual re-ingest, etc.).
+- `database/` – mounted volume that stores the SQLite database file.
+- `doc/` – architecture specs (e.g. `ALGORITHM_NEWS_DB.md`).
+- `Dockerfile`, `docker-compose.yml` – containerisation & local orchestration.
 
-Ключевое разделение ответственности:
-- **Доменная логика**: парсинг статей, суммирование, создание дайджестов.
-- **Инфраструктура/Ввод-вывод**: Telegram API, HTTP-запросы, база данных, Docker.
-- **Оркестрация**: планирование очереди задач в `bot.py`.
+Key separation of concerns:
+1. **Domain logic** (scraping, summarisation, digest composition).
+2. **Infrastructure / I/O** (Telegram API, HTTP requests, database, Docker).
+3. **Orchestration** (job queue and scheduling in `bot.py`).
 
-#### 3. Стратегия тестирования
-- **Фреймворк**: pytest (+ unittest.mock).
-- **Расположение и именование**: тесты находятся в `tests/`, имена файлов начинаются с `test_`.
-- **Философия**:
-  - Модульное тестирование критически важных чистых функций (`_parse_custom_date`, помощники суммаризатора, помощники БД).
-  - Имитация (mock) внешних HTTP-запросов и Telegram API для обеспечения детерминированности тестов.
-  - Интеграционные тесты (опционально) могут запускать временную БД SQLite или сервис Docker.
-- **Целевое покрытие**: ≥80 % строк кода для основных модулей (`parser`, `summarizer`, `database`).
-- **Фикстуры**: использование фикстур pytest для имитации фрагментов HTML и monkey-patching запросов.
-- **CI**: запуск `pytest -q` при сборке Docker или в GitHub Actions.
+#### 3. Test Strategy
+- **Framework**: Pytest (+ `unittest.mock`).
+- **Layout & naming**: tests live in `tests/`, file names start with `test_`.
+- **Philosophy**
+  - Unit-test critical pure functions (`_parse_custom_date`, summariser helpers, DB utils).
+  - Mock external HTTP requests and Telegram API to keep tests deterministic.
+  - Integration tests spin up a temporary SQLite DB (or Docker services) when needed.
+- **Coverage target**: ≥ 80 % lines for core modules (`parser`, `summarizer`, `database`).
+- **Fixtures**: use pytest fixtures for HTML snippets and monkey-patching requests.
+- **CI**: run `pytest -q` inside Docker or GitHub Actions on every PR.
 
-#### 4. Стиль кода
-- **Язык**: Python 3.11+, предпочтение отдается подсказкам типов (`typing`) для всех публичных функций.
-- **Асинхронный ввод-вывод**: использование `asyncio` в обработчиках бота и при интенсивном вводе-выводе (HTTP-вызовы, БД) – избегайте блокирующих операций в цикле событий.
-- **Именование**: snake_case для переменных и функций, PascalCase для классов, UPPER_SNAKE для констант.
-- **Логирование**: использование стандартного модуля `logging`; никогда не используйте `print` в рабочем коде.
-- **Докстринги**: докстринги в стиле Google для публичных модулей и функций; описывайте возвращаемые типы и исключения.
-- **Обработка ошибок**: перехватывайте **ожидаемые** ошибки как можно ближе к источнику; логируйте и повторно выбрасывайте или преобразуйте в ошибки доменной логики. Используйте `tenacity` для повторных попыток при нестабильном вводе-выводе.
+#### 4. Code Style
+- **Language**: Python 3.11 + with full type hints for all public functions.
+- **Async IO**: use `asyncio` for network-bound code; avoid blocking the event loop.
+- **Naming**: `snake_case` for variables & functions, `PascalCase` for classes, `UPPER_SNAKE` for constants.
+- **Logging**: standard `logging` module; never use `print` in production code.
+- **Docstrings**: Google-style docstrings on all public modules & functions; describe return types and raised exceptions.
+- **Error handling**: catch **expected** errors close to the source; log and re-raise or wrap in domain-specific exceptions. Use `tenacity` for retry logic on flaky I/O.
 
-#### 5. Распространенные паттерны
-- **Фабрика / Адаптер**: вспомогательные функции оборачивают внешние сервисы (LLM, Telegram), чтобы внутренние компоненты были слабо связаны.
-- **Планирование задач**: `Application.job_queue.run_repeating` – канонический способ планирования повторяющихся задач.
-- **Внедрение зависимостей**: конфигурация (API keys, URLs) передается через `config.py` вместо жесткого кодирования.
-- **Логика повторных попыток**: декораторы `tenacity` для сетевых вызовов.
-- **DTOs**: словари статей имеют согласованную структуру `{title, link, published_at}` во всей кодовой базе.
+#### 5. Common Patterns
+- **Factory / Adapter**: helper modules wrap external services (LLM, Telegram) to keep internals loosely coupled.
+- **Task scheduling**: `Application.job_queue.run_repeating` is the canonical way to schedule recurring jobs.
+- **Dependency injection**: config (API keys, URLs) is passed through `config.py`, not hard-coded.
+- **Retry decorators**: `tenacity` handles exponential back-off and jitter for network calls.
+- **DTOs**: article dictionaries follow a uniform schema `{title, link, published_at}` across the codebase.
 
-#### 6. Что делать и чего не делать
-- ✅ ДА, разделяйте асинхронный и блокирующий код; оборачивайте блокирующие вызовы с помощью `asyncio.to_thread`.
-- ✅ ДА, проверяйте весь внешний HTML с помощью BeautifulSoup перед обработкой.
-- ✅ ДА, пишите тесты для каждого исправления ошибки или новой функции.
-- ✅ ДА, добавляйте новые зависимости в `requirements.txt` и закрепляйте их версии.
-- ✅ ДА, используйте переменные окружения для секретов; никогда не кодируйте токены жестко.
-- ❌ НЕТ, не публикуйте файлы `.env` или базы данных в VCS.
-- ❌ НЕТ, не перехватывайте голое `Exception` без повторного выброса/логирования.
-- ❌ НЕТ, не логируйте чувствительную информацию (API keys, personal data).
-- ❌ НЕТ, не блокируйте цикл событий долгими `time.sleep`; используйте `asyncio.sleep`.
+#### 6. Do's and Don'ts
+- ✅ **Do** separate async and blocking code; wrap blocking calls with `asyncio.to_thread`.
+- ✅ **Do** validate all external HTML with BeautifulSoup before processing.
+- ✅ **Do** write tests for every bug-fix or new feature.
+- ✅ **Do** pin versions for new dependencies in `requirements.txt`.
+- ✅ **Do** load secrets from environment variables; never hard-code tokens.
+- ❌ **Don’t** commit `.env` files or database dumps to VCS.
+- ❌ **Don’t** swallow bare `Exception` without re-raising/logging.
+- ❌ **Don’t** log sensitive data (API keys, personal info).
+- ❌ **Don’t** block the event loop with long `time.sleep`; use `asyncio.sleep` instead.
 
-#### 7. Инструменты и зависимости
-- **python-telegram-bot** – взаимодействие с Telegram API и очередью задач.
-- **google-generativeai / OpenRouter** – суммирование с помощью LLM.
-- **requests & BeautifulSoup4** – HTTP-скрейпинг и парсинг.
-- **feedparser** – RSS/Atom ленты (для будущего использования).
-- **pytest** – фреймворк для тестирования.
-- **tenacity** – логика повторных попыток для ненадежных сетей.
+#### 7. Tools & Dependencies
+| Library | Purpose |
+|---------|---------|
+| `python-telegram-bot` | Telegram API client & job queue |
+| `google-generativeai`, `OpenRouter` | LLM providers for summarisation |
+| `requests`, `beautifulsoup4` | HTTP scraping & parsing |
+| `feedparser` | (Future) RSS/Atom ingestion |
+| `pytest` | Test framework |
+| `tenacity` | Resilient retry decorators |
+| `SQLAlchemy`, `alembic` | Planned ORM & migrations for PostgreSQL transition |
 
-Настройка:
-'''bash
-# Локальная разработка
+Setup (local):
+```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-export TELEGRAM_BOT_TOKEN=... # плюс другие переменные окружения
+export TELEGRAM_BOT_TOKEN=...  # plus other env vars
 python -m src.bot
-
-# Docker
+```
+Docker compose:
+```bash
 docker-compose up -d --build
-'''
+```
 
-#### 8. Прочие примечания
-- Целевой сайт (`warandpeace.ru`) использует кодировку Windows-1251; всегда устанавливайте `response.encoding` перед использованием `.text`.
-- Селекторы парсера хрупкие; поддерживайте `healthcheck.py` в актуальном состоянии после любого редизайна сайта.
-- Использование LLM должно оставаться в пределах лимитов токенов, эквивалентных GPT-4; суммируйте длинные тексты постепенно.
-- При добавлении новых команд для бота группируйте их логически и регистрируйте в `post_init`.
-- Сохраняйте миграции базы данных инкрементными; избегайте деструктивных изменений схемы в рабочей среде.
+#### 8. Other Notes
+- Target site uses Windows-1251 encoding; always set `response.encoding` before reading `.text`.
+- Parser selectors are fragile; keep `healthcheck.py` up-to-date after any site redesign.
+- LLM usage must respect token limits (equiv. GPT-4); chunk long texts when necessary.
+- When adding new bot commands, group logically and register them in `post_init`.
+- Keep DB migrations incremental; avoid destructive schema changes in production.
+- PostgreSQL migration plan is documented in `BEST_PRACTICES_RU.md` – keep both files consistent.
 
-##### Планируемая миграция на PostgreSQL
-В настоящее время мы используем SQLite для простоты. Чтобы подготовиться к будущему росту трафика и расширенным функциям поиска, мы планируем перенести слой персистентности на PostgreSQL. Ключевые моменты:
+#### 9. Observability & Metrics
+- Enable Prometheus metrics server via env: `METRICS_ENABLED=true`, `METRICS_PORT=8000` (default). The container exposes port 8000.
+- Exported metrics (see `src/metrics.py`):
+  - `articles_ingested_total` (Counter)
+  - `articles_posted_total` (Counter)
+  - `errors_total{type}` (Counter)
+  - `job_duration_seconds` (Histogram)
+  - `last_article_age_minutes` (Gauge)
+  - `dlq_size` (Gauge)
+- In test/dev without `prometheus_client`, metrics degrade gracefully (no-op).
 
-1. **Дорожная карта**
-   - Фаза 0 (сейчас) — поддерживать схему нейтральной (ANSI SQL) и оборачивать доступ к БД через вспомогательные функции.
-   - Фаза 1 — внедрить SQLAlchemy и миграции Alembic, все еще работая с SQLite.
-   - Фаза 2 — запустить экземпляр Postgres (Docker), применить те же миграции, запустить тесты и бота в промежуточной среде (staging).
-   - Фаза 3 — обновить рабочий `.env` на DSN `postgresql://` и отказаться от SQLite.
+#### 10. Ingest vs Summarisation
+- Keep raw-ingest and summarisation decoupled. Ingest should not depend on LLM quotas.
+- Store canonical URL, title, `published_at`, and full cleaned `content` first. Summaries are written later.
+- Provide separate CLI for each stage (`ingest-page`, `backfill-range`, `reconcile`, `summarize-range`).
 
-2. **Основные моменты схемы v3**
-   - Таблицы `sources`, `articles`, `article_texts`, `digests` (см. документ по дизайну).
-   - Использовать `ENUM` для полей статуса, `BOOLEAN` для флагов и индексы для `(published_at)` и `(status)`.
-   - "Тяжелые" столбцы (`original_content`, `summary_long`) находятся в `article_texts`, чтобы таблица `articles` оставалась "горячей".
+#### 11. DLQ (Dead-letter Queue)
+- Send persistent errors to `dlq` with `entity_type`, `entity_ref`, `error_code`, payload, and increment `attempts`.
+- Monitor with `dlq-show`; retry with `dlq-retry` (bounded batch, backoff). Track size via `dlq_size` gauge.
+- Budget retries and avoid hot-looping (respect exponential backoff in scrapers).
 
-3. **Ожидаемые преимущества**
-   - Полнотекстовый поиск (индекс `GIN` для `article_texts.original_content`).
-   - Возможность хранить векторные представления (`pgvector`) и выполнять семантический поиск.
-   - Репликация и восстановление на определенный момент времени для повышения надежности.
-   - Ограничения ENUM + CHECK для более строгой согласованности данных.
+#### 12. URL Canonicalisation
+- Always canonicalise with `src/url_utils.canonicalize_url` before any DB upsert or duplicate check.
+- Rules: force https, lowercase host, strip fragments and tracking params, sort query, normalise path and ports.
 
-4. **Обратная совместимость**
-   - Все вспомогательные функции чтения/записи будут использовать сессии SQLAlchemy, поэтому для смены движка потребуется только изменение DSN.
-   - Набор тестов будет запускаться как для SQLite, так и для Postgres в CI, чтобы гарантировать паритет.
+#### 13. Database & Migrations (SQLite now)
+- Wrap schema changes in transactions; create a file backup before complex migrations (see `backup_database_copy`).
+- Prefer additive changes; avoid destructive `DROP` except during controlled migrations with backups.
+- Maintain useful indices: `(published_at)`, `(backfill_status)`, `(content_hash)`.
 
-5. **Триггер для принятия решения о миграции**
-   - >50 тыс. статей *или* требование полнотекстового/семантического поиска.
-   - Расширение на несколько источников помимо `warandpeace.ru`.
+#### 14. Duplicates & Near-duplicates
+- Compute and persist `content_hash` (SHA-256) for exact duplicate detection and reporting.
+- Use `content-hash-report` to list groups; `near-duplicates` for shingled Jaccard similarity over recent content.
+- When merging duplicates, keep the earliest `published_at` and higher-quality `content`.
+
+#### 15. Scheduling & Backpressure
+- For periodic jobs, use bounded parallelism and rate limits; implement exponential backoff on network errors.
+- Use scheduler settings like `coalesce`, `misfire_grace_time`, `max_instances=1`, add jitter to avoid thundering herd.
+- Persist checkpoints for long backfills (date/page/last_link) to allow resumption.
+
+#### 16. Security & Compliance
+- Treat logs and scraped content as potentially sensitive; avoid logging PII, mask secrets.
+- Keep secrets in `.env`/vault; never commit real tokens.
+- Define retention windows for logs and raw content where applicable.
+
+#### 17. CLI Quick Reference
+- Ingest latest page: `python scripts/manage.py ingest-page --page 1 --limit 10`
+- Backfill range: `python scripts/manage.py backfill-range --from-date 2025-08-01 --to-date 2025-08-07`
+- Reconcile last N days: `python scripts/manage.py reconcile --since-days 7`
+- Summarise range: `python scripts/manage.py summarize-range --from-date 2025-08-01 --to-date 2025-08-07`
+- DLQ: `dlq-show`, `dlq-retry`
+- Duplicate reports: `content-hash-report`, `near-duplicates`
+
+Tip: backfill «с начала года по сегодня» (Docker Compose):
+```bash
+docker-compose run --rm telegram-bot \
+  python3 scripts/manage.py backfill-range \
+  --from-date "$(date +%Y)-01-01" --to-date "$(date +%F)"
+```

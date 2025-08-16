@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Список статей - {{ super() }}{% endblock %}
+
+{% block content %}
+    <header style="margin-bottom: 24px;">
+        <h1>Список статей ({{ total_articles }})</h1>
+    </header>
+
+    <form method="get" class="card">
+        <div class="grid" style="grid-template-columns: 2fr 1fr 1fr auto auto; gap: 12px;">
+            <input type="search" id="q" name="q" placeholder="Поиск по заголовку..." value="{{ q or '' }}">
+            <input type="date" id="start_date" name="start_date" value="{{ start_date or '' }}" title="Дата начала">
+            <input type="date" id="end_date" name="end_date" value="{{ end_date or '' }}" title="Дата окончания">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <input type="checkbox" id="has_content" name="has_content" value="1" {% if has_content %}checked{% endif %}>
+                <label for="has_content">С текстом</label>
+            </div>
+            <button type="submit" class="btn">Найти</button>
+        </div>
+    </form>
+
+    <div class="card">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Дата</th>
+                    <th>Заголовок</th>
+                    <th>Каноническая ссылка</th>
+                    <th>Оригинал</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for article in articles %}
+                <tr>
+                    <td class="muted">{{ article.published_at.split(' ')[0] }}</td>
+                    <td><a href="/articles/{{ article.id }}">{{ article.title }}</a></td>
+                    <td><a href="{{ article.canonical_link }}" target="_blank">{{ article.canonical_link | truncate(40) if article.canonical_link }}</a></td>
+                    <td><a href="{{ article.url }}" target="_blank">Источник</a></td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4" style="text-align: center; padding: 40px;" class="muted">Статьи не найдены.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if total_pages > 1 %}
+    <nav class="pagination">
+        <div>
+            {% if page > 1 %}
+                <a href="?page={{ page - 1 }}&page_size={{ page_size }}&q={{ q or '' }}&start_date={{ start_date or '' }}&end_date={{ end_date or '' }}&has_content={{ has_content }}" class="btn">‹ Предыдущая</a>
+            {% endif %}
+        </div>
+        <div class="muted">
+            Страница {{ page }} из {{ total_pages }}
+        </div>
+        <div>
+            {% if page < total_pages %}
+                <a href="?page={{ page + 1 }}&page_size={{ page_size }}&q={{ q or '' }}&start_date={{ start_date or '' }}&end_date={{ end_date or '' }}&has_content={{ has_content }}" class="btn">Следующая ›</a>
+            {% endif %}
+        </div>
+    </nav>
+    {% endif %}
+{% endblock %}

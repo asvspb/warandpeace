@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block title %}Статьи для хэша {{ hash[:12] }}... - {{ super() }}{% endblock %}
+
+{% block content %}
+    <header>
+        <h1>Статьи с хэшем <code class="muted">{{ hash }}</code></h1>
+    </header>
+
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Дата публикации</th>
+                <th>Заголовок</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for article in articles %}
+            <tr>
+                <td>{{ article.published_at.split(' ')[0] }}</td>
+                <td><a href="/articles/{{ article.id }}">{{ article.title }}</a></td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="2">Статьи не найдены.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <footer>
+        <a href="/duplicates" role="button" class="btn">Назад к группам дубликатов</a>
+    </footer>
+{% endblock %}

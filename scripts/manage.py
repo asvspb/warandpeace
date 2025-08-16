@@ -1,5 +1,6 @@
 import os
 import sys
+from datetime import datetime, timedelta
 
 # --- Настройка путей для корректного импорта ---
 # Этот блок должен выполняться перед импортом модулей из src.
@@ -40,6 +41,8 @@ from src.metrics import (
     ERRORS_TOTAL,
     DLQ_SIZE,
 )
+from src.config import APP_TZ
+from src.time_utils import to_utc
 
 # --- Загрузка переменных окружения ---
 dotenv_path = os.path.join(project_root, '.env')
@@ -47,6 +50,14 @@ load_dotenv(dotenv_path=dotenv_path)
 
 # --- Настройка и инициализация ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+
+def _to_utc_iso(dt: datetime) -> str:
+    """
+    Принимает datetime, приводит его к таймзоне приложения (если наивный),
+    конвертирует в UTC и возвращает строку ISO 8601.
+    """
+    return to_utc(dt, APP_TZ).isoformat()
 
 
 def _process_articles(articles):
@@ -168,7 +179,9 @@ def ingest_page(page: int, limit: int):
             text = get_article_text(a['link'])
             if not text:
                 raise ValueError("Контент пустой")
-            upsert_raw_article(a['link'], a['title'], a['published_at'], text)
+            
+            published_at_utc_iso = _to_utc_iso(a['published_at'])
+            upsert_raw_article(a['link'], a['title'], published_at_utc_iso, text)
             added += 1
             ARTICLES_INGESTED.inc()
         except Exception as e:
@@ -181,10 +194,10 @@ def ingest_page(page: int, limit: int):
 @cli.command('backfill-range')
 @click.option('--from-date', 'from_date', required=True, help='Начало периода (YYYY-MM-DD)')
 @click.option('--to-date', 'to_date', required=True, help='Конец периода (YYYY-MM-DD)')
+@click.option('--archive-only', is_flag=True, help='Использовать только архив (быстрее для старых дат).')
 @click.option('--max-workers', type=int, default=4, help='Ограничение параллелизма (в разработке: используется последовательная обработка).')
-def backfill_range(from_date: str, to_date: str, max_workers: int):
+def backfill_range(from_date: str, to_date: str, archive_only: bool, max_workers: int):
     """Backfill «сырых» статей за диапазон дат (без суммаризации)."""
-    from datetime import datetime, timedelta
     start = datetime.fromisoformat(from_date).date()
     end = datetime.fromisoformat(to_date).date()
     assert start <= end, "from_date должен быть меньше или равен to_date"
@@ -193,13 +206,16 @@ def backfill_range(from_date: str, to_date: str, max_workers: int):
     current = start
     while current <= end:
         click.echo(f"Сбор статей за {current.isoformat()}...")
-        pairs = asyncio.run(fetch_articles_for_date(current))
+        pairs = asyncio.run(fetch_articles_for_date(current, archive_only=archive_only))
         for title, link in pairs:
             try:
                 text = get_article_text(link)
                 if not text:
                     raise ValueError("Контент пустой")
-                upsert_raw_article(link, title, f"{current} 00:00:00", text)
+                
+                dt_naive = datetime.combine(current, datetime.min.time())
+                published_at_utc_iso = _to_utc_iso(dt_naive)
+                upsert_raw_article(link, title, published_at_utc_iso, text)
                 total_added += 1
                 ARTICLES_INGESTED.inc()
             except Exception as e:
@@ -214,7 +230,7 @@ def backfill_range(from_date: str, to_date: str, max_workers: int):
 @click.option('--since-days', type=int, default=7, help='Период к проверке, в днях.')
 def reconcile(since_days: int):
     """Сверка последних N дней: сайт vs БД. Загружает недостающее."""
-    from datetime import date, timedelta
+    from datetime import date
     today = date.today()
     start = today - timedelta(days=since_days)
     missing_total = 0
@@ -226,7 +242,10 @@ def reconcile(since_days: int):
                 text = get_article_text(link)
                 if not text:
                     raise ValueError("Контент пустой")
-                upsert_raw_article(link, title, f"{d} 00:00:00", text)
+                
+                dt_naive = datetime.combine(d, datetime.min.time())
+                published_at_utc_iso = _to_utc_iso(dt_naive)
+                upsert_raw_article(link, title, published_at_utc_iso, text)
                 day_missing += 1
                 ARTICLES_INGESTED.inc()
             except Exception as e:
@@ -243,9 +262,13 @@ def reconcile(since_days: int):
 @click.option('--to-date', 'to_date', required=True, help='Конец периода (YYYY-MM-DD)')
 def summarize_range(from_date: str, to_date: str):
     """Создаёт сводки для статей без резюме за указанный период."""
-    start_iso = f"{from_date} 00:00:00"
-    end_iso = f"{to_date} 23:59:59"
-    rows = list_articles_without_summary_in_range(start_iso, end_iso)
+    start_dt = datetime.strptime(from_date, "%Y-%m-%d")
+    end_dt = datetime.strptime(to_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+
+    start_utc_iso = _to_utc_iso(start_dt)
+    end_utc_iso = _to_utc_iso(end_dt)
+    
+    rows = list_articles_without_summary_in_range(start_utc_iso, end_utc_iso)
     click.echo(f"Найдено статей без сводки: {len(rows)}")
     done = 0
     for row in rows:
@@ -301,9 +324,8 @@ def dlq_retry(entity_type: str, limit: int):
                 raise ValueError('Контент пустой')
             # В DLQ нет заголовка/даты — в крайнем случае используем сам URL и текущую дату
             title = canonicalize_url(link)
-            from datetime import datetime
-            published_at = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
-            upsert_raw_article(link, title, published_at, text)
+            published_at_utc_iso = _to_utc_iso(datetime.utcnow())
+            upsert_raw_article(link, title, published_at_utc_iso, text)
             delete_dlq_item(it['id'])
             succeeded += 1
         except Exception as e:

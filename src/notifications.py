@@ -7,7 +7,7 @@ from typing import List
 from telegram import Bot
 from telegram.constants import ParseMode
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger()
 
 # Кэш админских ID и троттлинг-стейт
 _cached_admin_ids: List[int] | None = None

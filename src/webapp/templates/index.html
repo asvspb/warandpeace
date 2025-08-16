@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - {{ super() }}{% endblock %}
+
+{% block content %}
+    <header style="margin-bottom: 24px;">
+        <h1>Dashboard</h1>
+        <p class="muted">Обзор состояния базы данных новостей.</p>
+    </header>
+    <section>
+        <div class="grid">
+            <div class="card">
+                <h4>Всего статей</h4>
+                <h2><b>{{ stats.total_articles }}</b></h2>
+            </div>
+            <div class="card">
+                <h4>Последняя публикация</h4>
+                <h2><b>{{ stats.last_published_date.split(' ')[0] if stats.last_published_date != 'N/A' else 'N/A' }}</b></h2>
+            </div>
+            <div class="card">
+                <h4>Записей в DLQ</h4>
+                <h2><b>{{ stats.dlq_count }}</b></h2>
+            </div>
+        </div>
+    </section>
+{% endblock %}

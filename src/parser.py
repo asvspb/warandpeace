@@ -10,7 +10,7 @@ import logging
 from urllib.parse import urljoin
 from url_utils import canonicalize_url
 
-from config import NEWS_URL
+from config import NEWS_URL, APP_TZ
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 # Настройка логирования
@@ -27,13 +27,18 @@ def _parse_custom_date(date_str: str) -> datetime:
     """
     Парсит строку с датой, пробуя несколько распространенных форматов.
     Поддерживает форматы 'ДД.ММ.ГГ ЧЧ:ММ' и 'ДД.ММ.ГГГГ ЧЧ:ММ'.
+    Возвращает timezone-aware datetime объект (Europe/Moscow).
     """
+    dt_naive = None
     try:
         # Сначала пробуем формат с 4-значным годом, как более современный
-        return datetime.strptime(date_str, '%d.%m.%Y %H:%M')
+        dt_naive = datetime.strptime(date_str, '%d.%m.%Y %H:%M')
     except ValueError:
         # Если не получилось, пробуем с 2-значным годом
-        return datetime.strptime(date_str, '%d.%m.%y %H:%M')
+        dt_naive = datetime.strptime(date_str, '%d.%m.%y %H:%M')
+    
+    # Делаем наивный datetime aware с таймзоной приложения
+    return dt_naive.replace(tzinfo=APP_TZ)
 
 @retry(stop=stop_after_attempt(3),
        wait=wait_exponential(multiplier=1, min=4, max=10),
@@ -72,6 +77,7 @@ def get_article_text(url: str) -> str | None:
 def get_articles_from_page(page=1):
     """
     Получает список статей с заданной страницы новостей (для текущих новостей).
+    Возвращает 'published_at' как timezone-aware datetime объект.
     """
     list_url = f"{NEWS_URL}?page={page}"
     base_url = "https://www.warandpeace.ru"
@@ -94,17 +100,17 @@ def get_articles_from_page(page=1):
                 # Извлечение и парсинг даты и времени
                 time_str = time_element.get_text(strip=True)
                 try:
-                    # Используем новую функцию для большей гибкости
+                    # dt_object теперь будет timezone-aware
                     dt_object = _parse_custom_date(time_str)
-                    published_at_iso = dt_object.isoformat()
                 except ValueError:
                     logger.warning(f"Не удалось распарсить дату из '{time_str}'. Используется текущее время.")
-                    published_at_iso = datetime.now().isoformat()
+                    # now_msk() вернет aware datetime
+                    dt_object = datetime.now(APP_TZ)
 
                 articles.append({
                     "title": title_element.get_text(strip=True),
                     "link": article_url,
-                    "published_at": published_at_iso
+                    "published_at": dt_object  # Возвращаем datetime объект
                 })
         return articles
     except requests.exceptions.RequestException as e:

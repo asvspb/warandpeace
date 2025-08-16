@@ -2,9 +2,12 @@ import asyncio
 import pytest
 from click.testing import CliRunner
 from unittest.mock import patch, MagicMock
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from scripts.manage import cli
 
+APP_TZ = ZoneInfo("Europe/Moscow")
 
 @pytest.fixture(autouse=True)
 def mock_init_db():
@@ -23,13 +26,16 @@ def run_cli(args):
 @patch('scripts.manage.get_articles_from_page')
 def test_ingest_page_success(mock_list, mock_get_text, mock_upsert, mock_dlq_size):
     mock_list.return_value = [
-        {'link': 'https://example.com/a', 'title': 'A', 'published_at': '2025-08-04T12:00:00'},
-        {'link': 'https://example.com/b', 'title': 'B', 'published_at': '2025-08-04T12:01:00'},
+        {'link': 'https://example.com/a', 'title': 'A', 'published_at': datetime(2025, 8, 4, 12, 0, tzinfo=APP_TZ)},
+        {'link': 'https://example.com/b', 'title': 'B', 'published_at': datetime(2025, 8, 4, 12, 1, tzinfo=APP_TZ)},
     ]
     result = run_cli(['ingest-page', '--page', '1', '--limit', '2'])
     assert result.exit_code == 0, result.output
     assert 'Добавлено/обновлено: 2' in result.output
     assert mock_upsert.call_count == 2
+    # Проверяем, что в БД передается корректная UTC-строка
+    first_call_args = mock_upsert.call_args_list[0][0]
+    assert first_call_args[2] == '2025-08-04T09:00:00+00:00'
 
 
 @patch('scripts.manage.get_dlq_size', return_value=1)
@@ -39,7 +45,7 @@ def test_ingest_page_success(mock_list, mock_get_text, mock_upsert, mock_dlq_siz
 @patch('scripts.manage.get_articles_from_page')
 def test_ingest_page_dlq(mock_list, mock_get_text, mock_upsert, mock_dlq_record, mock_dlq_size):
     mock_list.return_value = [
-        {'link': 'https://example.com/a', 'title': 'A', 'published_at': '2025-08-04T12:00:00'},
+        {'link': 'https://example.com/a', 'title': 'A', 'published_at': datetime(2025, 8, 4, 12, 0, tzinfo=APP_TZ)},
     ]
     result = run_cli(['ingest-page', '--page', '1', '--limit', '1'])
     assert result.exit_code == 0, result.output

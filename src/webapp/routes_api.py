@@ -1,0 +1,27 @@
+
+from fastapi import APIRouter, Depends, Query
+from typing import Optional, List, Dict, Any
+
+from src.webapp import services
+
+router = APIRouter(prefix="/api")
+
+@router.get("/articles", response_model=List[Dict[str, Any]])
+async def api_list_articles(
+    page: int = 1,
+    page_size: int = Query(50, ge=1, le=200),
+    q: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+):
+    """API endpoint to get a paginated list of articles."""
+    articles, _ = services.get_articles(page, page_size, q, start_date, end_date)
+    return articles
+
+@router.get("/articles/{article_id}", response_model=Dict[str, Any])
+async def api_read_article(article_id: int):
+    """API endpoint to get a single article by ID."""
+    article = services.get_article_by_id(article_id)
+    if not article:
+        return {"error": "Article not found"}
+    return article

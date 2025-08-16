@@ -8,6 +8,7 @@ services:
     env_file:
       - .env
     environment:
+      - TZ=${TZ:-Europe/Moscow}
       - METRICS_ENABLED=${METRICS_ENABLED:-true}
       - METRICS_PORT=${METRICS_PORT:-8000}
       - TZ=Europe/Moscow
@@ -16,3 +17,24 @@ services:
     ports:
       - "${METRICS_PORT:-8000}:8000"
     restart: unless-stopped
+
+  web:
+    build: .
+    command: uvicorn src.webapp.server:app --host 0.0.0.0 --port ${WEB_PORT:-8080}
+    env_file: .env
+    environment:
+      - TZ=${TZ:-Europe/Moscow}
+      - WEB_ENABLED=true
+      - WEB_PORT=${WEB_PORT:-8080}
+      - WEB_BASIC_AUTH_USER=${WEB_BASIC_AUTH_USER}
+      - WEB_BASIC_AUTH_PASSWORD=${WEB_BASIC_AUTH_PASSWORD}
+    volumes:
+      - ./database:/app/database:ro
+    ports:
+      - "${WEB_PORT:-8080}:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3

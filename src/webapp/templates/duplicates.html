@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}Дубликаты статей - {{ super() }}{% endblock %}
+
+{% block content %}
+    <header style="margin-bottom: 24px;">
+        <h1>Группы дубликатов</h1>
+        <p class="muted">Группы статей с идентичным содержимым, сгруппированные по хэшу контента.</p>
+    </header>
+
+    <div class="card">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Хэш контента</th>
+                    <th>Количество статей</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for group in groups %}
+                <tr>
+                    <td><a href="/duplicates/{{ group.hash }}">{{ group.hash[:32] }}...</a></td>
+                    <td>{{ group.cnt }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="2" style="text-align: center; padding: 40px;" class="muted">Группы дубликатов не найдены.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endblock %}

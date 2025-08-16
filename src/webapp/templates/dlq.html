@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Dead Letter Queue (DLQ) - {{ super() }}{% endblock %}
+
+{% block content %}
+    <header style="margin-bottom: 24px;">
+        <h1>Dead Letter Queue (DLQ)</h1>
+        <p class="muted">Записи, которые не удалось обработать.</p>
+    </header>
+
+    <div class="card">
+        <form method="get" style="margin-bottom: 20px;">
+            <select name="entity_type" onchange="this.form.submit()" style="max-width: 200px;">
+                <option value="" {% if not entity_type %}selected{% endif %}>Все типы</option>
+                <option value="article" {% if entity_type == 'article' %}selected{% endif %}>Article</option>
+                <option value="summary" {% if entity_type == 'summary' %}selected{% endif %}>Summary</option>
+            </select>
+        </form>
+
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Последняя попытка</th>
+                    <th>Тип</th>
+                    <th>ID/Ссылка</th>
+                    <th>Код ошибки</th>
+                    <th>Попыток</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td class="muted">{{ item.last_seen_at.split('.')[0] }}</td>
+                    <td>{{ item.entity_type }}</td>
+                    <td>{{ item.entity_ref }}</td>
+                    <td><code>{{ item.error_code }}</code></td>
+                    <td>{{ item.attempts }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" style="text-align: center; padding: 40px;" class="muted">В DLQ пусто.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endblock %}

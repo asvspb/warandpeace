@@ -1,6 +1,7 @@
 import os
 import sys
 from dotenv import load_dotenv
+from zoneinfo import ZoneInfo
 
 # Определяем абсолютный путь к директории, где находится этот файл (src)
 src_dir = os.path.dirname(os.path.abspath(__file__))
@@ -56,6 +57,15 @@ GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 MISTRAL_MODEL_NAME = os.getenv("MISTRAL_MODEL_NAME", "mistral-large-latest")
 LLM_TIMEOUT_SEC = int(os.getenv("LLM_TIMEOUT_SEC", "30"))
 LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "512"))
+
+# --- Настройки времени ---
+APP_TZ_NAME = os.getenv("TIMEZONE", "Europe/Moscow")
+try:
+    APP_TZ = ZoneInfo(APP_TZ_NAME)
+except Exception:
+    print(f"ERROR: Invalid timezone '{APP_TZ_NAME}'. Defaulting to UTC.", file=sys.stderr)
+    APP_TZ = ZoneInfo("UTC")
+
 
 # --- Проверка ключевых переменных (мягкая) ---
 # Не прерываем импорт модулей при отсутствии переменных — это важно для тестов и

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}{{ article.title }} - {{ super() }}{% endblock %}
+
+{% block content %}
+    <div class="card">
+        <header style="margin-bottom: 24px;">
+            <h2>{{ article.title }}</h2>
+            <p class="muted">
+                <strong>Дата публикации:</strong> {{ article.published_at }}<br>
+                <strong>Источник:</strong> <a href="{{ article.url }}" target="_blank" rel="noopener noreferrer">{{ article.url }}</a><br>
+                {% if article.canonical_link %}
+                <strong>Каноническая ссылка:</strong> <a href="{{ article.canonical_link }}" target="_blank" rel="noopener noreferrer">{{ article.canonical_link }}</a>
+                {% endif %}
+            </p>
+        </header>
+        
+        {% if article.summary_text %}
+        <h3>Резюме:</h3>
+        <p>{{ article.summary_text }}</p>
+        <hr style="border: 0; border-top: 1px solid var(--border); margin: 24px 0;">
+        {% endif %}
+
+        <h3>Полный текст:</h3>
+        <pre>{{ article.content or 'Полный текст отсутствует.' }}</pre>
+
+        <footer style="margin-top: 24px;">
+            <a href="/articles" class="btn">Назад к списку</a>
+        </footer>
+    </div>
+{% endblock %}
