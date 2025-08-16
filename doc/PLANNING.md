@@ -105,6 +105,10 @@
   - Цель: граф связей и заметок (Zettelkasten).
   - Статус: план составлен.
 
+- [MEDIA_FROM_ORIGINAL_SOURCE_PLAN_RU.md](MEDIA_FROM_ORIGINAL_SOURCE_PLAN_RU.md)
+  - Цель: извлекать медиа с оригинального источника новости и использовать их в постах/UI.
+  - Статус: план составлен.
+
 ## Справочные/концептуальные документы
 - [BEST_PRACTICES.md](BEST_PRACTICES.md)
 - [GEMINI.md](GEMINI.md)
