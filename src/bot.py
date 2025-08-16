@@ -225,22 +225,25 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
 
             except CircuitBreakerOpenError:
                 logger.warning(f"Отправка статьи '{article_data['title']}' отложена (Circuit Breaker OPEN).")
+                # Добавляем в очередь только если у нас есть резюме
+                # Если резюме нет, оно будет сгенерировано при обработке очереди
                 await asyncio.to_thread(
                     enqueue_publication,
                     url=article_data["link"],
                     title=article_data["title"],
                     published_at=article_data["published_at"],
-                    summary_text=(summary or ""),
+                    summary_text=(summary if summary else ""),
                 )
             except Exception as e:
                 error_message = f"Ошибка при обработке статьи {article_data['link']}: {e}"
                 logger.error(error_message, exc_info=True)
+                # Добавляем в очередь. Если резюме отсутствует, оно будет сгенерировано позже
                 await asyncio.to_thread(
                     enqueue_publication,
                     url=article_data["link"],
                     title=article_data["title"],
                     published_at=article_data["published_at"],
-                    summary_text=(summary or ""),
+                    summary_text=(summary if summary else ""),
                 )
                 await notify_admin(
                     context.bot,
@@ -302,7 +305,40 @@ async def flush_pending_publications(context: ContextTypes.DEFAULT_TYPE):
 
     for article in pending_articles:
         try:
-            message = f"<b>{article['title']}</b>\n\n{article['summary_text']} {channel_username}"
+            # Проверяем наличие резюме и генерируем его при необходимости
+            summary_text = article.get('summary_text', '').strip()
+            
+            if not summary_text:
+                logger.info(f"Резюме отсутствует для статьи '{article['title']}'. Генерирую...")
+                
+                # Получаем полный текст статьи
+                full_text = await asyncio.to_thread(get_article_text, article["url"])
+                if not full_text:
+                    logger.error(f"Не удалось получить текст статьи для генерации резюме: {article['url']}")
+                    # Пропускаем эту статью и увеличиваем счетчик попыток
+                    await asyncio.to_thread(increment_attempt_count, article["id"], "Failed to fetch article text")
+                    continue
+                
+                # Генерируем резюме
+                summary_text = await asyncio.to_thread(summarize_text_local, full_text)
+                if not summary_text:
+                    logger.warning(f"Резюме от Gemini не получено, пробую Mistral: {article['url']}")
+                    summary_text = await asyncio.to_thread(summarize_with_mistral, full_text)
+                
+                if not summary_text:
+                    logger.error(f"Не удалось сгенерировать резюме для отложенной статьи: {article['url']}")
+                    # Пропускаем эту статью и увеличиваем счетчик попыток
+                    await asyncio.to_thread(increment_attempt_count, article["id"], "Failed to generate summary")
+                    continue
+                
+                logger.info(f"Резюме успешно сгенерировано для статьи '{article['title']}'")
+                
+                # Сохраняем сгенерированное резюме обратно в очередь
+                from database import update_publication_summary
+                await asyncio.to_thread(update_publication_summary, article["id"], summary_text)
+            
+            # Формируем и отправляем сообщение
+            message = f"<b>{article['title']}</b>\n\n{summary_text} {channel_username}"
             await send_message_with_retry(
                 bot=context.bot,
                 chat_id=TELEGRAM_CHANNEL_ID,
@@ -316,7 +352,7 @@ async def flush_pending_publications(context: ContextTypes.DEFAULT_TYPE):
                 article["url"],
                 article["title"],
                 article["published_at"],
-                article["summary_text"],
+                summary_text,  # Используем актуальное резюме
             )
             await asyncio.to_thread(delete_sent_publication, article["id"])
             logger.info(f"Отложенная статья '{article['title']}' успешно опубликована.")

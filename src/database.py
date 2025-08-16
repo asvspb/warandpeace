@@ -645,3 +645,18 @@ def increment_attempt_count(publication_id: int, last_error: str):
             (last_error, publication_id)
         )
         conn.commit()
+
+def update_publication_summary(publication_id: int, summary_text: str):
+    """Обновляет резюме для публикации в очереди."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE pending_publications
+            SET summary_text = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (summary_text, publication_id)
+        )
+        conn.commit()
+        logger.info(f"Резюме обновлено для публикации ID={publication_id} в очереди.")
