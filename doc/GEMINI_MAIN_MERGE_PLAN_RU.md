@@ -10,7 +10,6 @@
   - `doc/GEMINI.md`, `doc/AI_EXECUTION_PLAYBOOK_RU.md`, `doc/GPT5.md` (правила и сценарии)
   - `doc/GEMINI_ORCHESTRATION_PLAN_RU.md` (операционные процедуры)
   - `scripts/gemini_cli.py` (CLI)
-  - Сопутствующие правки: `doc/PLANNING.md`, `doc/CHANGELOG.md`
 - Зависимости (проверить в `requirements.txt`): `google-generativeai`, `click`, `python-dotenv`, `mistralai` (fallback)
 
 ### 2) Предрелизная проверка (develop)
@@ -24,7 +23,6 @@
 - [ ] Нет секретов/ключей в git
 
 ### 3) Документация релиза
-- [ ] Обновить `doc/CHANGELOG.md`:
   - Перенести секцию `Unreleased` в `## [vX.Y.Z] - YYYY-MM-DD`
   - Оставить пустую секцию `Unreleased` для следующего цикла
 - [ ] Создать/обновить `doc/RELEASELOG.md` с кратким резюме релиза (что и зачем)
@@ -36,7 +34,6 @@
   - Summary: 1–3 пункта ключевых изменений
   - Test plan: список проверок из п.2
   - Risks & Rollback (см. ниже)
-  - Ссылки: `CHANGELOG.md` (секция релиза)
 
 ### 5) Слияние и теги
 - [ ] После одобрения — выполнить merge без squash (сохранить историю)
@@ -45,12 +42,9 @@
 - [ ] (Опционально) Создать GitHub Release на основе тега, вложить выдержку из `RELEASELOG.md`
 
 ### 6) Пост‑релиз
-- [ ] Обратно слить `main` в `develop` (или rebase), чтобы синхронизировать тег и CHANGELOG
-- [ ] В `CHANGELOG.md` открыть новую секцию `Unreleased`
 - [ ] Мониторинг после релиза (логи, метрики; проверить CLI ключей на прод‑хосте)
 
 ### 7) Риски и откат
-- Неправильные формулировки/документация — правка `CHANGELOG.md`/`RELEASELOG.md` отдельным коммитом в `main`
 - Проблемы совместимости зависимостей — быстрый rollback: `git revert` коммита релиза, снять тег/поставить новый
 - Сбой Gemini (квоты/гео) — использовать Mistral (fallback), ротация ключей (`keys:rotate`)
 
