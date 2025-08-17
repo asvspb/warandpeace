@@ -199,3 +199,7 @@ temp/
 
 # Legacy specific file (kept for compatibility)
 database/articles.db
+
+config/
+scripts/os
+scripts/sys

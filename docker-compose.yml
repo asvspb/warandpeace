@@ -1,10 +1,41 @@
 version: '3.8'
 
 services:
+  wg-client:
+    image: linuxserver/wireguard:latest
+    container_name: wg-client
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+    volumes:
+      # Том /lib/modules нужен, только если модуль WireGuard не загружен на хосте
+      - /lib/modules:/lib/modules:ro
+      - ./config/wireguard:/config
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Moscow
+    restart: unless-stopped
+    ports:
+      - "${METRICS_PORT:-9090}:8000" # Пробрасываем порт метрик бота
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - |
+          v=$$(wg show wg0 latest-handshakes | awk '{print $$2}')
+          [ -n "$$v" ] && [ $$(( $$(date +%s) - $$v )) -lt 180 ]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
   telegram-bot:
     build: .
     container_name: warandpeace-bot
     command: python3 src/bot.py
+    network_mode: "service:wg-client"
     env_file:
       - .env
     environment:
@@ -14,9 +45,10 @@ services:
     volumes:
       - ./database:/app/database
       - ./backups:/var/backups/warandpeace
-    ports:
-      - "${METRICS_PORT:-8000}:8000"
     restart: unless-stopped
+    depends_on: # Примечание: в Compose v3 это не ждет healthcheck, только запускает контейнеры в нужном порядке.
+      - wg-client
+
 
   web:
     build: .

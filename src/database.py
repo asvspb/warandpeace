@@ -6,8 +6,9 @@ import os
 import shutil
 from datetime import datetime
 from typing import Optional, Dict, Any, List
+import config
 
-DATABASE_NAME = "/app/database/articles.db"
+DATABASE_NAME = config.DB_SQLITE_PATH
 logger = logging.getLogger()
 
 @contextmanager

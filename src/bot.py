@@ -78,7 +78,7 @@ logger = logging.getLogger(__name__)
 
 # Импортируем предохранитель после настройки логирования,
 # чтобы первое сообщение тоже было в новом формате
-from connectivity import circuit_breaker  # noqa: E402
+from connectivity import circuit_breaker, log_network_context  # noqa: E402
 
 # --- Утилиты с ретраями и Circuit Breaker ---
 
@@ -144,6 +144,10 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
     Основная задача: проверяет наличие новых статей, обрабатывает и публикует их.
     """
     logger.debug("[TASK] Запущена задача проверки и публикации новостей...")
+    try:
+        log_network_context("NET: check_and_post_news")
+    except Exception:
+        pass
     
     if circuit_breaker.is_open():
         logger.warning("[TASK] Circuit Breaker находится в состоянии OPEN. Пропуск основного цикла задачи.")
@@ -293,6 +297,10 @@ async def flush_pending_publications(context: ContextTypes.DEFAULT_TYPE):
     Отправляет отложенные публикации из очереди.
     """
     logger.debug("[TASK] Запущена задача отправки отложенных публикаций...")
+    try:
+        log_network_context("NET: flush_pending")
+    except Exception:
+        pass
     
     if circuit_breaker.is_open():
         logger.warning("[TASK] Circuit Breaker находится в состоянии OPEN. Пропуск отправки из очереди.")
@@ -648,6 +656,10 @@ def main():
     init_db()
 
     logger.info("Создание и запуск приложения-бота...")
+    try:
+        log_network_context("NET: startup")
+    except Exception:
+        pass
     start_metrics_server()
     # Тюнинг HTTP-клиента Telegram для устойчивости к сетевым сбоям
     request = HTTPXRequest(

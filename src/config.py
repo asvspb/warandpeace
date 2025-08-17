@@ -11,9 +11,14 @@ project_root = os.path.dirname(src_dir)
 # Явно указываем путь к .env файлу в корне проекта
 dotenv_path = os.path.join(project_root, '.env')
 
-# Загружаем переменные из найденного .env файла
-# Этот подход надежнее, чем find_dotenv(), при запусках из разных директорий.
-# load_dotenv(dotenv_path=dotenv_path, override=True) # ОТКЛЮЧЕНО: переменные должны подгружаться из docker-compose
+# Загружаем переменные из найденного .env файла.
+# Это нужно для локальных запусков скриптов. В Docker Compose переменные
+# подставляются напрямую из env_file, и override=True гарантирует,
+# что они будут иметь приоритет над локальным .env.
+load_dotenv(dotenv_path=dotenv_path, override=True)
+
+# --- Путь к БД ---
+DB_SQLITE_PATH = os.getenv("DB_SQLITE_PATH", "/app/database/articles.db")
 
 # --- Основные переменные окружения ---
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")

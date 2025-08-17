@@ -7,7 +7,9 @@
 """
 import logging
 import os
+import socket
 import time
+from typing import Optional, Dict, Any
 from threading import RLock
 
 # --- Состояния предохранителя ---
@@ -108,3 +110,124 @@ class TelegramCircuitBreaker:
 
 # Глобальный экземпляр предохранителя для всего приложения
 circuit_breaker = TelegramCircuitBreaker()
+
+
+# --- VPN/Network diagnostics ---
+
+def _get_default_route_interface() -> Optional[str]:
+    """Parse /proc/net/route to determine default route interface.
+
+    Returns interface name like 'wg0', 'eth0', or None if undetermined.
+    """
+    try:
+        with open("/proc/net/route", "r", encoding="utf-8") as f:
+            # Skip header
+            _ = next(f, None)
+            best_metric = None
+            best_iface = None
+            for line in f:
+                parts = line.strip().split("\t")
+                if len(parts) < 11:
+                    # Fallback to whitespace split
+                    parts = line.strip().split()
+                if len(parts) < 11:
+                    continue
+                iface, destination_hex, flags_hex, _, _, _, metric_str, *_rest = parts[:11]
+                # Default route has destination 00000000
+                if destination_hex != "00000000":
+                    continue
+                try:
+                    metric = int(metric_str)
+                except Exception:
+                    metric = 0
+                # Pick lowest metric
+                if best_metric is None or metric < best_metric:
+                    best_metric = metric
+                    best_iface = iface
+            return best_iface
+    except Exception:
+        return None
+
+
+def _get_public_ip(timeout_sec: float = 3.0) -> Optional[str]:
+    """Resolve public IP via external service. Returns None on failure."""
+    try:
+        # Lazy import to avoid mandatory dependency at import-time
+        import requests  # type: ignore
+        for url in (
+            "https://api.ipify.org",
+            "https://ifconfig.me/ip",
+            "https://ipv4.icanhazip.com",
+        ):
+            try:
+                resp = requests.get(url, timeout=timeout_sec)
+                if resp.ok:
+                    ip = resp.text.strip()
+                    # Basic validation
+                    try:
+                        socket.inet_aton(ip)
+                        return ip
+                    except OSError:
+                        continue
+            except Exception:
+                continue
+        return None
+    except Exception:
+        return None
+
+
+def _get_egress_local_ip(target_host: str = "1.1.1.1", target_port: int = 80) -> Optional[str]:
+    """Determine the local IPv4 address used to reach target.
+
+    Uses a UDP socket trick without sending packets.
+    """
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.settimeout(1.0)
+            try:
+                s.connect((target_host, target_port))
+                local_ip = s.getsockname()[0]
+                return local_ip
+            except Exception:
+                return None
+    except Exception:
+        return None
+
+
+def detect_network_context() -> Dict[str, Any]:
+    """Gather lightweight network/VPN context for logging/metrics."""
+    wg0_present = os.path.exists("/sys/class/net/wg0")
+    default_iface = _get_default_route_interface()
+    public_ip = _get_public_ip()
+    egress_local_ip = _get_egress_local_ip()
+    # Heuristic: if wg0 exists and either default route is wg0 or
+    # the chosen local IP for Internet egress is a typical WG client subnet (10.x/100.64-127.x)
+    vpn_active_guess = bool(
+        wg0_present
+        and (
+            default_iface == "wg0"
+            or (egress_local_ip and (egress_local_ip.startswith("10.") or egress_local_ip.startswith("100.")))
+        )
+    )
+    return {
+        "wg0_present": wg0_present,
+        "default_iface": default_iface,
+        "public_ip": public_ip,
+        "egress_local_ip": egress_local_ip,
+        "vpn_active_guess": vpn_active_guess,
+    }
+
+
+def log_network_context(prefix: str = "NET") -> None:
+    """Log a single-line summary of the current network/VPN context."""
+    ctx = detect_network_context()
+    logger.info(
+        "%s: wg0_present=%s; default_iface=%s; egress_ip_local=%s; public_ip=%s; vpn_active=%s",
+        prefix,
+        ctx.get("wg0_present"),
+        ctx.get("default_iface"),
+        ctx.get("egress_local_ip") or "n/a",
+        ctx.get("public_ip") or "n/a",
+        ctx.get("vpn_active_guess"),
+    )
+
