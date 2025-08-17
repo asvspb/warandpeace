@@ -6,7 +6,12 @@ import os
 import shutil
 from datetime import datetime
 from typing import Optional, Dict, Any, List
-import config
+
+# Support both package and module execution contexts
+try:  # When imported as part of the 'src' package (e.g., uvicorn src.webapp.server:app)
+    from . import config  # type: ignore
+except Exception:  # When running scripts like 'python src/bot.py'
+    import config  # type: ignore
 
 DATABASE_NAME = config.DB_SQLITE_PATH
 logger = logging.getLogger()

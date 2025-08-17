@@ -30,11 +30,12 @@ services:
       interval: 30s
       timeout: 3s
       retries: 3
+    # Optional watchdog sidecar (disabled by default). Uncomment 'watchdog' service below.
 
   telegram-bot:
     build: .
     container_name: warandpeace-bot
-    command: python3 src/bot.py
+    command: bash -lc "./scripts/sys/wait-for-net.sh --timeout 30 api.telegram.org api.ipify.org www.warandpeace.ru && python3 src/bot.py"
     network_mode: "service:wg-client"
     env_file:
       - .env
@@ -48,6 +49,23 @@ services:
     restart: unless-stopped
     depends_on: # Примечание: в Compose v3 это не ждет healthcheck, только запускает контейнеры в нужном порядке.
       - wg-client
+
+  watchdog:
+    image: docker:cli
+    container_name: wg-watchdog
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./scripts/wireguard/wg_watchdog.sh:/usr/local/bin/wg_watchdog.sh:ro
+      - ./logs:/logs
+    env_file:
+      - .env
+    environment:
+      - WG_CONTAINER=${WG_CONTAINER:-wg-client}
+      - WG_WATCHDOG_POLL=${WG_WATCHDOG_POLL:-30}
+      - WG_UNHEALTHY_THRESHOLD=${WG_UNHEALTHY_THRESHOLD:-7}
+      - WG_DISABLE_MINUTES=${WG_DISABLE_MINUTES:-15}
+    restart: unless-stopped
+    entrypoint: ["/bin/sh","-lc","wg_watchdog.sh"]
 
 
   web:

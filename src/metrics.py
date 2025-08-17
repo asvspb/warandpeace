@@ -1,7 +1,7 @@
 import os
 import time
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Dict
 
 try:
     from prometheus_client import Counter, Gauge, Histogram, start_http_server  # type: ignore
@@ -44,6 +44,20 @@ LAST_ARTICLE_AGE_MIN = Gauge(
     "last_article_age_minutes", "Age (in minutes) of the last article in DB"
 )
 DLQ_SIZE = Gauge("dlq_size", "Number of items in the DLQ")
+
+# --- Network/VPN metrics ---
+VPN_ACTIVE = Gauge("vpn_active", "VPN active heuristic (0/1)")
+DNS_RESOLVE_OK = Gauge(
+    "dns_resolve_ok",
+    "DNS resolution success (0/1) for important hosts",
+    labelnames=("hostname",),
+)
+# Info-like gauge to attach network labels (value is always 1)
+NETWORK_INFO = Gauge(
+    "network_info",
+    "Network context info as labels",
+    labelnames=("default_iface", "egress_ip", "public_ip"),
+)
 
 
 def start_metrics_server() -> None:

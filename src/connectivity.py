@@ -10,6 +10,17 @@ import os
 import socket
 import time
 from typing import Optional, Dict, Any
+try:
+    # When running as package
+    from .metrics import VPN_ACTIVE, DNS_RESOLVE_OK, NETWORK_INFO  # type: ignore
+except Exception:
+    try:
+        # When running as module from /app
+        from metrics import VPN_ACTIVE, DNS_RESOLVE_OK, NETWORK_INFO  # type: ignore
+    except Exception:
+        VPN_ACTIVE = None  # type: ignore
+        DNS_RESOLVE_OK = None  # type: ignore
+        NETWORK_INFO = None  # type: ignore
 from threading import RLock
 
 # --- Состояния предохранителя ---
@@ -221,6 +232,28 @@ def detect_network_context() -> Dict[str, Any]:
 def log_network_context(prefix: str = "NET") -> None:
     """Log a single-line summary of the current network/VPN context."""
     ctx = detect_network_context()
+    # Export metrics if available
+    try:
+        if VPN_ACTIVE is not None:
+            VPN_ACTIVE.set(1.0 if ctx.get("vpn_active_guess") else 0.0)
+        if NETWORK_INFO is not None:
+            NETWORK_INFO.labels(
+                default_iface=str(ctx.get("default_iface") or "n/a"),
+                egress_ip=str(ctx.get("egress_local_ip") or "n/a"),
+                public_ip=str(ctx.get("public_ip") or "n/a"),
+            ).set(1)
+        if DNS_RESOLVE_OK is not None:
+            import socket as _s
+            for host in ("api.ipify.org", "www.warandpeace.ru", "api.telegram.org"):
+                ok = 0.0
+                try:
+                    _ = _s.getaddrinfo(host, 443, proto=_s.IPPROTO_TCP)
+                    ok = 1.0
+                except Exception:
+                    ok = 0.0
+                DNS_RESOLVE_OK.labels(hostname=host).set(ok)
+    except Exception:
+        pass
     logger.info(
         "%s: wg0_present=%s; default_iface=%s; egress_ip_local=%s; public_ip=%s; vpn_active=%s",
         prefix,
