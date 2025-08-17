@@ -11,17 +11,14 @@
   - `GOOGLE_API_KEY=...` — одиночный ключ (legacy)
   - `GEMINI_MODEL=gemini-2.0-flash` — модель по умолчанию
   - (опционально) `MISTRAL_API_KEY` и `MISTRAL_MODEL_NAME=mistral-large-latest`
-- Python-зависимости уже есть в `requirements.txt`: `google-generativeai`, `click`, `python-dotenv`.
+- Python-зависимости уже есть в `requirements.txt`: `google-generativeai`, `python-dotenv`, `mistralai` (fallback при необходимости).
 
 ### 2) Инструмент CLI
-- Скрипт: `scripts/gemini_cli.py` (в этом репозитории)
-- Основные команды:
-  - `prompt` — одноразовый промпт к модели
-  - `summarize-file` — суммаризация локального файла (текст/markdown/html)
-  - `models:list` — список доступных моделей
-  - `keys:check` — диагностический прогон по всем ключам
-  - `keys:rotate` — вычисление «следующего» ключа (для ручной ротации)
-- Интерфейс предусматривает выбор модели `--model`, индекс ключа `--key-index`, режим JSON‑ответа `--json`.
+- Примечание: упоминавшийся ранее `scripts/gemini_cli.py` в текущей кодовой базе отсутствует (план/идея).
+- Фактические возможности доступны через:
+  - `scripts/manage.py` — команды для backfill/summarize и вспомогательные операции.
+  - `src/summarizer.py` — прямой вызов функций суммаризации Gemini/Mistral из Python.
+- При необходимости отдельный CLI может быть добавлен позднее; примеры команд в данном документе следует считать планом.
 
 ### 3) Практика использования
 - Базовые примеры:
@@ -40,10 +37,9 @@
   - В CLI можно добавить опцию `--fallback-mistral` в будущем (не обязательно сейчас).
 
 ### 5) Интеграция с Linux
-- Удобные алиасы в шелле (`~/.bashrc`):
+- Удобные алиасы в шелле (`~/.bashrc`) — пример для manage.py:
 ```bash
-alias gmp='python3 scripts/gemini_cli.py prompt'
-alias gms='python3 scripts/gemini_cli.py summarize-file'
+alias wnp-sumrange='docker compose run --rm telegram-bot python3 scripts/manage.py summarize-range'
 ```
 - Systemd‑таймеры (пример периодической проверки ключей):
 ```ini
@@ -55,7 +51,8 @@ Description=Gemini keys health check
 Type=oneshot
 WorkingDirectory=/app
 EnvironmentFile=/app/.env
-ExecStart=/usr/bin/python3 /app/scripts/gemini_cli.py keys:check --json
+ExecStart=/usr/bin/true
+# Примечание: CLI для Gemini в текущем репозитории отсутствует; таймер/юнит оставлен как шаблон.
 
 # /etc/systemd/system/gemini-keys-check.timer
 [Unit]
