@@ -2,7 +2,7 @@
 FROM python:3.10-slim
 
 # 2. Установка системных зависимостей (curl для healthcheck, tzdata для часовых поясов)
-RUN apt-get update && apt-get install -y curl tzdata age postgresql-client sqlite3 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y curl tzdata age postgresql-client sqlite3 cron && rm -rf /var/lib/apt/lists/*
 
 # 3. Установка рабочей директории внутри контейнера
 WORKDIR /app

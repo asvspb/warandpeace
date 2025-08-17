@@ -75,7 +75,6 @@
 - [GEMINI_MAIN_MERGE_PLAN_RU.md](GEMINI_MAIN_MERGE_PLAN_RU.md)
   - Цель: подготовить и провести релиз Gemini‑изменений в `main`.
   - Статус: план составлен.
-  - Ключевые шаги: проверки в `develop`, оформить релиз в `RELEASELOG.md`, PR в `main`, тег, пост‑релизная синхронизация.
 
 - [POSTGRES_MIGRATION_PLAN_RU.md](POSTGRES_MIGRATION_PLAN_RU.md)
   - Цель: переход на PostgreSQL c SQLAlchemy/Alembic.

@@ -6,13 +6,13 @@ services:
     container_name: warandpeace-bot
     command: python3 src/bot.py
     env_file:
-      - .env.test
+      - .env
     environment:
       - TZ=${TZ:-Europe/Moscow}
       - METRICS_ENABLED=${METRICS_ENABLED:-true}
       - METRICS_PORT=${METRICS_PORT:-8000}
     volumes:
-      - ./database_test:/app/database
+      - ./database:/app/database
       - ./backups:/var/backups/warandpeace
     ports:
       - "${METRICS_PORT:-8000}:8000"
@@ -51,10 +51,10 @@ services:
         cron -f & tail -f /var/log/cron.log
       "
     env_file:
-      - .env.test
+      - .env
     environment:
       - TZ=${TZ:-Europe/Moscow}
     volumes:
-      - ./database_test:/app/database:ro
+      - ./database:/app/database:ro
       - ./backups:/var/backups/warandpeace
     restart: unless-stopped
