@@ -37,7 +37,7 @@ from database import (
 from parser import get_articles_from_page, get_article_text
 from summarizer import summarize_with_fallback, create_digest, create_annual_digest
 from notifications import notify_admin
-from connectivity import circuit_breaker
+from connectivity import circuit_breaker, log_network_context
 
 # Настройка логирования
 log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -72,6 +72,7 @@ logger = logging.getLogger(__name__)
 TELEGRAM_CACHE_TTL_SEC = int(os.getenv("TELEGRAM_CACHE_TTL_SEC", "3600"))
 channel_info_cache = {"username": None, "timestamp": 0.0}
 
+# --- Утилиты с ретраями и Circuit Breaker ---
 class CircuitBreakerOpenError(Exception):
     pass
 
@@ -117,6 +118,11 @@ async def get_chat_with_retry(bot, **kwargs):
 # --- Основная задача ---
 async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
     logger.debug("[TASK] Запущена задача проверки и публикации новостей...")
+    try:
+        log_network_context("NET: check_and_post_news")
+    except Exception:
+        pass
+    
     if circuit_breaker.is_open():
         logger.warning("[TASK] Circuit Breaker в состоянии OPEN. Пропуск цикла.")
         return
@@ -195,6 +201,11 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
 # --- Команды и остальная логика без изменений ---
 async def flush_pending_publications(context: ContextTypes.DEFAULT_TYPE):
     logger.debug("[TASK] Запущена задача отправки отложенных публикаций...")
+    try:
+        log_network_context("NET: flush_pending")
+    except Exception:
+        pass
+    
     if circuit_breaker.is_open():
         logger.warning("[TASK] Circuit Breaker в состоянии OPEN. Пропуск отправки из очереди.")
         return
@@ -375,6 +386,11 @@ async def annual_digest_command(update: Update, context: ContextTypes.DEFAULT_TY
 
 def main():
     init_db()
+    logger.info("Создание и запуск приложения-бота...")
+    try:
+        log_network_context("NET: startup")
+    except Exception:
+        pass
     start_metrics_server()
     request = HTTPXRequest(read_timeout=60, write_timeout=60, connect_timeout=30, pool_timeout=60, http_version="1.1")
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).request(request).job_queue(JobQueue()).post_init(post_init).build()

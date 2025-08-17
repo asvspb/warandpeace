@@ -1,7 +1,7 @@
 import os
 import time
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Dict
 
 try:
     from prometheus_client import Counter, Gauge, Histogram, start_http_server, REGISTRY
@@ -88,6 +88,22 @@ TELEGRAM_SEND_SECONDS = _get_or_create_metric(
     Histogram,
     "telegram_send_seconds",
     "Latency of sending messages to Telegram",
+)
+
+# --- Network/VPN metrics ---
+VPN_ACTIVE = _get_or_create_metric(Gauge, "vpn_active", "VPN active heuristic (0/1)")
+DNS_RESOLVE_OK = _get_or_create_metric(
+    Gauge,
+    "dns_resolve_ok",
+    "DNS resolution success (0/1) for important hosts",
+    labelnames=("hostname",),
+)
+# Info-like gauge to attach network labels (value is always 1)
+NETWORK_INFO = _get_or_create_metric(
+    Gauge,
+    "network_info",
+    "Network context info as labels",
+    labelnames=("default_iface", "egress_ip", "public_ip"),
 )
 
 def start_metrics_server() -> None:

@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import os
 import sys
 from datetime import datetime, timedelta
@@ -43,10 +44,6 @@ from src.metrics import (
 )
 from src.config import APP_TZ
 from src.time_utils import to_utc
-
-# --- Загрузка переменных окружения ---
-dotenv_path = os.path.join(project_root, '.env')
-load_dotenv(dotenv_path=dotenv_path)
 
 # --- Настройка и инициализация ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -131,6 +128,14 @@ def backfill(force):
     articles_to_process = get_articles_for_backfill()
     _process_articles(articles_to_process)
     click.echo("Процесс backfill завершен.")
+
+
+@cli.command()
+def init():
+    """Инициализирует БД и необходимые директории."""
+    click.echo("Инициализация базы данных...")
+    init_db()
+    click.echo("Готово.")
 
 
 @cli.command()

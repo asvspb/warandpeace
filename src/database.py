@@ -20,9 +20,14 @@ except Exception:
         def _canonicalize_url(u: str) -> str:  # type: ignore
             return u
 
-DATABASE_NAME = "/app/database/articles.db"
+# Support both package and module execution contexts
+try:  # When imported as part of the 'src' package (e.g., uvicorn src.webapp.server:app)
+    from . import config  # type: ignore
+except Exception:  # When running scripts like 'python src/bot.py'
+    import config  # type: ignore
+
+DATABASE_NAME = config.DB_SQLITE_PATH
 logger = logging.getLogger(__name__)
-# Используем системную таймзону, которая должна быть установлена в Europe/Moscow в Docker
 APP_TZ = ZoneInfo(os.getenv("TIMEZONE", "Europe/Moscow"))
 
 @contextmanager

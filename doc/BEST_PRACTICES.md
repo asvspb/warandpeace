@@ -1,7 +1,7 @@
 ### 📘 Project Best Practices
 
 #### 1. Project Purpose
-This repository hosts a Telegram bot and data-processing pipeline that tracks new articles on the Russian geopolitical news website “warandpeace.ru”, stores raw articles in a local database, generates AI-based summaries (Google Gemini / OpenRouter LLM), and posts both instant updates and periodic digests to a Telegram channel.
+This repository hosts a Telegram bot and data-processing pipeline that tracks new articles on the Russian geopolitical news website “warandpeace.ru”, stores raw articles in a local database, generates AI-based summaries (Google Gemini / Mistral), and posts both instant updates and periodic digests to a Telegram channel.
 
 #### 2. Project Structure
 - `src/` – production source code
@@ -10,7 +10,7 @@ This repository hosts a Telegram bot and data-processing pipeline that tracks ne
   - `summarizer.py` – helpers to call external LLM providers and compose prompts.
   - `database.py` – low-level persistence helpers (SQLite today, PostgreSQL planned).
   - `config.py` – loads `.env` variables and centralises runtime configuration.
-  - `healthcheck.py` – verifies that CSS selectors still match the target site.
+  - `healthcheck.py` – planned helper to verify selectors (not present in current repo).
 - `tests/` – pytest suite covering parsing, summarisation and DB helpers.
 - `scripts/` – one-off CLI tools (DB migrations, manual re-ingest, etc.).
 - `database/` – mounted volume that stores the SQLite database file.
@@ -63,7 +63,7 @@ Key separation of concerns:
 | Library | Purpose |
 |---------|---------|
 | `python-telegram-bot` | Telegram API client & job queue |
-| `google-generativeai`, `OpenRouter` | LLM providers for summarisation |
+| `google-generativeai`, `mistralai` | LLM providers for summarisation |
 | `requests`, `beautifulsoup4` | HTTP scraping & parsing |
 | `feedparser` | (Future) RSS/Atom ingestion |
 | `pytest` | Test framework |
@@ -79,7 +79,7 @@ python -m src.bot
 ```
 Docker compose:
 ```bash
-docker-compose up -d --build
+docker compose up -d --build
 ```
 
 #### 8. Other Notes
@@ -91,7 +91,7 @@ docker-compose up -d --build
 - PostgreSQL migration plan is documented in `BEST_PRACTICES_RU.md` – keep both files consistent.
 
 #### 9. Observability & Metrics
-- Enable Prometheus metrics server via env: `METRICS_ENABLED=true`, `METRICS_PORT=8000` (default). The container exposes port 8000.
+- Enable Prometheus metrics server via env: `METRICS_ENABLED=true`, `METRICS_PORT=8000` (default). The bot exposes 8000 inside the container; by default metrics are published on the host via `wg-client` port mapping at `http://localhost:9090/metrics`.
 - Exported metrics (see `src/metrics.py`):
   - `articles_ingested_total` (Counter)
   - `articles_posted_total` (Counter)
@@ -145,7 +145,7 @@ docker-compose up -d --build
 
 Tip: backfill «с начала года по сегодня» (Docker Compose):
 ```bash
-docker-compose run --rm telegram-bot \
+docker compose run --rm telegram-bot \
   python3 scripts/manage.py backfill-range \
   --from-date "$(date +%Y)-01-01" --to-date "$(date +%F)"
 ```
