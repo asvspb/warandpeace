@@ -51,10 +51,10 @@ services:
         cron -f & tail -f /var/log/cron.log
       "
     env_file:
-      - .env.test
+      - .env
     environment:
       - TZ=${TZ:-Europe/Moscow}
     volumes:
-      - ./database_test:/app/database:ro
+      - ./database:/app/database:ro
       - ./backups:/var/backups/warandpeace
     restart: unless-stopped
