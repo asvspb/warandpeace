@@ -29,6 +29,9 @@ STATE_OPEN = "OPEN"      # Соединение разорвано, запрос
 STATE_HALF_OPEN = "HALF_OPEN" # Пробный период, разрешен один запрос для проверки.
 
 logger = logging.getLogger()
+_net_state_lock = RLock()
+_vpn_last_state: Optional[bool] = None
+_vpn_last_ctx: Optional[Dict[str, Optional[str]]] = None
 
 class TelegramCircuitBreaker:
     """
@@ -230,7 +233,11 @@ def detect_network_context() -> Dict[str, Any]:
 
 
 def log_network_context(prefix: str = "NET") -> None:
-    """Log a single-line summary of the current network/VPN context."""
+    """Log a concise VPN/network status.
+
+    - Detailed one-line context is logged at DEBUG to avoid INFO noise.
+    - INFO is emitted only on VPN state transitions (connect/disconnect).
+    """
     ctx = detect_network_context()
     # Export metrics if available
     try:
@@ -254,7 +261,57 @@ def log_network_context(prefix: str = "NET") -> None:
                 DNS_RESOLVE_OK.labels(hostname=host).set(ok)
     except Exception:
         pass
-    logger.info(
+    # Emit INFO only on VPN state transitions
+    try:
+        vpn_active_now = bool(ctx.get("vpn_active_guess"))
+        current_ctx = {
+            "default_iface": ctx.get("default_iface"),
+            "egress_local_ip": ctx.get("egress_local_ip"),
+            "public_ip": ctx.get("public_ip"),
+        }
+        with _net_state_lock:
+            global _vpn_last_state, _vpn_last_ctx
+            previous = _vpn_last_state
+            # Connect/Disconnect events
+            if previous is not None and vpn_active_now != previous:
+                if vpn_active_now:
+                    logger.info(
+                        "VPN подключен (iface=%s, egress=%s, public=%s)",
+                        current_ctx.get("default_iface"),
+                        current_ctx.get("egress_local_ip") or "n/a",
+                        current_ctx.get("public_ip") or "n/a",
+                    )
+                else:
+                    logger.info(
+                        "VPN отключен (default_iface=%s, egress=%s, public=%s)",
+                        current_ctx.get("default_iface"),
+                        current_ctx.get("egress_local_ip") or "n/a",
+                        current_ctx.get("public_ip") or "n/a",
+                    )
+            # Restart/route-change event while remaining connected
+            elif previous is True and vpn_active_now is True and _vpn_last_ctx is not None:
+                if (
+                    _vpn_last_ctx.get("default_iface") != current_ctx.get("default_iface")
+                    or _vpn_last_ctx.get("egress_local_ip") != current_ctx.get("egress_local_ip")
+                    or _vpn_last_ctx.get("public_ip") != current_ctx.get("public_ip")
+                ):
+                    logger.info(
+                        "VPN перезапущен/изменена маршрутизация (iface: %s→%s, egress: %s→%s, public: %s→%s)",
+                        _vpn_last_ctx.get("default_iface"),
+                        current_ctx.get("default_iface"),
+                        _vpn_last_ctx.get("egress_local_ip") or "n/a",
+                        current_ctx.get("egress_local_ip") or "n/a",
+                        _vpn_last_ctx.get("public_ip") or "n/a",
+                        current_ctx.get("public_ip") or "n/a",
+                    )
+            _vpn_last_state = vpn_active_now
+            _vpn_last_ctx = current_ctx
+    except Exception:
+        # Do not fail the caller because of logging
+        pass
+
+    # Always keep a detailed line at DEBUG for diagnostics
+    logger.debug(
         "%s: wg0_present=%s; default_iface=%s; egress_ip_local=%s; public_ip=%s; vpn_active=%s",
         prefix,
         ctx.get("wg0_present"),
