@@ -137,6 +137,27 @@ def create_annual_digest_prompt(digest_contents: list[str]) -> str:
 {digests_text}
 """
 
+# --- Mistral generic generation helper ---
+def _mistral_generate_from_prompt(prompt: str) -> Optional[str]:
+    try:
+        from mistralai.client import MistralClient
+    except Exception:
+        logger.error("SDK Mistral недоступен.")
+        return None
+    if not MISTRAL_API_KEY:
+        logger.error("API-ключ для Mistral не найден.")
+        return None
+    try:
+        client = MistralClient(api_key=MISTRAL_API_KEY)
+        messages = [{"role": "user", "content": prompt}]
+        chat_response = client.chat(model=MISTRAL_MODEL_NAME, messages=messages)
+        content = chat_response.choices[0].message.content
+        logger.info("Ответ успешно получен от Mistral.")
+        return content.strip()
+    except Exception as e:
+        logger.error(f"Ошибка при обращении к Mistral: {e}")
+        return None
+
 # --- Public API ---
 def summarize_text_local(full_text: str) -> str | None:
     cleaned_text = full_text.strip()
@@ -180,13 +201,35 @@ def create_digest(summaries: list[str], period_name: str) -> str | None:
     if not summaries:
         logger.warning("Передан пустой список сводок для создания дайджеста.")
         return None
-    
+
     prompt = create_digest_prompt(summaries, period_name)
-    try:
-        return _make_gemini_request(prompt)
-    except RetryError as e:
-        logger.error(f"Не удалось создать дайджест: {e}")
+
+    # Provider selection honoring LLM_PRIMARY strictly
+    truthy = {"1", "true", "yes", "on"}
+    gemini_enabled = os.getenv("GEMINI_ENABLED", "true" if GEMINI_ENABLED else "false").strip().lower() in truthy
+    mistral_enabled = os.getenv("MISTRAL_ENABLED", "true" if MISTRAL_ENABLED else "false").strip().lower() in truthy
+    llm_primary = os.getenv("LLM_PRIMARY", (LLM_PRIMARY or "gemini")).strip().lower()
+
+    if llm_primary == "mistral":
+        if mistral_enabled and MISTRAL_API_KEY:
+            return _mistral_generate_from_prompt(prompt)
+        if not mistral_enabled or not MISTRAL_API_KEY:
+            if gemini_enabled and GOOGLE_API_KEYS:
+                try:
+                    return _make_gemini_request(prompt)
+                except RetryError as e:
+                    logger.error(f"Не удалось создать дайджест (Gemini): {e}")
         return None
+
+    if gemini_enabled and GOOGLE_API_KEYS:
+        try:
+            return _make_gemini_request(prompt)
+        except RetryError as e:
+            logger.error(f"Не удалось создать дайджест: {e}")
+
+    if mistral_enabled and MISTRAL_API_KEY:
+        return _mistral_generate_from_prompt(prompt)
+    return None
 
 def create_annual_digest(digest_contents: list[str]) -> str | None:
     """
@@ -197,11 +240,33 @@ def create_annual_digest(digest_contents: list[str]) -> str | None:
         return None
 
     prompt = create_annual_digest_prompt(digest_contents)
-    try:
-        return _make_gemini_request(prompt)
-    except RetryError as e:
-        logger.error(f"Не удалось создать годовой дайджест: {e}")
+
+    # Provider selection honoring LLM_PRIMARY strictly
+    truthy = {"1", "true", "yes", "on"}
+    gemini_enabled = os.getenv("GEMINI_ENABLED", "true" if GEMINI_ENABLED else "false").strip().lower() in truthy
+    mistral_enabled = os.getenv("MISTRAL_ENABLED", "true" if MISTRAL_ENABLED else "false").strip().lower() in truthy
+    llm_primary = os.getenv("LLM_PRIMARY", (LLM_PRIMARY or "gemini")).strip().lower()
+
+    if llm_primary == "mistral":
+        if mistral_enabled and MISTRAL_API_KEY:
+            return _mistral_generate_from_prompt(prompt)
+        if not mistral_enabled or not MISTRAL_API_KEY:
+            if gemini_enabled and GOOGLE_API_KEYS:
+                try:
+                    return _make_gemini_request(prompt)
+                except RetryError as e:
+                    logger.error(f"Не удалось создать годовой дайджест (Gemini): {e}")
         return None
+
+    if gemini_enabled and GOOGLE_API_KEYS:
+        try:
+            return _make_gemini_request(prompt)
+        except RetryError as e:
+            logger.error(f"Не удалось создать годовой дайджест: {e}")
+
+    if mistral_enabled and MISTRAL_API_KEY:
+        return _mistral_generate_from_prompt(prompt)
+    return None
 
 def summarize_with_mistral(text_to_summarize: str) -> Optional[str]:
     try:
