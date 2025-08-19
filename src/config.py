@@ -1,6 +1,10 @@
 import os
 import sys
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except Exception:  # optional dependency in local runs/tests
+    def load_dotenv(*args, **kwargs):  # type: ignore
+        return False
 from zoneinfo import ZoneInfo
 
 # Определяем абсолютный путь к директории, где находится этот файл (src)
@@ -25,7 +29,13 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID")
 TELEGRAM_ADMIN_ID = os.getenv("TELEGRAM_ADMIN_ID")
 
-# --- Ключи API ---
+# --- Ключи API и провайдеры ---
+# Управление провайдерами LLM
+LLM_PRIMARY = os.getenv("LLM_PRIMARY", "gemini").strip().lower()
+GEMINI_ENABLED = os.getenv("GEMINI_ENABLED", "true").strip().lower() in {"1", "true", "yes"}
+MISTRAL_ENABLED = os.getenv("MISTRAL_ENABLED", "true").strip().lower() in {"1", "true", "yes"}
+
+# Ключи API
 # Динамически собираем все ключи Google API из переменных окружения
 GOOGLE_API_KEYS = []
 
