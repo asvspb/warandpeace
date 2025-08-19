@@ -1,6 +1,10 @@
 import os
 import sys
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except Exception:  # optional dependency in local runs/tests
+    def load_dotenv(*args, **kwargs):  # type: ignore
+        return False
 from zoneinfo import ZoneInfo
 
 # Определяем абсолютный путь к директории, где находится этот файл (src)
