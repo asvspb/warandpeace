@@ -108,24 +108,47 @@ def create_summarization_prompt(full_text: str) -> str:
         "---"
     )
 
+def _format_summaries_bullets(summaries: list[str]) -> str:
+    return "\n".join(f"- {s}" for s in summaries)
+
+
 def create_digest_prompt(summaries: list[str], period_name: str) -> str:
-    """
-    Создает промпт для генерации аналитического дайджеста на основе сводок.
-    """
-    summaries_text = "\n- ".join(summaries)
-    return f"""Ты — профессиональный новостной аналитик. Ниже представлен список кратких сводок новостей за последние {period_name}.
-Твоя задача — написать целостную аналитическую сводку на русском языке (200-250 слов).
+    """Создаёт промпт для дайджеста, подхватывая внешний шаблон по периоду.
 
-Требования:
-1.  Не перечисляй просто факты из сводок.
-2.  Определи 2-4 ключевых тренда или тематических блока на основе этих новостей.
-3.  Напиши связный текст, который описывает эти тенденции, объединяя информацию из разных новостей.
-4.  Начни с общего заголовка, например: "Главные события за {period_name}".
-5.  Структурируй текст, используя абзацы для каждого тренда.
+    Порядок поиска файла:
+    - Для периодов, содержащих ключевые слова, ищем специальные шаблоны:
+      daily → digest_daily_ru.txt; week/недел → digest_weekly_ru.txt; month/месяц → digest_monthly_ru.txt
+    - Иначе используем общий встроенный шаблон.
+    """
+    lower = period_name.lower()
+    filename = None
+    if any(k in lower for k in ["вчера", "day", "daily"]):
+        filename = "digest_daily_ru.txt"
+    elif any(k in lower for k in ["недел", "week", "weekly"]):
+        filename = "digest_weekly_ru.txt"
+    elif any(k in lower for k in ["месяц", "month", "monthly"]):
+        filename = "digest_monthly_ru.txt"
 
-Список сводок:
-- {summaries_text}
-"""
+    template = _load_prompt_template(filename) if filename else None
+    bullets = _format_summaries_bullets(summaries)
+    if template:
+        return (
+            template
+            .replace("{PERIOD_NAME}", period_name)
+            .replace("{SUMMARIES_BULLETS}", bullets)
+        )
+
+    # Фолбэк на встроённый общий шаблон
+    return (
+        f"Ты — профессиональный новостной аналитик. Ниже представлен список кратких сводок новостей за последние {period_name}.\n"
+        "Твоя задача — написать целостную аналитическую сводку на русском языке (200–250 слов).\n\n"
+        "Требования:\n"
+        "1. Не перечисляй просто факты из сводок.\n"
+        "2. Определи 2–4 ключевых тренда или тематических блока.\n"
+        "3. Напиши связный текст без markdown и списков.\n\n"
+        "Список сводок:\n"
+        f"{bullets}\n"
+    )
 
 def create_annual_digest_prompt(digest_contents: list[str]) -> str:
     """
