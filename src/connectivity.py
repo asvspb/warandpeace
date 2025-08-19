@@ -229,10 +229,19 @@ def detect_network_context() -> Dict[str, Any]:
     }
 
 
+_last_net_log_at: dict[str, float] = {}
+
+
 def log_network_context(prefix: str = "NET") -> None:
-    """Log a single-line summary of the current network/VPN context."""
+    """Log a single-line summary of the current network/VPN context.
+
+    Требования заказчика:
+    - Писать только статус "ВПН активен/неактивен" без технических деталей
+    - Логировать не чаще, чем раз в NET_LOG_THROTTLE_SEC (по умолчанию 900с = 15 минут) на каждый уникальный prefix
+    """
     ctx = detect_network_context()
-    # Export metrics if available
+
+    # Обновляем метрики всегда (без троттлинга), чтобы графики были живыми
     try:
         if VPN_ACTIVE is not None:
             VPN_ACTIVE.set(1.0 if ctx.get("vpn_active_guess") else 0.0)
@@ -254,13 +263,15 @@ def log_network_context(prefix: str = "NET") -> None:
                 DNS_RESOLVE_OK.labels(hostname=host).set(ok)
     except Exception:
         pass
-    logger.info(
-        "%s: wg0_present=%s; default_iface=%s; egress_ip_local=%s; public_ip=%s; vpn_active=%s",
-        prefix,
-        ctx.get("wg0_present"),
-        ctx.get("default_iface"),
-        ctx.get("egress_local_ip") or "n/a",
-        ctx.get("public_ip") or "n/a",
-        ctx.get("vpn_active_guess"),
-    )
+
+    # Троттлинг логирования статуса
+    throttle_sec = int(os.getenv("NET_LOG_THROTTLE_SEC", "900"))  # 15 минут по умолчанию
+    now = time.time()
+    last = _last_net_log_at.get(prefix, 0)
+    if now - last < throttle_sec:
+        return
+    _last_net_log_at[prefix] = now
+
+    status_text = "ВПН активен" if ctx.get("vpn_active_guess") else "ВПН неактивен"
+    logger.info("%s: %s", prefix, status_text)
 
