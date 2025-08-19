@@ -16,7 +16,6 @@ if project_root not in sys.path:
 import logging  # noqa: E402
 import asyncio  # noqa: E402
 import click  # noqa: E402
-from dotenv import load_dotenv  # noqa: E402
 from src.database import (  # noqa: E402
     init_db,
     get_articles_for_backfill,
