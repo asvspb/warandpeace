@@ -1,6 +1,7 @@
 import google.generativeai as genai
 import os
 import logging
+from typing import Optional
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, RetryError
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -136,36 +137,41 @@ def create_annual_digest_prompt(digest_contents: list[str]) -> str:
 {digests_text}
 """
 
-<<<<<<< HEAD
-# --- 3. Публичные функции ---
-=======
 # --- Public API ---
->>>>>>> origin/main
 def summarize_text_local(full_text: str) -> str | None:
     cleaned_text = full_text.strip()
     if not cleaned_text:
         logger.error("Ошибка: Передан пустой текст для суммирования.")
         return None
     prompt = create_summarization_prompt(cleaned_text)
-    if LLM_PRIMARY == "mistral" and MISTRAL_ENABLED and MISTRAL_API_KEY:
+
+    # Read runtime switches from environment with config defaults
+    truthy = {"1", "true", "yes", "on"}
+    gemini_enabled = os.getenv("GEMINI_ENABLED", "true" if GEMINI_ENABLED else "false").lower() in truthy
+    mistral_enabled = os.getenv("MISTRAL_ENABLED", "true" if MISTRAL_ENABLED else "false").lower() in truthy
+    llm_primary = os.getenv("LLM_PRIMARY", (LLM_PRIMARY or "gemini")).lower()
+
+    if llm_primary == "mistral" and mistral_enabled and MISTRAL_API_KEY:
         result = summarize_with_mistral(cleaned_text)
         if result:
             return result
-        if GEMINI_ENABLED and GOOGLE_API_KEYS:
+        if gemini_enabled and GOOGLE_API_KEYS:
             try:
                 return _make_gemini_request(prompt)
             except RetryError as e:
                 logger.error(f"Не удалось получить резюме от Gemini: {e}")
                 return None
         return None
-    if GEMINI_ENABLED and GOOGLE_API_KEYS:
+
+    if gemini_enabled and GOOGLE_API_KEYS:
         try:
             result = _make_gemini_request(prompt)
             if result:
                 return result
         except RetryError as e:
             logger.error(f"Не удалось получить резюме от Gemini: {e}")
-    if MISTRAL_ENABLED and MISTRAL_API_KEY:
+
+    if mistral_enabled and MISTRAL_API_KEY:
         return summarize_with_mistral(cleaned_text)
     return None
 
@@ -216,3 +222,11 @@ def summarize_with_mistral(text_to_summarize: str) -> Optional[str]:
     except Exception as e:
         logger.error(f"Ошибка при получении резюме от Mistrал: {e}")
         return None
+
+def summarize_with_fallback(text: str) -> Optional[str]:
+    """Публичная обертка, ожидаемая CLI и тестами.
+
+    Делегирует на summarize_text_local, которая учитывает LLM_PRIMARY,
+    GEMINI_ENABLED и MISTRAL_ENABLED и выполняет фолбэк.
+    """
+    return summarize_text_local(text)
