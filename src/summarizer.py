@@ -151,16 +151,17 @@ def summarize_text_local(full_text: str) -> str | None:
     mistral_enabled = os.getenv("MISTRAL_ENABLED", "true" if MISTRAL_ENABLED else "false").lower() in truthy
     llm_primary = os.getenv("LLM_PRIMARY", (LLM_PRIMARY or "gemini")).lower()
 
-    if llm_primary == "mistral" and mistral_enabled and MISTRAL_API_KEY:
-        result = summarize_with_mistral(cleaned_text)
-        if result:
-            return result
-        if gemini_enabled and GOOGLE_API_KEYS:
-            try:
-                return _make_gemini_request(prompt)
-            except RetryError as e:
-                logger.error(f"Не удалось получить резюме от Gemini: {e}")
-                return None
+    # If primary is mistral, honor it strictly: no fallback to Gemini unless Mistral is disabled
+    if llm_primary == "mistral":
+        if mistral_enabled and MISTRAL_API_KEY:
+            return summarize_with_mistral(cleaned_text)
+        # If Mistral is not available, allow Gemini as a backup
+        if not mistral_enabled or not MISTRAL_API_KEY:
+            if gemini_enabled and GOOGLE_API_KEYS:
+                try:
+                    return _make_gemini_request(prompt)
+                except RetryError as e:
+                    logger.error(f"Не удалось получить резюме от Gemini: {e}")
         return None
 
     if gemini_enabled and GOOGLE_API_KEYS:
