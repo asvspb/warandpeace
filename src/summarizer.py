@@ -72,16 +72,41 @@ def _make_gemini_request(prompt: str) -> str | None:
         raise
 
 # --- 2. Создание промптов ---
-def create_summarization_prompt(full_text: str) -> str:
-    """
-    Создает четкий промпт для задачи суммаризации.
-    """
-    return f"""Сделай краткое и содержательное резюме (примерно 150 слов) следующей новостной статьи на русском языке. Сохрани только ключевые факты и выводы. Не добавляй от себя никакой информации и не используй markdown-форматирование.
+def _load_prompt_template(filename: str) -> str | None:
+    """Пытается загрузить шаблон промпта из файла относительно корня репо.
 
-Текст статьи:
----
-{full_text}
----"""
+    Ищет путь в переменной окружения PROMPTS_DIR (по умолчанию 'prompts').
+    Возвращает содержимое файла или None при ошибке.
+    """
+    try:
+        prompts_dir = os.getenv("PROMPTS_DIR", "prompts")
+        # Ищем относительно текущего рабочего каталога, затем относительно файла
+        candidate_paths = [
+            os.path.join(os.getcwd(), prompts_dir, filename),
+            os.path.join(os.path.dirname(__file__), os.pardir, prompts_dir, filename),
+        ]
+        for path in candidate_paths:
+            if os.path.exists(path):
+                with open(path, "r", encoding="utf-8") as f:
+                    return f.read()
+    except Exception:
+        return None
+    return None
+
+
+def create_summarization_prompt(full_text: str) -> str:
+    """Создает промпт для суммаризации из внешнего шаблона, если он есть."""
+    template = _load_prompt_template("summarization_ru.txt")
+    if template:
+        return template.replace("{{FULL_TEXT}}", full_text)
+    # Фолбэк на встроённый шаблон
+    return (
+        "Сделай краткое и содержательное резюме (примерно 150 слов) следующей новостной статьи на русском языке. "
+        "Сохрани только ключевые факты и выводы. Не добавляй от себя никакой информации и не используй markdown-форматирование.\n\n"
+        "Текст статьи:\n---\n"
+        f"{full_text}\n"
+        "---"
+    )
 
 def create_digest_prompt(summaries: list[str], period_name: str) -> str:
     """
