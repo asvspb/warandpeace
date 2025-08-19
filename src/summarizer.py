@@ -8,7 +8,15 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # Импорт ключей из обновленного конфига
-from config import GOOGLE_API_KEYS, GEMINI_MODEL_NAME, MISTRAL_API_KEY, MISTRAL_MODEL_NAME
+from config import (
+    GOOGLE_API_KEYS,
+    GEMINI_MODEL_NAME,
+    MISTRAL_API_KEY,
+    MISTRAL_MODEL_NAME,
+    LLM_PRIMARY,
+    GEMINI_ENABLED,
+    MISTRAL_ENABLED,
+)
 
 # Глобальный индекс для перебора ключей
 current_gemini_key_index = 0
@@ -171,8 +179,11 @@ def create_annual_digest_prompt(digest_contents: list[str]) -> str:
 
 # --- 3. Публичные функции ---
 def summarize_text_local(full_text: str) -> str | None:
-    """
-    Суммирует текст, используя Gemini API с перебором ключей.
+    """Суммирует текст, выбирая провайдера по настройке LLM_PRIMARY.
+
+    Логика:
+    - Если LLM_PRIMARY = 'mistral' и провайдер доступен — используем Mistral.
+    - Иначе используем Gemini (при наличии ключей), затем фолбэк на Mistral.
     """
     cleaned_text = full_text.strip()
     if not cleaned_text:
@@ -180,11 +191,31 @@ def summarize_text_local(full_text: str) -> str | None:
         return None
 
     prompt = create_summarization_prompt(cleaned_text)
-    try:
-        return _make_gemini_request(prompt)
-    except RetryError as e:
-        logger.error(f"Не удалось получить резюме после исчерпания всех ключей: {e}")
+    # 1) Явный приоритет Mistral
+    if LLM_PRIMARY == "mistral" and MISTRAL_ENABLED and MISTRAL_API_KEY:
+        result = summarize_with_mistral(cleaned_text)
+        if result:
+            return result
+        # Если не удалось, пробуем Gemini
+        if GEMINI_ENABLED and GOOGLE_API_KEYS:
+            try:
+                return _make_gemini_request(prompt)
+            except RetryError as e:
+                logger.error(f"Не удалось получить резюме от Gemini: {e}")
+                return None
         return None
+
+    # 2) По умолчанию — Gemini с фолбэком на Mistral
+    if GEMINI_ENABLED and GOOGLE_API_KEYS:
+        try:
+            result = _make_gemini_request(prompt)
+            if result:
+                return result
+        except RetryError as e:
+            logger.error(f"Не удалось получить резюме от Gemini: {e}")
+    if MISTRAL_ENABLED and MISTRAL_API_KEY:
+        return summarize_with_mistral(cleaned_text)
+    return None
 
 def create_digest(summaries: list[str], period_name: str) -> str | None:
     """

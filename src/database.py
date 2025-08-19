@@ -600,6 +600,22 @@ def list_recent_articles(days: int = 7, limit: int = 200) -> List[Dict[str, Any]
         return [dict(row) for row in cursor.fetchall()]
 
 
+def get_last_posted_article() -> Optional[Dict[str, Any]]:
+    """Возвращает самую последнюю опубликованную статью (по published_at)."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, url, title, published_at, content, summary_text
+            FROM articles
+            ORDER BY published_at DESC
+            LIMIT 1
+            """
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
 # --- Функции для очереди публикаций ---
 
 def enqueue_publication(url: str, title: str, published_at: str, summary_text: str):

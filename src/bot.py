@@ -29,6 +29,8 @@ from database import (
     get_digests_for_period,
     add_digest,
     get_stats,
+    get_last_posted_article,
+    set_article_summary,
     enqueue_publication,
     dequeue_batch,
     delete_sent_publication,
@@ -415,11 +417,12 @@ async def post_init(application: Application):
 
     if TELEGRAM_ADMIN_ID:
         admin_commands = user_commands + [
+            BotCommand("reissue", "Перевыпуск новости"),
             BotCommand("daily_digest", "Дайджест за вчерашний день"),
             BotCommand("weekly_digest", "Дайджест за прошлую неделю"),
-            BotCommand("monthly_digest", "Дайджест за прошлый месяц"),
-            BotCommand("annual_digest", "Итоговая годовая сводка"),
-            BotCommand("healthcheck", "Проверить доступность сайта"),
+            # BotCommand("monthly_digest", "Дайджест за прошлый месяц"),
+            # BotCommand("annual_digest", "Итоговая годовая сводка"),
+            # BotCommand("healthcheck", "Проверить доступность сайта"),
         ]
         try:
             await application.bot.set_my_commands(
@@ -506,6 +509,54 @@ async def healthcheck(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # --- Digest Commands ---
+
+async def reissue_last_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Перевыпускает последнюю опубликованную новость: пересуммаризация и повторная отправка."""
+    user_id = update.effective_user.id
+    await send_message_with_retry(bot=context.bot, chat_id=user_id, text="Перевыпускаю последнюю новость...")
+
+    try:
+        last = await asyncio.to_thread(get_last_posted_article)
+        if not last or not last.get("url"):
+            await send_message_with_retry(bot=context.bot, chat_id=user_id, text="Нет опубликованных статей для перевыпуска.")
+            return
+
+        # Получаем полный текст снова (вдруг статья изменилась)
+        full_text = await asyncio.to_thread(get_article_text, last["url"])
+        if not full_text:
+            await send_message_with_retry(bot=context.bot, chat_id=user_id, text="Не удалось получить текст статьи для пересуммаризации.")
+            return
+
+        # Генерация резюме с фолбэком на Mistral
+        summary = await asyncio.to_thread(summarize_text_local, full_text)
+        if not summary:
+            summary = await asyncio.to_thread(summarize_with_mistral, full_text)
+        if not summary:
+            await send_message_with_retry(bot=context.bot, chat_id=user_id, text="Не удалось сгенерировать новое резюме.")
+            return
+
+        # Получим username канала (для хвостовой подписи) с ретраями
+        try:
+            chat = await get_chat_with_retry(bot=context.bot, chat_id=TELEGRAM_CHANNEL_ID)
+            channel_username = f"@{chat.username}"
+        except Exception:
+            channel_username = f"@{TELEGRAM_CHANNEL_ID}"
+
+        message = f"<b>{last['title']}</b>\n\n{summary} {channel_username}"
+        await send_message_with_retry(
+            bot=context.bot,
+            chat_id=TELEGRAM_CHANNEL_ID,
+            text=message,
+            parse_mode=ParseMode.HTML,
+        )
+
+        # Обновляем резюме в БД
+        await asyncio.to_thread(set_article_summary, int(last["id"]), summary)
+
+        await send_message_with_retry(bot=context.bot, chat_id=user_id, text="Готово: новость перевыпущена.")
+    except Exception as e:
+        logger.error(f"Ошибка при перевыпуске новости: {e}", exc_info=True)
+        await send_message_with_retry(bot=context.bot, chat_id=user_id, text=f"Ошибка перевыпуска: {e}")
 
 async def daily_digest_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Создает и отправляет дайджест за предыдущий календарный день."""
@@ -737,6 +788,7 @@ def main():
     if TELEGRAM_ADMIN_ID:
         admin_filter = filters.User(user_id=int(TELEGRAM_ADMIN_ID))
         application.add_handler(CommandHandler("healthcheck", healthcheck, filters=admin_filter))
+        application.add_handler(CommandHandler("reissue", reissue_last_command, filters=admin_filter))
         application.add_handler(CommandHandler("daily_digest", daily_digest_command, filters=admin_filter))
         application.add_handler(CommandHandler("weekly_digest", weekly_digest_command, filters=admin_filter))
         application.add_handler(CommandHandler("monthly_digest", monthly_digest_command, filters=admin_filter))
