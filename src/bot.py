@@ -61,6 +61,24 @@ for _h in list(_root.handlers):
     except Exception:
         pass
 
+# Селективно подавляем шумные ошибки DNS от петли polling PTB
+class _SuppressUpdaterDnsErrors(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:  # pragma: no cover (зависит от окружения)
+        try:
+            if record.name.startswith("telegram.ext"):
+                msg = record.getMessage()
+                if (
+                    "Error while getting Updates" in msg
+                    and "Temporary failure in name resolution" in msg
+                ):
+                    return False
+        except Exception:
+            # В сомнительных случаях не фильтруем
+            return True
+        return True
+
+logging.getLogger("telegram.ext._updater").addFilter(_SuppressUpdaterDnsErrors())
+
 verbose_lib_logs = os.getenv("ENABLE_VERBOSE_LIB_LOGS", "false").lower() in {"1", "true", "yes"}
 if not verbose_lib_logs:
     for noisy in [
@@ -681,6 +699,10 @@ def main():
     # Глобальный обработчик ошибок PTB
     async def on_error(update: Update, context: ContextTypes.DEFAULT_TYPE):
         err = context.error
+        # Игнорируем временные DNS‑сбои при polling — они самовосстанавливаются
+        if isinstance(err, NetworkError) and "Temporary failure in name resolution" in str(err):
+            logger.warning("Polling: временная ошибка DNS, продолжаю без уведомлений")
+            return
         if err is not None:
             # Логируем стек конкретного исключения, не "NoneType: None"
             logger.error(
@@ -720,7 +742,14 @@ def main():
         application.add_handler(CommandHandler("monthly_digest", monthly_digest_command, filters=admin_filter))
         application.add_handler(CommandHandler("annual_digest", annual_digest_command, filters=admin_filter))
 
-    application.run_polling(drop_pending_updates=True)
+    # Более агрессивные таймауты и короткий интервал опроса, чтобы переживать временные сбои DNS
+    application.run_polling(
+        drop_pending_updates=True,
+        close_loop=False,
+        poll_interval=float(os.getenv("TG_POLL_INTERVAL", "1.0")),
+        allowed_updates=None,
+        timeout=int(os.getenv("TG_LONG_POLL_TIMEOUT", "10")),
+    )
 
 if __name__ == "__main__":
     main()
