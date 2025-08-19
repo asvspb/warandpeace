@@ -147,9 +147,9 @@ def summarize_text_local(full_text: str) -> str | None:
 
     # Read runtime switches from environment with config defaults
     truthy = {"1", "true", "yes", "on"}
-    gemini_enabled = os.getenv("GEMINI_ENABLED", "true" if GEMINI_ENABLED else "false").lower() in truthy
-    mistral_enabled = os.getenv("MISTRAL_ENABLED", "true" if MISTRAL_ENABLED else "false").lower() in truthy
-    llm_primary = os.getenv("LLM_PRIMARY", (LLM_PRIMARY or "gemini")).lower()
+    gemini_enabled = os.getenv("GEMINI_ENABLED", "true" if GEMINI_ENABLED else "false").strip().lower() in truthy
+    mistral_enabled = os.getenv("MISTRAL_ENABLED", "true" if MISTRAL_ENABLED else "false").strip().lower() in truthy
+    llm_primary = os.getenv("LLM_PRIMARY", (LLM_PRIMARY or "gemini")).strip().lower()
 
     # If primary is mistral, honor it strictly: no fallback to Gemini unless Mistral is disabled
     if llm_primary == "mistral":
