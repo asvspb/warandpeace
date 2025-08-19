@@ -37,7 +37,7 @@ from database import (
     increment_attempt_count,
 )
 from parser import get_articles_from_page, get_article_text
-from summarizer import summarize_text_local, create_digest, create_annual_digest, summarize_with_mistral
+from summarizer import summarize_text_local, summarize_with_mistral, create_digest, create_annual_digest
 from notifications import notify_admin
 
 # Настройка логирования (тихий режим для сторонних библиотек и управляемый уровень для приложения)
@@ -232,10 +232,6 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
                     continue
 
                 summary = await asyncio.to_thread(summarize_text_local, full_text)
-                if not summary:
-                    logger.warning(f"Резюме от Gemini не получено, пробую Mistral: {article_data['link']}")
-                    summary = await asyncio.to_thread(summarize_with_mistral, full_text)
-
                 if not summary:
                     logger.error(f"Не удалось сгенерировать резюме: {article_data['link']}")
                     continue

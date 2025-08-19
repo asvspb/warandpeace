@@ -263,6 +263,7 @@ def log_network_context(prefix: str = "NET") -> None:
                 DNS_RESOLVE_OK.labels(hostname=host).set(ok)
     except Exception:
         pass
+    # NOTE: ранее здесь был подробный DEBUG и события переходов VPN; сейчас — минималистичный вывод по требованию заказчика
 
     # Троттлинг логирования статуса
     throttle_sec = int(os.getenv("NET_LOG_THROTTLE_SEC", "900"))  # 15 минут по умолчанию
@@ -274,4 +275,5 @@ def log_network_context(prefix: str = "NET") -> None:
 
     status_text = "ВПН активен" if ctx.get("vpn_active_guess") else "ВПН неактивен"
     logger.info("%s: %s", prefix, status_text)
+
 

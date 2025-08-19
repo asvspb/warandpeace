@@ -598,8 +598,7 @@ def list_recent_articles(days: int = 7, limit: int = 200) -> List[Dict[str, Any]
             (days, limit),
         )
         return [dict(row) for row in cursor.fetchall()]
-
-
+ 
 def get_last_posted_article() -> Optional[Dict[str, Any]]:
     """Возвращает самую последнюю опубликованную статью (по published_at)."""
     with get_db_connection() as conn:
@@ -617,7 +616,6 @@ def get_last_posted_article() -> Optional[Dict[str, Any]]:
 
 
 # --- Функции для очереди публикаций ---
-
 def enqueue_publication(url: str, title: str, published_at: str, summary_text: str):
     """Добавляет статью в очередь на публикацию."""
     with get_db_connection() as conn:

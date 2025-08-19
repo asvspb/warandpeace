@@ -3,11 +3,8 @@ import os
 import logging
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, RetryError
 
-# Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-
-# Импорт ключей из обновленного конфига
 from config import (
     GOOGLE_API_KEYS,
     GEMINI_MODEL_NAME,
@@ -18,12 +15,10 @@ from config import (
     MISTRAL_ENABLED,
 )
 
-# Глобальный индекс для перебора ключей
+# --- Gemini helpers ---
 current_gemini_key_index = 0
 
-# --- 1. Конфигурация и работа с Gemini ---
 def configure_gemini_model(api_key: str):
-    """Конфигурирует модель Gemini с заданным ключом."""
     try:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel(GEMINI_MODEL_NAME)
@@ -37,10 +32,6 @@ def configure_gemini_model(api_key: str):
        wait=wait_exponential(multiplier=1, min=4, max=10),
        retry=retry_if_exception_type((genai.types.BlockedPromptException, Exception)))
 def _make_gemini_request(prompt: str) -> str | None:
-    """
-    Выполняет запрос к Gemini API с использованием циклического перебора ключей.
-    Декоратор retry обрабатывает ошибки и переключает ключи.
-    """
     global current_gemini_key_index
     if not GOOGLE_API_KEYS:
         logger.error("Список ключей Google API пуст. Запрос невозможен.")
@@ -50,45 +41,33 @@ def _make_gemini_request(prompt: str) -> str | None:
     gemini_model = configure_gemini_model(api_key)
 
     if not gemini_model:
-        # Если модель не создалась, переключаем ключ и вызываем ошибку для retry
         current_gemini_key_index = (current_gemini_key_index + 1) % len(GOOGLE_API_KEYS)
         raise Exception("Не удалось сконфигурировать модель Gemini, пробую следующий ключ.")
 
     try:
         logger.info(f"Отправка запроса к Gemini API с ключом #{current_gemini_key_index + 1}...")
         response = gemini_model.generate_content(prompt)
-        
         if response.text:
-            logger.info(f"Ответ успешно получен с ключом #{current_gemini_key_index + 1}.")
+            logger.info("Ответ успешно получен от Gemini.")
             return response.text.strip()
         else:
-            logger.warning(f"Gemini API с ключом #{current_gemini_key_index + 1} вернул пустой ответ.")
-            if response.prompt_feedback:
+            logger.warning("Gemini вернул пустой ответ.")
+            if getattr(response, 'prompt_feedback', None):
                 logger.warning(f"Причина блокировки: {response.prompt_feedback}")
-            # Вызываем ошибку, чтобы retry попробовал следующий ключ
             raise genai.types.BlockedPromptException("Пустой ответ или блокировка по безопасности.")
-
     except Exception as e:
         message_text = str(e)
         logger.error(f"Ошибка с ключом #{current_gemini_key_index + 1}: {message_text}")
-        # Если регион недоступен для Gemini — нет смысла перебирать ключи
         if 'location is not supported' in message_text.lower():
-            logger.warning("Регион не поддерживается для Gemini API. Переходим к запасному провайдеру без повторов.")
+            logger.warning("Регион не поддерживается для Gemini API.")
             return None
-        # Переключаем ключ и перевыбрасываем исключение для retry
         current_gemini_key_index = (current_gemini_key_index + 1) % len(GOOGLE_API_KEYS)
         raise
 
-# --- 2. Создание промптов ---
+# --- Prompt loading ---
 def _load_prompt_template(filename: str) -> str | None:
-    """Пытается загрузить шаблон промпта из файла относительно корня репо.
-
-    Ищет путь в переменной окружения PROMPTS_DIR (по умолчанию 'prompts').
-    Возвращает содержимое файла или None при ошибке.
-    """
     try:
         prompts_dir = os.getenv("PROMPTS_DIR", "prompts")
-        # Ищем относительно текущего рабочего каталога, затем относительно файла
         candidate_paths = [
             os.path.join(os.getcwd(), prompts_dir, filename),
             os.path.join(os.path.dirname(__file__), os.pardir, prompts_dir, filename),
@@ -101,13 +80,10 @@ def _load_prompt_template(filename: str) -> str | None:
         return None
     return None
 
-
 def create_summarization_prompt(full_text: str) -> str:
-    """Создает промпт для суммаризации из внешнего шаблона, если он есть."""
     template = _load_prompt_template("summarization_ru.txt")
     if template:
         return template.replace("{{FULL_TEXT}}", full_text)
-    # Фолбэк на встроённый шаблон
     return (
         "Сделай краткое и содержательное резюме (примерно 150 слов) следующей новостной статьи на русском языке. "
         "Сохрани только ключевые факты и выводы. Не добавляй от себя никакой информации и не используй markdown-форматирование.\n\n"
@@ -119,15 +95,7 @@ def create_summarization_prompt(full_text: str) -> str:
 def _format_summaries_bullets(summaries: list[str]) -> str:
     return "\n".join(f"- {s}" for s in summaries)
 
-
 def create_digest_prompt(summaries: list[str], period_name: str) -> str:
-    """Создаёт промпт для дайджеста, подхватывая внешний шаблон по периоду.
-
-    Порядок поиска файла:
-    - Для периодов, содержащих ключевые слова, ищем специальные шаблоны:
-      daily → digest_daily_ru.txt; week/недел → digest_weekly_ru.txt; month/месяц → digest_monthly_ru.txt
-    - Иначе используем общий встроенный шаблон.
-    """
     lower = period_name.lower()
     filename = None
     if any(k in lower for k in ["вчера", "day", "daily"]):
@@ -140,20 +108,11 @@ def create_digest_prompt(summaries: list[str], period_name: str) -> str:
     template = _load_prompt_template(filename) if filename else None
     bullets = _format_summaries_bullets(summaries)
     if template:
-        return (
-            template
-            .replace("{PERIOD_NAME}", period_name)
-            .replace("{SUMMARIES_BULLETS}", bullets)
-        )
-
-    # Фолбэк на встроённый общий шаблон
+        return template.replace("{PERIOD_NAME}", period_name).replace("{SUMMARIES_BULLETS}", bullets)
     return (
         f"Ты — профессиональный новостной аналитик. Ниже представлен список кратких сводок новостей за последние {period_name}.\n"
         "Твоя задача — написать целостную аналитическую сводку на русском языке (200–250 слов).\n\n"
-        "Требования:\n"
-        "1. Не перечисляй просто факты из сводок.\n"
-        "2. Определи 2–4 ключевых тренда или тематических блока.\n"
-        "3. Напиши связный текст без markdown и списков.\n\n"
+        "Требования:\n1. Не перечисляй просто факты из сводок.\n2. Определи 2–4 ключевых тренда или тематических блока.\n3. Напиши связный текст без markdown и списков.\n\n"
         "Список сводок:\n"
         f"{bullets}\n"
     )
@@ -177,26 +136,21 @@ def create_annual_digest_prompt(digest_contents: list[str]) -> str:
 {digests_text}
 """
 
+<<<<<<< HEAD
 # --- 3. Публичные функции ---
+=======
+# --- Public API ---
+>>>>>>> origin/main
 def summarize_text_local(full_text: str) -> str | None:
-    """Суммирует текст, выбирая провайдера по настройке LLM_PRIMARY.
-
-    Логика:
-    - Если LLM_PRIMARY = 'mistral' и провайдер доступен — используем Mistral.
-    - Иначе используем Gemini (при наличии ключей), затем фолбэк на Mistral.
-    """
     cleaned_text = full_text.strip()
     if not cleaned_text:
         logger.error("Ошибка: Передан пустой текст для суммирования.")
         return None
-
     prompt = create_summarization_prompt(cleaned_text)
-    # 1) Явный приоритет Mistral
     if LLM_PRIMARY == "mistral" and MISTRAL_ENABLED and MISTRAL_API_KEY:
         result = summarize_with_mistral(cleaned_text)
         if result:
             return result
-        # Если не удалось, пробуем Gemini
         if GEMINI_ENABLED and GOOGLE_API_KEYS:
             try:
                 return _make_gemini_request(prompt)
@@ -204,8 +158,6 @@ def summarize_text_local(full_text: str) -> str | None:
                 logger.error(f"Не удалось получить резюме от Gemini: {e}")
                 return None
         return None
-
-    # 2) По умолчанию — Gemini с фолбэком на Mistral
     if GEMINI_ENABLED and GOOGLE_API_KEYS:
         try:
             result = _make_gemini_request(prompt)
@@ -218,9 +170,6 @@ def summarize_text_local(full_text: str) -> str | None:
     return None
 
 def create_digest(summaries: list[str], period_name: str) -> str | None:
-    """
-    Создает аналитический дайджест на основе списка сводок.
-    """
     if not summaries:
         logger.warning("Передан пустой список сводок для создания дайджеста.")
         return None
@@ -229,7 +178,7 @@ def create_digest(summaries: list[str], period_name: str) -> str | None:
     try:
         return _make_gemini_request(prompt)
     except RetryError as e:
-        logger.error(f"Не удалось создать дайджест после исчерпания всех ключей: {e}")
+        logger.error(f"Не удалось создать дайджест: {e}")
         return None
 
 def create_annual_digest(digest_contents: list[str]) -> str | None:
@@ -247,55 +196,23 @@ def create_annual_digest(digest_contents: list[str]) -> str | None:
         logger.error(f"Не удалось создать годовой дайджест: {e}")
         return None
 
-def summarize_with_mistral(text_to_summarize: str) -> str | None:
-    """
-    Суммирует предоставленный текст с помощью модели Mistral.
-    """
-    from mistralai.client import MistralClient
-
+def summarize_with_mistral(text_to_summarize: str) -> Optional[str]:
+    try:
+        from mistralai.client import MistralClient
+    except Exception:
+        logger.error("SDK Mistral недоступен.")
+        return None
     if not MISTRAL_API_KEY:
         logger.error("API-ключ для Mistral не найден.")
         return None
-
     try:
         client = MistralClient(api_key=MISTRAL_API_KEY)
-
         prompt = create_summarization_prompt(text_to_summarize)
-        # Используем универсальный формат сообщений без зависимости от моделей SDK
         messages = [{"role": "user", "content": prompt}]
-
-        chat_response = client.chat(
-            model=MISTRAL_MODEL_NAME,
-            messages=messages,
-        )
-
+        chat_response = client.chat(model=MISTRAL_MODEL_NAME, messages=messages)
         summary = chat_response.choices[0].message.content
         logger.info("Резюме успешно получено от Mistral.")
         return summary.strip()
-
     except Exception as e:
-        logger.error(f"Ошибка при получении резюме от Mistral: {e}")
+        logger.error(f"Ошибка при получении резюме от Mistrал: {e}")
         return None
-
-# --- Блок для проверки ---
-if __name__ == "__main__":
-    test_text = """
-    Министерство обороны России сообщило, что в ночь на 2 августа силы ПВО перехватили
-    и уничтожили 15 беспилотных летательных аппаратов над территорией нескольких областей.
-    По данным ведомства, атака была пресечена над Брянской, Курской и Белгородской областями.
-    Губернаторы регионов подтвердили отсутствие пострадавших и разрушений на земле.
-    Отмечается, что это уже третья подобная атака за последнюю неделю, что свидетельствует
-    о возросшей активности на данном направлении. Эксперты анализируют тактику применения
-    дронов и разрабатывают контрмеры для повышения эффективности систем ПВО.
-    """
-
-    print("\n" + "="*30 + "\n")
-    print("--- Запрос на суммирование через Gemini API ---")
-    summary = summarize_text_local(test_text)
-
-    print("\n" + "="*30 + "\n")
-    print("--- Результат суммирования ---")
-    if summary:
-        print(summary)
-    else:
-        print("Не удалось получить резюме.")
