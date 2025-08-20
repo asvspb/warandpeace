@@ -70,24 +70,41 @@ services:
 
   web:
     build: .
-    command: uvicorn src.webapp.server:app --host 0.0.0.0 --port ${WEB_PORT:-8080}
+    command: uvicorn src.webapp.server:app --host 0.0.0.0 --port 8080
     env_file: .env
     environment:
       - TZ=${TZ:-Europe/Moscow}
       - WEB_ENABLED=true
-      - WEB_PORT=${WEB_PORT:-8080}
-      - WEB_BASIC_AUTH_USER=${WEB_BASIC_AUTH_USER}
-      - WEB_BASIC_AUTH_PASSWORD=${WEB_BASIC_AUTH_PASSWORD}
+      - WEB_PORT=8080
+      - WEB_AUTH_MODE=${WEB_AUTH_MODE:-basic}
+      - WEB_RP_ID=${WEB_RP_ID}
+      - WEB_RP_NAME=${WEB_RP_NAME}
+      - WEB_SESSION_SECRET=${WEB_SESSION_SECRET}
+      - WEB_API_ENABLED=${WEB_API_ENABLED:-false}
+      - WEB_API_KEY=${WEB_API_KEY}
     volumes:
       - ./database:/app/database:ro
-    ports:
-      - "${WEB_PORT:-8080}:8080"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
       interval: 30s
       timeout: 3s
       retries: 3
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: wp-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - CADDY_DOMAIN=${CADDY_DOMAIN}
+      - CADDY_EMAIL=${CADDY_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - web
 
   cron:
     build: .
