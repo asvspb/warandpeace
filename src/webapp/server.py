@@ -101,7 +101,7 @@ async def basic_auth_middleware(request: Request, call_next):
     """Enforce Basic Auth at request time when credentials are set via env.
     Allows public access to /healthz, /metrics, /static, /favicon.ico.
     """
-    public_prefixes = ("/healthz", "/metrics", "/static", "/favicon.ico")
+    public_prefixes = ("/healthz", "/metrics", "/static", "/favicon.ico", "/webauthn")
     path = request.url.path
 
     # Skip auth for public endpoints

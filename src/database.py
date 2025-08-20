@@ -193,6 +193,24 @@ def init_db():
         """)
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_pending_publications_created_at ON pending_publications (created_at)")
         
+        # 7. Таблица для WebAuthn-учётных данных администратора
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS webauthn_credential (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              user_id TEXT NOT NULL,
+              credential_id BLOB NOT NULL UNIQUE,
+              public_key BLOB NOT NULL,
+              sign_count INTEGER NOT NULL DEFAULT 0,
+              transports TEXT,
+              aaguid TEXT,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              last_used_at TIMESTAMP
+            )
+            """
+        )
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_webauthn_user ON webauthn_credential (user_id)")
+        
         logger.info("Инициализация базы данных завершена.")
 
 
