@@ -4,11 +4,12 @@ import secrets
 import base64
 from fastapi import FastAPI, Depends, HTTPException, Request, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from prometheus_client import make_asgi_app, Counter, Histogram, CollectorRegistry
 import uvicorn
 
-from src.webapp import routes_articles, routes_duplicates, routes_dlq, routes_api
+from src.webapp import routes_articles, routes_duplicates, routes_dlq, routes_api, routes_webauthn
 
 # --- Metrics ---
 # Use a dedicated registry to avoid duplicate registration on module reloads (tests)
@@ -31,6 +32,17 @@ app = FastAPI(
 )
 
 app.mount("/static", StaticFiles(directory="src/webapp/static"), name="static")
+
+# --- Sessions ---
+# Enable session middleware for future WebAuthn-based admin auth
+_session_secret = os.getenv("WEB_SESSION_SECRET", "dev-session-secret-change-me")
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=_session_secret,
+    session_cookie="wp_session",
+    same_site="strict",
+    https_only=False,  # set True behind TLS in production
+)
 
 # --- Security ---
 security = HTTPBasic()
@@ -62,12 +74,15 @@ if auth_user and auth_pass:
     app.include_router(routes_dlq.router, tags=["Frontend"], dependencies=auth_dependency)
     if os.getenv("WEB_API_ENABLED", "false").lower() == "true":
         app.include_router(routes_api.router, tags=["API"], dependencies=auth_dependency)
+    # WebAuthn endpoints remain public for login/registration flows
+    app.include_router(routes_webauthn.router, tags=["Auth"]) 
 else:
     app.include_router(routes_articles.router, tags=["Frontend"])
     app.include_router(routes_duplicates.router, tags=["Frontend"])
     app.include_router(routes_dlq.router, tags=["Frontend"])
     if os.getenv("WEB_API_ENABLED", "false").lower() == "true":
         app.include_router(routes_api.router, tags=["API"])
+    app.include_router(routes_webauthn.router, tags=["Auth"]) 
 
 
 # --- Public Endpoints ---
