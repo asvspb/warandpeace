@@ -3,6 +3,7 @@ from fastapi import APIRouter, Request, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from typing import Optional
+from datetime import datetime, date
 import math
 
 from src.webapp import services
@@ -12,39 +13,41 @@ templates = Jinja2Templates(directory="src/webapp/templates")
 
 @router.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
-    """Renders the main dashboard page."""
+    """Renders the main dashboard page with calendar of current month."""
     stats = services.get_dashboard_stats()
-    return templates.TemplateResponse("index.html", {"request": request, "stats": stats})
+    today = date.today()
+    calendar_data = services.get_month_calendar_data(today.year, today.month)
+    return templates.TemplateResponse("index.html", {"request": request, "stats": stats, "calendar": calendar_data})
 
 @router.get("/articles", response_class=HTMLResponse)
 async def list_articles(
     request: Request,
-    page: int = 1,
-    page_size: int = Query(50, ge=1, le=200),
-    q: Optional[str] = None,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    has_content: int = Query(1, ge=0, le=1),
+    year: Optional[int] = None,
+    month: Optional[int] = None,
 ):
-    """Renders the list of articles with pagination and filters."""
-    articles, total_articles = services.get_articles(page, page_size, q, start_date, end_date, has_content)
-    total_pages = math.ceil(total_articles / page_size)
-    
-    return templates.TemplateResponse(
-        "articles_list.html",
-        {
-            "request": request,
-            "articles": articles,
-            "page": page,
-            "page_size": page_size,
-            "total_pages": total_pages,
-            "total_articles": total_articles,
-            "q": q,
-            "start_date": start_date,
-            "end_date": end_date,
-            "has_content": has_content,
-        },
-    )
+    """Replaced: render calendar view instead of list."""
+    today = date.today()
+    y = year or today.year
+    m = month or today.month
+    calendar_data = services.get_month_calendar_data(y, m)
+    return templates.TemplateResponse("calendar.html", {"request": request, "calendar": calendar_data})
+
+
+@router.get("/calendar", response_class=HTMLResponse)
+async def calendar_view(request: Request, year: Optional[int] = None, month: Optional[int] = None):
+    """Renders the calendar view for a given month (defaults to current)."""
+    today = date.today()
+    y = year or today.year
+    m = month or today.month
+    calendar_data = services.get_month_calendar_data(y, m)
+    return templates.TemplateResponse("calendar.html", {"request": request, "calendar": calendar_data})
+
+
+@router.get("/day/{day_iso}", response_class=HTMLResponse)
+async def daily_feed(request: Request, day_iso: str):
+    """Renders the daily news feed for a given date (YYYY-MM-DD)."""
+    articles = services.get_daily_articles(day_iso)
+    return templates.TemplateResponse("daily_feed.html", {"request": request, "day": day_iso, "articles": articles})
 
 @router.get("/articles/{article_id}", response_class=HTMLResponse)
 async def read_article(

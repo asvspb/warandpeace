@@ -23,12 +23,11 @@ def test_read_root(mock_get_stats, client):
     assert response.status_code == 200
     assert "Dashboard" in response.text
 
-@patch('src.webapp.services.get_articles')
-def test_list_articles(mock_get_articles, client):
-    mock_get_articles.return_value = ([], 0)
+def test_list_articles(client):
     response = client.get("/articles")
     assert response.status_code == 200
-    assert "Список статей" in response.text
+    # Calendar view is rendered instead of list
+    assert "Календарь" in response.text or "calendar-grid" in response.text
 
 def test_health_check(client):
     response = client.get("/healthz")
@@ -67,18 +66,13 @@ def test_security_headers_are_present(client):
     assert response.headers["X-Frame-Options"] == "DENY"
     assert response.headers["X-Content-Type-Options"] == "nosniff"
 
-@patch('src.webapp.services.get_articles')
-def test_has_content_filter(mock_get_articles, client):
-    """Tests the has_content filter is passed to the service layer."""
-    mock_get_articles.return_value = ([], 0)
-    
-    # Test with has_content=1 (default)
-    client.get("/articles?has_content=1")
-    mock_get_articles.assert_called_with(1, 50, None, None, None, 1)
-    
-    # Test with has_content=0
-    client.get("/articles?has_content=0")
-    mock_get_articles.assert_called_with(1, 50, None, None, None, 0)
+@patch('src.webapp.services.get_month_calendar_data')
+def test_articles_calendar_params(mock_get_calendar, client):
+    """Tests that calendar params are passed to the service layer."""
+    mock_get_calendar.return_value = {"year": 2025, "month": 2, "weeks": []}
+    response = client.get("/articles?year=2025&month=2")
+    assert response.status_code == 200
+    mock_get_calendar.assert_called_with(2025, 2)
 
 @patch.dict(os.environ, {"WEB_BASIC_AUTH_USER": "testuser", "WEB_BASIC_AUTH_PASSWORD": "testpass"})
 def test_auth_is_enforced():

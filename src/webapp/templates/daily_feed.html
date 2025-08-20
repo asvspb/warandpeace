@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Лента за {{ day }} - {{ super() }}{% endblock %}
+
+{% block content %}
+    <header style="margin-bottom: 24px;">
+        <h1>Лента за {{ day }}</h1>
+        <p class="muted">Все статьи, опубликованные в этот день.</p>
+    </header>
+
+    <section class="card">
+        {% if articles %}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Время</th>
+                    <th>Заголовок</th>
+                    <th>Каноническая ссылка</th>
+                    <th>Оригинал</th>
+                    <th>Резюме</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for article in articles %}
+                <tr>
+                    <td class="muted">{{ article.published_at.split(' ')[1] if ' ' in article.published_at else article.published_at }}</td>
+                    <td><a href="/articles/{{ article.id }}">{{ article.title }}</a></td>
+                    <td><a href="{{ article.canonical_link }}" target="_blank">{{ article.canonical_link | truncate(40) if article.canonical_link }}</a></td>
+                    <td><a href="{{ article.url }}" target="_blank">Источник</a></td>
+                    <td>
+                        {% if article.summary_text %}
+                            <span class="badge success">Есть</span>
+                        {% else %}
+                            <span class="badge muted">Нет</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+            <div class="muted" style="text-align:center; padding: 24px;">В этот день записей нет.</div>
+        {% endif %}
+    </section>
+{% endblock %}

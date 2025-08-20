@@ -1,6 +1,8 @@
 
 import sqlite3
 from typing import List, Dict, Any, Optional
+from datetime import date, datetime, timedelta
+import calendar as py_calendar
 from src.database import get_db_connection, get_content_hash_groups, list_articles_by_content_hash, list_dlq_items
 
 def get_articles(page: int = 1, page_size: int = 50, q: Optional[str] = None, 
@@ -95,3 +97,120 @@ def get_articles_by_hash(content_hash: str) -> List[Dict[str, Any]]:
 def get_dlq_items(entity_type: Optional[str] = None) -> List[Dict[str, Any]]:
     """Reuses the database function to get DLQ items."""
     return list_dlq_items(entity_type=entity_type, limit=500)
+
+
+# --- Calendar and Daily Services ---
+
+def _to_iso_date(d: date) -> str:
+    return d.strftime("%Y-%m-%d")
+
+
+def _month_bounds(year: int, month: int) -> (str, str):
+    month_start = date(year, month, 1)
+    last_day = py_calendar.monthrange(year, month)[1]
+    month_end = date(year, month, last_day)
+    # Inclusive day bounds at 00:00:00 to 23:59:59
+    start_iso = f"{_to_iso_date(month_start)} 00:00:00"
+    end_iso = f"{_to_iso_date(month_end)} 23:59:59"
+    return start_iso, end_iso
+
+
+def get_month_calendar_data(year: int, month: int) -> Dict[str, Any]:
+    """Builds a calendar data model for the given month.
+
+    Returns a dict with keys:
+    - year, month
+    - weeks: List[{
+        'days': List[{'date': 'YYYY-MM-DD', 'day': int, 'in_month': bool, 'total': int, 'summarized': int}],
+        'total': int, 'summarized': int, 'all_summarized': bool
+      }]
+    """
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+
+            start_iso, end_iso = _month_bounds(year, month)
+
+            # Aggregate counts per calendar day within the month
+            cursor.execute(
+                """
+                SELECT date(published_at) AS d,
+                       COUNT(*) AS total,
+                       SUM(CASE WHEN summary_text IS NOT NULL AND TRIM(summary_text) <> '' THEN 1 ELSE 0 END) AS summarized
+                FROM articles
+                WHERE published_at BETWEEN ? AND ?
+                GROUP BY date(published_at)
+                """,
+                (start_iso, end_iso),
+            )
+            rows = cursor.fetchall()
+            per_day: Dict[str, Dict[str, int]] = {
+                row[0]: {"total": int(row[1] or 0), "summarized": int(row[2] or 0)} for row in rows
+            }
+
+            cal = py_calendar.Calendar(firstweekday=0)  # Monday=0 in Python 3.12+, but here 0 is Monday in calendar? In calendar, 0=Monday.
+            # To be explicit across versions: ensure Monday-first weeks
+            cal = py_calendar.Calendar(firstweekday=0)
+
+            weeks: List[Dict[str, Any]] = []
+            for week in cal.monthdatescalendar(year, month):
+                week_days: List[Dict[str, Any]] = []
+                week_total = 0
+                week_summarized = 0
+                for day_date in week:
+                    d_iso = _to_iso_date(day_date)
+                    counts = per_day.get(d_iso, {"total": 0, "summarized": 0})
+                    in_month = (day_date.month == month)
+                    week_total += counts["total"]
+                    week_summarized += counts["summarized"]
+                    week_days.append({
+                        "date": d_iso,
+                        "day": day_date.day,
+                        "in_month": in_month,
+                        "total": counts["total"],
+                        "summarized": counts["summarized"],
+                    })
+                all_summarized = week_total > 0 and (week_total == week_summarized)
+                weeks.append({
+                    "days": week_days,
+                    "total": week_total,
+                    "summarized": week_summarized,
+                    "all_summarized": all_summarized,
+                })
+
+            return {
+                "year": year,
+                "month": month,
+                "weeks": weeks,
+            }
+    except sqlite3.Error:
+        # Fallback for empty/missing DB
+        today = date.today()
+        cal = py_calendar.Calendar(firstweekday=0)
+        weeks = []
+        for week in cal.monthdatescalendar(year, month):
+            week_days = [{"date": _to_iso_date(d), "day": d.day, "in_month": d.month == month, "total": 0, "summarized": 0} for d in week]
+            weeks.append({"days": week_days, "total": 0, "summarized": 0, "all_summarized": False})
+        return {"year": year, "month": month, "weeks": weeks}
+
+
+def get_daily_articles(day_iso: str) -> List[Dict[str, Any]]:
+    """Returns articles for a specific day (YYYY-MM-DD)."""
+    try:
+        # Validate date format
+        datetime.strptime(day_iso, "%Y-%m-%d")
+    except ValueError:
+        return []
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, title, url, canonical_link, published_at, summary_text
+            FROM articles
+            WHERE date(published_at) = ?
+            ORDER BY published_at DESC
+            """,
+            (day_iso,),
+        )
+        return [dict(row) for row in cursor.fetchall()]
