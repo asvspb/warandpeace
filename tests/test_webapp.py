@@ -34,6 +34,14 @@ def test_health_check(client):
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
+
+def _reload_app_with_env(env_overrides):
+    from importlib import reload
+    import src.webapp.server as server_module
+    with patch.dict(os.environ, env_overrides, clear=False):
+        reload(server_module)
+        return TestClient(server_module.app)
+
 @patch('src.webapp.services.get_duplicate_groups')
 def test_list_duplicates(mock_get_duplicates, client):
     mock_get_duplicates.return_value = []
@@ -88,3 +96,54 @@ def test_auth_is_enforced():
         mock_get_stats.return_value = {'total_articles': 0, 'last_published_date': 'N/A', 'dlq_count': 0}
         response_authed = client.get("/", auth=("testuser", "testpass"))
         assert response_authed.status_code == 200
+
+
+def test_api_key_auth_enforced_when_enabled():
+    env = {
+        "WEB_ENABLED": "true",
+        "WEB_API_ENABLED": "true",
+        "WEB_API_KEY": "secret123",
+        # No Basic auth
+        "WEB_BASIC_AUTH_USER": "",
+        "WEB_BASIC_AUTH_PASSWORD": "",
+    }
+    from importlib import reload
+    import src.webapp.server as server_module
+    with patch.dict(os.environ, env, clear=False):
+        reload(server_module)
+        client = TestClient(server_module.app)
+
+        # Without key -> 401
+        resp_no_key = client.get("/api/articles")
+        assert resp_no_key.status_code == 401
+
+        # With wrong key -> 401
+        resp_bad = client.get("/api/articles", headers={"X-API-Key": "bad"})
+        assert resp_bad.status_code == 401
+
+        # With correct key in X-API-Key -> 200 (empty DB still OK)
+        resp_ok = client.get("/api/articles", headers={"X-API-Key": "secret123"})
+        assert resp_ok.status_code in (200, 204)
+
+        # With Authorization: Api-Key <key>
+        resp_ok2 = client.get("/api/articles", headers={"Authorization": "Api-Key secret123"})
+        assert resp_ok2.status_code in (200, 204)
+
+
+def test_api_routes_public_when_key_not_set():
+    # Enable API but do not set key -> public access
+    env = {
+        "WEB_ENABLED": "true",
+        "WEB_API_ENABLED": "true",
+        "WEB_API_KEY": "",
+        # No Basic auth
+        "WEB_BASIC_AUTH_USER": "",
+        "WEB_BASIC_AUTH_PASSWORD": "",
+    }
+    from importlib import reload
+    import src.webapp.server as server_module
+    with patch.dict(os.environ, env, clear=False):
+        reload(server_module)
+        client = TestClient(server_module.app)
+        resp = client.get("/api/articles")
+        assert resp.status_code in (200, 204)

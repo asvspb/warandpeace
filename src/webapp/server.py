@@ -5,14 +5,20 @@ import base64
 from fastapi import FastAPI, Depends, HTTPException, Request, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from prometheus_client import make_asgi_app, Counter, Histogram
+from prometheus_client import make_asgi_app, Counter, Histogram, CollectorRegistry
 import uvicorn
 
 from src.webapp import routes_articles, routes_duplicates, routes_dlq, routes_api
 
 # --- Metrics ---
-REQUEST_COUNT = Counter("web_request_total", "Total requests", ["method", "path", "status_code"])
-REQUEST_LATENCY = Histogram("web_request_latency_seconds", "Request latency", ["method", "path"])
+# Use a dedicated registry to avoid duplicate registration on module reloads (tests)
+METRICS_REGISTRY = CollectorRegistry()
+REQUEST_COUNT = Counter(
+    "web_request_total", "Total requests", ["method", "path", "status_code"], registry=METRICS_REGISTRY
+)
+REQUEST_LATENCY = Histogram(
+    "web_request_latency_seconds", "Request latency", ["method", "path"], registry=METRICS_REGISTRY
+)
 
 # --- App Initialization ---
 app = FastAPI(
@@ -70,8 +76,8 @@ def health_check():
     """Health check endpoint."""
     return {"status": "ok"}
 
-# Mount metrics app publicly
-metrics_app = make_asgi_app()
+# Mount metrics app publicly (use the same dedicated registry)
+metrics_app = make_asgi_app(registry=METRICS_REGISTRY)
 app.mount("/metrics", metrics_app)
 
 # --- Middlewares ---
@@ -86,6 +92,25 @@ async def basic_auth_middleware(request: Request, call_next):
     # Skip auth for public endpoints
     if path.startswith(public_prefixes):
         return await call_next(request)
+
+    # API key enforcement for /api when configured
+    # If WEB_API_KEY is set and API is enabled, require X-API-Key or Authorization: Api-Key <key>
+    if path.startswith("/api") and os.getenv("WEB_API_ENABLED", "false").lower() == "true":
+        expected_key = os.environ.get("WEB_API_KEY")
+        if expected_key:
+            auth_header = request.headers.get("Authorization")
+            x_api_key = request.headers.get("X-API-Key")
+            provided_key = None
+            if x_api_key:
+                provided_key = x_api_key.strip()
+            elif auth_header and auth_header.startswith("Api-Key "):
+                provided_key = auth_header.split(" ", 1)[1].strip()
+
+            if not provided_key or not secrets.compare_digest(provided_key, expected_key):
+                return Response(status_code=401)
+
+            # Valid API key: proceed without Basic Auth
+            return await call_next(request)
 
     env_user = os.environ.get("WEB_BASIC_AUTH_USER")
     env_pass = os.environ.get("WEB_BASIC_AUTH_PASSWORD")
