@@ -16,10 +16,10 @@ project_root = os.path.dirname(src_dir)
 dotenv_path = os.path.join(project_root, '.env')
 
 # Загружаем переменные из найденного .env файла.
-# Это нужно для локальных запусков скриптов. В Docker Compose переменные
-# подставляются напрямую из env_file, и override=True гарантирует,
-# что они будут иметь приоритет над локальным .env.
-load_dotenv(dotenv_path=dotenv_path, override=True)
+# Примечание: во время pytest избегаем жёсткого override, чтобы тесты могли
+# управлять окружением через patch.dict без влияния локального .env.
+_running_pytest = bool(os.environ.get("PYTEST_CURRENT_TEST"))
+load_dotenv(dotenv_path=dotenv_path, override=(not _running_pytest))
 
 # --- Путь к БД ---
 DB_SQLITE_PATH = os.getenv("DB_SQLITE_PATH", "/app/database/articles.db")
@@ -112,3 +112,7 @@ SERVICE_DIGEST_ROTATION = _rotation_seq
 
 # Каденс ротации: daily|hourly (пока поддержан daily по умолчанию)
 SERVICE_ROTATION_CADENCE = os.getenv("SERVICE_ROTATION_CADENCE", "daily").strip().lower()
+
+# --- Telegram канал для служебных прогнозов ---
+SERVICE_TG_ENABLED = os.getenv("SERVICE_TG_ENABLED", "false").strip().lower() in {"1", "true", "yes"}
+SERVICE_TG_CHANNEL_ID = os.getenv("SERVICE_TG_CHANNEL_ID")

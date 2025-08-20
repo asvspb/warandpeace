@@ -211,6 +211,37 @@ def create_service_digest_prompt(
     )
 
 
+# --- 2b. Публичные генераторы служебного вывода ---
+def generate_service_summary(article_json: str, variant: int | None = None) -> str | None:
+    """Генерирует служебный JSON-резюме одной статьи, возвращает сырой текст (ожидаемый JSON)."""
+    prompt = create_service_summarization_prompt(article_json, variant=variant)
+    try:
+        return _make_gemini_request(prompt)
+    except RetryError as e:
+        logger.error(f"Не удалось получить служебное резюме: {e}")
+        return None
+
+
+def generate_service_digest(
+    articles_jsonl: str,
+    period_name: str,
+    previous_summary_json: str | None = None,
+    variant: int | None = None,
+) -> str | None:
+    """Генерирует служебный JSON-дайджест для периода."""
+    prompt = create_service_digest_prompt(
+        articles_jsonl=articles_jsonl,
+        period_name=period_name,
+        previous_summary_json=previous_summary_json,
+        variant=variant,
+    )
+    try:
+        return _make_gemini_request(prompt)
+    except RetryError as e:
+        logger.error(f"Не удалось получить служебный дайджест: {e}")
+        return None
+
+
 def create_summarization_prompt(full_text: str) -> str:
     """Создает промпт для суммаризации из внешнего шаблона, если он есть."""
     template = _load_prompt_template("summarization_ru.txt")

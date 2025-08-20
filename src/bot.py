@@ -18,6 +18,9 @@ from config import (
     TELEGRAM_ADMIN_ID,
     NEWS_URL,
     APP_TZ,
+    SERVICE_PROMPTS_ENABLED,
+    SERVICE_TG_ENABLED,
+    SERVICE_TG_CHANNEL_ID,
 )
 from time_utils import now_msk, to_utc, utc_to_local
 from metrics import start_metrics_server, JOB_DURATION, ARTICLES_POSTED, ERRORS_TOTAL, update_last_article_age
@@ -37,7 +40,14 @@ from database import (
     increment_attempt_count,
 )
 from parser import get_articles_from_page, get_article_text
-from summarizer import summarize_text_local, create_digest, create_annual_digest, summarize_with_mistral
+from summarizer import (
+    summarize_text_local,
+    create_digest,
+    create_annual_digest,
+    summarize_with_mistral,
+    create_service_summarization_prompt,
+    generate_service_summary,
+)
 from notifications import notify_admin
 
 # Настройка логирования (тихий режим для сторонних библиотек и управляемый уровень для приложения)
@@ -256,6 +266,57 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
                 )
                 posted_count += 1
                 await asyncio.sleep(10)  # Пауза
+
+                # 4.1 Теневой служебный прогноз в отдельный канал (если включено)
+                try:
+                    if SERVICE_PROMPTS_ENABLED and SERVICE_TG_ENABLED and SERVICE_TG_CHANNEL_ID:
+                        # Сформируем минимальный JSON статьи (id, url, title)
+                        article_json = {
+                            "source_id": article_data.get("link"),
+                            "url": article_data.get("link"),
+                            "title": article_data.get("title"),
+                            "published_at": published_at_utc_iso,
+                            "summary": summary,
+                        }
+                        import json as _json
+                        raw = await asyncio.to_thread(generate_service_summary, _json.dumps(article_json, ensure_ascii=False))
+                        if raw:
+                            # Попробуем извлечь краткий формат для TG
+                            try:
+                                data = _json.loads(raw)
+                                headline = data.get("normalized_title") or data.get("summary", {}).get("title") or article_data.get("title")
+                                conf = data.get("confidence") or data.get("calibration", {}).get("confidence_overall")
+                                forecast = data.get("forecast") or []
+                                top = None
+                                if isinstance(forecast, list) and forecast:
+                                    top = sorted(
+                                        [f for f in forecast if isinstance(f, dict) and isinstance(f.get("probability"), (int, float))],
+                                        key=lambda x: x.get("probability", 0), reverse=True
+                                    )[:2]
+                                # Сформируем краткое сообщение
+                                lines = [f"<b>Служебный прогноз</b>", headline]
+                                if top:
+                                    for sc in top:
+                                        lines.append(f"• {sc.get('outcome')}: {sc.get('probability'):.2f} @ {sc.get('horizon_hours','?')}ч")
+                                if conf is not None:
+                                    lines.append(f"уверенность: {float(conf):.2f}")
+                                lines.append(f"src: {article_data.get('link')}")
+                                text = "\n".join(lines)
+                            except Exception:
+                                # Если не парсится, отправим сырой JSON в кодовом блоке
+                                text = f"<b>Служебный прогноз (raw)</b>\n<code>{raw[:3500]}</code>"
+
+                            try:
+                                await send_message_with_retry(
+                                    bot=context.bot,
+                                    chat_id=SERVICE_TG_CHANNEL_ID,
+                                    text=text,
+                                    parse_mode=ParseMode.HTML,
+                                )
+                            except Exception as e:
+                                logger.warning(f"Не удалось отправить служебный прогноз в TG: {e}")
+                except Exception:
+                    logger.exception("Сбой при формировании/отправке служебного прогноза")
 
             except CircuitBreakerOpenError:
                 logger.warning(f"Отправка статьи '{article_data['title']}' отложена (Circuit Breaker OPEN).")
