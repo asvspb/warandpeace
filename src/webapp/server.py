@@ -6,6 +6,7 @@ from fastapi import FastAPI, Depends, HTTPException, Request, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi.templating import Jinja2Templates
 from prometheus_client import make_asgi_app, Counter, Histogram, CollectorRegistry
 import uvicorn
 
@@ -32,16 +33,20 @@ app = FastAPI(
 )
 
 app.mount("/static", StaticFiles(directory="src/webapp/static"), name="static")
+templates_login = Jinja2Templates(directory="src/webapp/templates")
 # --- Login page route (for WebAuthn mode) ---
 @app.get("/login", tags=["Auth"], include_in_schema=False)
-def login_page():
-    # Serve static template (Jinja will be used from articles router if needed)
-    from fastapi.responses import HTMLResponse
-    try:
-        with open("src/webapp/templates/login.html", "r", encoding="utf-8") as f:
-            return HTMLResponse(f.read())
-    except Exception:
-        return HTMLResponse("<h1>Login</h1>")
+def login_page(request: Request):
+    return templates_login.TemplateResponse("login.html", {"request": request})
+
+@app.get("/logout", tags=["Auth"], include_in_schema=False)
+def logout(request: Request):
+    request.session.clear()
+    return Response(status_code=303, headers={"Location": "/login"})
+
+@app.get("/register-key", tags=["Auth"], include_in_schema=False)
+def register_key_page(request: Request):
+    return templates_login.TemplateResponse("register_key.html", {"request": request})
 
 
 # --- Sessions ---
