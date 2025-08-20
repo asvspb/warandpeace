@@ -1,18 +1,25 @@
 import os
 import base64
 from typing import Dict, Any, List
+import sqlite3
 
 from fastapi import APIRouter, Request, HTTPException
+from fastapi.responses import Response
+import json
 
 # Optional dependency: python-fido2
 try:
     from fido2.server import Fido2Server
-    from fido2.webauthn import PublicKeyCredentialRpEntity, PublicKeyCredentialUserEntity
+    from fido2.webauthn import (
+        PublicKeyCredentialRpEntity,
+        PublicKeyCredentialUserEntity,
+        PublicKeyCredentialDescriptor,
+    )
     WEBAUTHN_AVAILABLE = True
 except Exception:
     WEBAUTHN_AVAILABLE = False
 
-from src.database import get_db_connection
+from src.database import get_db_connection, init_db
 
 router = APIRouter(prefix="/webauthn")
 
@@ -55,24 +62,78 @@ def _list_credential_ids_for_user(user_id: str) -> List[bytes]:
         return [bytes(row[0]) for row in cur.fetchall()]
 
 
+def _sanitize_for_json(value):
+    """Recursively convert complex structures to JSON-safe (base64url for bytes)."""
+    # Bytes-like
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        return _b64url(bytes(value))
+    # Mapping
+    try:
+        from collections.abc import Mapping
+    except Exception:
+        Mapping = dict  # type: ignore
+    if isinstance(value, Mapping):
+        return {k: _sanitize_for_json(v) for k, v in value.items()}
+    # Sequences (but not str/bytes handled above)
+    if isinstance(value, (list, tuple, set)):
+        seq = [_sanitize_for_json(v) for v in value]
+        return seq if not isinstance(value, tuple) else tuple(seq)
+    # Namedtuple
+    if hasattr(value, "_asdict") and callable(getattr(value, "_asdict")):
+        return _sanitize_for_json(value._asdict())
+    # Objects with to_json/dict
+    if hasattr(value, "to_json") and callable(getattr(value, "to_json")):
+        try:
+            return _sanitize_for_json(value.to_json())
+        except Exception:
+            pass
+    if hasattr(value, "dict") and callable(getattr(value, "dict")):
+        try:
+            return _sanitize_for_json(value.dict())
+        except Exception:
+            pass
+    # Generic object -> attempt vars()
+    try:
+        return _sanitize_for_json(vars(value))
+    except Exception:
+        return value
+
+
 @router.post("/register/options")
 async def register_options(request: Request):
     if not WEBAUTHN_AVAILABLE:
         raise HTTPException(status_code=501, detail="WebAuthn not available: install python-fido2")
     server = _get_server()
     user = _admin_user_entity()
-    existing_ids = _list_credential_ids_for_user(user_id=user.name)
+    # Ensure DB schema exists and fetch existing credential ids
+    try:
+        existing_ids = _list_credential_ids_for_user(user_id=user.name)
+    except sqlite3.OperationalError:
+        # Likely missing table; initialize schema and retry once
+        init_db()
+        existing_ids = _list_credential_ids_for_user(user_id=user.name)
 
-    options, state = server.register_begin(user, resident_key=None, user_verification="preferred", exclude_credentials=[{"id": cid, "type": "public-key"} for cid in existing_ids])
+    # Build credential descriptors to exclude (compat with fido2 1.1.x)
+    descriptors = [PublicKeyCredentialDescriptor(id=cid, type="public-key") for cid in existing_ids]
+
+    # Compatibility with multiple python-fido2 versions
+    # Try the most feature-complete call first, then progressively simplify
+    try:
+        options, state = server.register_begin(
+            user,
+            credentials=descriptors,
+            user_verification="preferred",
+        )
+    except TypeError:
+        try:
+            options, state = server.register_begin(user, credentials=descriptors)
+        except TypeError:
+            options, state = server.register_begin(user)
 
     request.session["webauthn_state"] = state
-    # Convert binary fields to base64url
-    options["publicKey"]["challenge"] = _b64url(options["publicKey"]["challenge"])
-    options["publicKey"]["user"]["id"] = _b64url(options["publicKey"]["user"]["id"])
-    if "excludeCredentials" in options["publicKey"]:
-        for cred in options["publicKey"]["excludeCredentials"]:
-            cred["id"] = _b64url(cred["id"])
-    return options
+    # Sanitize any remaining bytes deeply to ensure JSON-safe
+    options = _sanitize_for_json(options)
+    return Response(content=json.dumps(options), media_type="application/json")
 
 
 @router.post("/register/verify")
@@ -130,15 +191,22 @@ async def login_options(request: Request):
     if not allow:
         raise HTTPException(status_code=400, detail="No credentials registered")
 
-    options, state = server.authenticate_begin(allow_credentials=[{"id": cid, "type": "public-key"} for cid in allow], user_verification="preferred")
+    # Compatibility with multiple python-fido2 versions
+    allow_descriptors = [PublicKeyCredentialDescriptor(id=cid, type="public-key") for cid in allow]
+    try:
+        options, state = server.authenticate_begin(
+            credentials=allow_descriptors,
+            user_verification="preferred",
+        )
+    except TypeError:
+        try:
+            options, state = server.authenticate_begin(credentials=allow_descriptors)
+        except TypeError:
+            options, state = server.authenticate_begin()
     request.session["webauthn_state"] = state
-
-    # Convert binary to base64url
-    options["publicKey"]["challenge"] = _b64url(options["publicKey"]["challenge"])
-    if "allowCredentials" in options["publicKey"]:
-        for cred in options["publicKey"]["allowCredentials"]:
-            cred["id"] = _b64url(cred["id"])
-    return options
+    # Sanitize any remaining bytes deeply to ensure JSON-safe
+    options = _sanitize_for_json(options)
+    return Response(content=json.dumps(options), media_type="application/json")
 
 
 @router.post("/login/verify")

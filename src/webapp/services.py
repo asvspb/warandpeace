@@ -183,8 +183,8 @@ def get_month_calendar_data(year: int, month: int) -> Dict[str, Any]:
                 "month": month,
                 "weeks": weeks,
             }
-    except sqlite3.Error:
-        # Fallback for empty/missing DB
+    except Exception:
+        # Fallback for empty/missing DB or environment without write access
         today = date.today()
         cal = py_calendar.Calendar(firstweekday=0)
         weeks = []

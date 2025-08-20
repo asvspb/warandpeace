@@ -83,7 +83,9 @@ services:
       - WEB_API_ENABLED=${WEB_API_ENABLED:-false}
       - WEB_API_KEY=${WEB_API_KEY}
     volumes:
-      - ./database:/app/database:ro
+      - ./database:/app/database
+    ports:
+      - "${WEB_PORT:-8080}:8080"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]

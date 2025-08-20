@@ -21,6 +21,6 @@ async def list_articles_for_hash(request: Request, content_hash: str):
     if not articles:
         raise HTTPException(status_code=404, detail="No articles found for this hash")
     return templates.TemplateResponse(
-        "duplicate_articles.html", 
+        "duplicate_articles.html",
         {"request": request, "articles": articles, "hash": content_hash}
     )

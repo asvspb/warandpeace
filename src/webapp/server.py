@@ -2,7 +2,7 @@
 import os
 import secrets
 import base64
-from fastapi import FastAPI, Depends, HTTPException, Request, Response
+from fastapi import FastAPI, Depends, HTTPException, Request, Response, Form
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
@@ -11,6 +11,7 @@ from prometheus_client import make_asgi_app, Counter, Histogram, CollectorRegist
 import uvicorn
 
 from src.webapp import routes_articles, routes_duplicates, routes_dlq, routes_api, routes_webauthn
+from src.database import init_db
 
 # --- Metrics ---
 # Use a dedicated registry to avoid duplicate registration on module reloads (tests)
@@ -34,10 +35,12 @@ app = FastAPI(
 
 app.mount("/static", StaticFiles(directory="src/webapp/static"), name="static")
 templates_login = Jinja2Templates(directory="src/webapp/templates")
+# Expose auth mode to templates
+templates_login.env.globals["auth_mode"] = os.getenv("WEB_AUTH_MODE", "basic").strip().lower()
 # --- Login page route (for WebAuthn mode) ---
 @app.get("/login", tags=["Auth"], include_in_schema=False)
 def login_page(request: Request):
-    return templates_login.TemplateResponse("login.html", {"request": request})
+    return templates_login.TemplateResponse(request, "login.html")
 
 @app.get("/logout", tags=["Auth"], include_in_schema=False)
 def logout(request: Request):
@@ -46,7 +49,22 @@ def logout(request: Request):
 
 @app.get("/register-key", tags=["Auth"], include_in_schema=False)
 def register_key_page(request: Request):
-    return templates_login.TemplateResponse("register_key.html", {"request": request})
+    return templates_login.TemplateResponse(request, "register_key.html")
+
+# --- Basic Auth UI (optional nicer flow) ---
+@app.get("/basic-login", tags=["Auth"], include_in_schema=False)
+def basic_login_page(request: Request):
+    return templates_login.TemplateResponse(request, "basic_login.html")
+
+@app.post("/basic-login", tags=["Auth"], include_in_schema=False)
+async def basic_login_submit(request: Request, username: str = Form(...), password: str = Form(...)):
+    env_user = os.environ.get("WEB_BASIC_AUTH_USER", "")
+    env_pass = os.environ.get("WEB_BASIC_AUTH_PASSWORD", "")
+    if secrets.compare_digest(username, env_user) and secrets.compare_digest(password, env_pass):
+        request.session["admin"] = True
+        return Response(status_code=303, headers={"Location": "/"})
+    # invalid credentials -> show form with error
+    return templates_login.TemplateResponse(request, "basic_login.html", {"error": "Неверные логин или пароль"})
 
 
 # --- Sessions ---
@@ -83,9 +101,8 @@ def basic_auth_dependency(credentials: HTTPBasicCredentials = Depends(security))
 auth_user = os.environ.get("WEB_BASIC_AUTH_USER")
 auth_pass = os.environ.get("WEB_BASIC_AUTH_PASSWORD")
 auth_dependency = [Depends(basic_auth_dependency)]
-auth_mode = os.getenv("WEB_AUTH_MODE", "basic").strip().lower()
 
-if auth_mode == "basic" and auth_user and auth_pass:
+if os.getenv("WEB_AUTH_MODE", "basic").strip().lower() == "basic" and auth_user and auth_pass:
     app.include_router(routes_articles.router, tags=["Frontend"], dependencies=auth_dependency)
     app.include_router(routes_duplicates.router, tags=["Frontend"], dependencies=auth_dependency)
     app.include_router(routes_dlq.router, tags=["Frontend"], dependencies=auth_dependency)
@@ -118,7 +135,7 @@ async def auth_middleware(request: Request, call_next):
     """Enforce either API key, WebAuthn session or Basic Auth.
     Allows public access to /healthz, /metrics, /static, /favicon.ico, /webauthn, /login.
     """
-    public_prefixes = ("/healthz", "/metrics", "/static", "/favicon.ico", "/webauthn")
+    public_prefixes = ("/healthz", "/metrics", "/static", "/favicon.ico", "/webauthn", "/login", "/register-key", "/basic-login")
     path = request.url.path
 
     # Skip auth for public endpoints
@@ -147,17 +164,21 @@ async def auth_middleware(request: Request, call_next):
     env_user = os.environ.get("WEB_BASIC_AUTH_USER")
     env_pass = os.environ.get("WEB_BASIC_AUTH_PASSWORD")
 
-    # If WEB_AUTH_MODE=webauthn — require session for frontend pages
-    if os.getenv("WEB_AUTH_MODE", "basic").strip().lower() == "webauthn":
-        # API enforcement handled above; here protect the rest of the app except public
-        if not request.session.get("admin"):
-            # redirect to login page
-            return Response(status_code=303, headers={"Location": "/login"})
+    # Determine WebAuthn enforcement state once per request
+    mode = os.getenv("WEB_AUTH_MODE", "basic").strip().lower()
+    webauthn_enforce = os.getenv("WEB_WEBAUTHN_ENFORCE", "false").lower() == "true"
+    webauthn_enabled = (mode == "webauthn") and webauthn_enforce
 
-    # Otherwise, if Basic Auth credentials are configured, require Authorization header
-    if os.getenv("WEB_AUTH_MODE", "basic").strip().lower() == "basic" and env_user and env_pass:
+    # If session already marked admin (from UI login), let request pass
+    session_data = request.scope.get("session")
+    if isinstance(session_data, dict) and session_data.get("admin"):
+        return await call_next(request)
+
+    # If basic credentials configured and WebAuthn is NOT enforced, require Basic Auth
+    if env_user and env_pass and not webauthn_enabled:
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Basic "):
+            # If user used UI login but header missing, redirect to UI login
             return Response(status_code=401, headers={"WWW-Authenticate": "Basic"})
         try:
             raw = base64.b64decode(auth_header.split(" ", 1)[1]).decode("utf-8")
@@ -167,6 +188,17 @@ async def auth_middleware(request: Request, call_next):
 
         if not (secrets.compare_digest(username, env_user) and secrets.compare_digest(password, env_pass)):
             return Response(status_code=401, headers={"WWW-Authenticate": "Basic"})
+    if webauthn_enabled:
+        # API enforcement handled above; here protect the rest of the app except public
+        # Be defensive in case SessionMiddleware is not present yet (e.g., during tests or misconfiguration)
+        session_data = request.scope.get("session")
+        is_admin = False
+        if isinstance(session_data, dict):
+            is_admin = bool(session_data.get("admin"))
+        # No session or not admin -> redirect to login
+        if not is_admin:
+            return Response(status_code=303, headers={"Location": "/login"})
+
 
     return await call_next(request)
 @app.middleware("http")
@@ -186,6 +218,16 @@ async def add_process_time_header(request: Request, call_next):
         response = await call_next(request)
         REQUEST_COUNT.labels(request.method, request.url.path, response.status_code).inc()
     return response
+
+# --- Startup ---
+@app.on_event("startup")
+async def _startup_init_db():
+    # Ensure SQLite schema (including webauthn_credential) exists for web app
+    try:
+        init_db()
+    except Exception:
+        # Avoid crashing on startup; errors will surface in endpoints/logs
+        pass
 
 # --- Main Entry Point ---
 if __name__ == "__main__":

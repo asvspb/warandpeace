@@ -14,7 +14,9 @@ router = APIRouter()
 templates = Jinja2Templates(directory="src/webapp/templates")
 
 def _require_admin_session(request: Request):
-    if os.getenv("WEB_AUTH_MODE", "basic").strip().lower() == "webauthn":
+    mode = os.getenv("WEB_AUTH_MODE", "basic").strip().lower()
+    webauthn_enforce = os.getenv("WEB_WEBAUTHN_ENFORCE", "false").lower() == "true"
+    if mode == "webauthn" and webauthn_enforce:
         if not request.session.get("admin"):
             # redirect to login page
             return RedirectResponse(url="/login", status_code=303)
