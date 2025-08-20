@@ -1,0 +1,12 @@
+Верните ТОЛЬКО JSON:
+{
+  "articles": number,
+  "signals_detected": number,
+  "alerts": number,
+  "dominant_domains": [string],
+  "highest_risk_signal": {"name": string, "probability": number},
+  "confidence_overall": number
+}
+
+Вход:
+{{ARTICLES_JSONL}}

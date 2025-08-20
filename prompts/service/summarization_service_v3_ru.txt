@@ -1,0 +1,5 @@
+Верните ТОЛЬКО JSON с полями:
+{"title":string,"event_type":string,"domain":string,"signals":[string],"forecast_outcome":string,"forecast_p":number,"horizon_hours":number,"confidence":number,"evidence":[string],"unknown":boolean}
+Ограничения: outcome ∈ ["escalation","de_escalation","status_quo","market_drop","market_rally","other"], 0≤p≤1, 24≤horizon_hours≤720. При нехватке данных — `unknown: true`.
+Вход:
+{{ARTICLE_JSON}}

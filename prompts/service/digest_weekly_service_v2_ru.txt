@@ -1,0 +1,14 @@
+Верните ТОЛЬКО JSON:
+{
+  "risk_register": [
+    {"risk": string, "domain": string, "status": "open|watch|mitigated",
+     "likelihood_14d": number, "impact": "low|medium|high", "owner": string|null,
+     "evidence": [string]}
+  ],
+  "top5_new_risks": [string],
+  "deescalations": [string],
+  "confidence_overall": number
+}
+
+Вход:
+{{ARTICLES_JSONL}}

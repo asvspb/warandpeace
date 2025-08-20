@@ -1,0 +1,19 @@
+Месячный стратегический служебный отчёт. Вывод — ТОЛЬКО JSON.
+- Идентифицируйте структурные сдвиги (policy, military, markets, energy, cyber).
+- Сценарии на 90 дней с калиброванными вероятностями (сумма ≤ 1.0).
+- Укажите ведущие индикаторы для мониторинга.
+
+Структура:
+{
+  "window": {"start": string, "end": string},
+  "structural_shifts": [{"area": string, "description": string, "evidence": [string]}],
+  "scenarios_90d": [
+    {"name": "base|bull|bear|tail", "probability": number, "implications": [string], "watch_indicators": [string]}
+  ],
+  "allocation_hints": [string],
+  "confidence_overall": number,
+  "notes": string
+}
+
+Вход:
+{"ARTICLES": {{ARTICLES_JSONL}}, "LAST_MONTH_SUMMARY": {{LM_SUMMARY_JSON_OR_NULL}}}

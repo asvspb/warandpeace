@@ -16,6 +16,11 @@ from config import (
     LLM_PRIMARY,
     GEMINI_ENABLED,
     MISTRAL_ENABLED,
+    # Service prompts / rotation
+    SERVICE_PROMPTS_ENABLED,
+    SERVICE_SUMMARY_VARIANT,
+    SERVICE_DIGEST_ROTATION,
+    SERVICE_ROTATION_CADENCE,
 )
 
 # Глобальный индекс для перебора ключей
@@ -100,6 +105,110 @@ def _load_prompt_template(filename: str) -> str | None:
     except Exception:
         return None
     return None
+
+
+# --- 2a. Служебные промпты и ротация ---
+def _select_digest_variants_for_now() -> tuple[int, int, int]:
+    """Возвращает кортеж вариантов (daily, weekly, monthly) согласно ротации и времени.
+
+    Стратегия: индекс = номер дня (UTC) по модулю длины последовательности.
+    Поддерживаются только целочисленные варианты 1..3.
+    """
+    import datetime as _dt
+
+    if not SERVICE_DIGEST_ROTATION:
+        return (1, 1, 1)
+
+    now_utc = _dt.datetime.utcnow()
+    # Каденс может быть 'daily' или 'hourly' в будущем; пока используем daily
+    if SERVICE_ROTATION_CADENCE == "hourly":
+        idx_basis = now_utc.year * 10000 + now_utc.timetuple().tm_yday * 24 + now_utc.hour
+    else:
+        idx_basis = now_utc.year * 1000 + now_utc.timetuple().tm_yday
+    index = idx_basis % len(SERVICE_DIGEST_ROTATION)
+    return SERVICE_DIGEST_ROTATION[index]
+
+
+def _load_service_template(path_in_prompts: str) -> str | None:
+    """Загружает шаблон из подпапки service (относительно PROMPTS_DIR)."""
+    return _load_prompt_template(path_in_prompts)
+
+
+def create_service_summarization_prompt(article_json: str, variant: int | None = None) -> str:
+    """Создаёт служебный промпт (строгий JSON) для суммаризации одной статьи.
+
+    article_json — строка с JSON статьи. variant ∈ {1,2,3}.
+    """
+    use_variant = int(variant or SERVICE_SUMMARY_VARIANT or 1)
+    use_variant = 1 if use_variant not in (1, 2, 3) else use_variant
+    filename = f"service/summarization_service_v{use_variant}_ru.txt"
+    template = _load_service_template(filename)
+    if template:
+        return template.replace("{{ARTICLE_JSON}}", article_json)
+    # Фолбэк: минимальный жёсткий JSON-промпт
+    return (
+        "Вы — аналитик WP Pulse. Верните ТОЛЬКО валидный JSON по схеме из служебного мануала.\n\n"
+        "Вход:\n" + article_json
+    )
+
+
+def create_service_digest_prompt(
+    articles_jsonl: str,
+    period_name: str,
+    previous_summary_json: str | None = None,
+    variant: int | None = None,
+) -> str:
+    """Создаёт служебный промпт для дайджеста (суточный/недельный/месячный).
+
+    period_name: строка, содержащая daily/weekly/monthly или русские аналоги.
+    previous_summary_json: JSON предыдущего окна (для дельт), если применимо.
+    variant: принудительный вариант шаблона 1..3 (иначе берётся из ротации).
+    """
+    lower = period_name.lower()
+    is_daily = any(k in lower for k in ["вчера", "сут", "day", "daily"])
+    is_weekly = any(k in lower for k in ["недел", "week", "weekly"])
+    is_monthly = any(k in lower for k in ["месяц", "month", "monthly"])
+
+    if not (is_daily or is_weekly or is_monthly):
+        # по умолчанию — daily
+        is_daily = True
+
+    if variant is None:
+        daily_v, weekly_v, monthly_v = _select_digest_variants_for_now()
+        chosen_variant = daily_v if is_daily else weekly_v if is_weekly else monthly_v
+    else:
+        chosen_variant = int(variant)
+        chosen_variant = 1 if chosen_variant not in (1, 2, 3) else chosen_variant
+
+    if is_daily:
+        filename = f"service/digest_daily_service_v{chosen_variant}_ru.txt"
+    elif is_weekly:
+        filename = f"service/digest_weekly_service_v{chosen_variant}_ru.txt"
+    else:
+        filename = f"service/digest_monthly_service_v{chosen_variant}_ru.txt"
+
+    template = _load_service_template(filename)
+
+    # Подстановка плейсхолдеров
+    if template:
+        prompt = template.replace("{{ARTICLES_JSONL}}", articles_jsonl)
+        if previous_summary_json is not None:
+            prompt = prompt.replace("{{Y_SUMMARY_JSON_OR_NULL}}", previous_summary_json)
+            prompt = prompt.replace("{{LW_SUMMARY_JSON_OR_NULL}}", previous_summary_json)
+            prompt = prompt.replace("{{LM_SUMMARY_JSON_OR_NULL}}", previous_summary_json)
+        else:
+            prompt = prompt.replace("{{Y_SUMMARY_JSON_OR_NULL}}", "null")
+            prompt = prompt.replace("{{LW_SUMMARY_JSON_OR_NULL}}", "null")
+            prompt = prompt.replace("{{LM_SUMMARY_JSON_OR_NULL}}", "null")
+        return prompt
+
+    # Фолбэк: минимальный JSON-ориентированный промпт
+    return (
+        "Сформируйте служебный JSON-дайджест WP Pulse. Верните ТОЛЬКО JSON.\n\n"
+        f"Период: {period_name}\n"
+        "Входные статьи (JSON Lines):\n" + articles_jsonl + "\n"
+        "Предыдущий сводный JSON:\n" + (previous_summary_json or "null")
+    )
 
 
 def create_summarization_prompt(full_text: str) -> str:
