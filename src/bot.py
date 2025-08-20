@@ -45,7 +45,6 @@ from summarizer import (
     create_digest,
     create_annual_digest,
     summarize_with_mistral,
-    create_service_summarization_prompt,
     generate_service_summary,
 )
 from notifications import notify_admin

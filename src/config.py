@@ -80,38 +80,9 @@ MISSING_TG_VARS = not all([TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID, TELEGRAM_ADM
 MISSING_GOOGLE_KEYS = not bool(GOOGLE_API_KEYS)
 
 
-# --- Служебные промпты и ротация ---
-# Флаг включения служебных промптов (JSON-строгих шаблонов)
+# --- Служебные промпты (без ротации) ---
+# Флаг включения служебных промптов (JSON-строгих шаблонов). Используются фиксированные шаблоны v1.
 SERVICE_PROMPTS_ENABLED = os.getenv("SERVICE_PROMPTS_ENABLED", "true").strip().lower() in {"1", "true", "yes"}
-
-# Вариант служебного промпта для единичной статьи (1..3)
-try:
-    SERVICE_SUMMARY_VARIANT = int(os.getenv("SERVICE_SUMMARY_VARIANT", "1"))
-except Exception:
-    SERVICE_SUMMARY_VARIANT = 1
-if SERVICE_SUMMARY_VARIANT not in (1, 2, 3):
-    SERVICE_SUMMARY_VARIANT = 1
-
-# Ротация вариантов для дайджестов. Формат: CSV троек через точку с запятой.
-# Пример: "1-1-1;1-1-2;1-2-2;2-2-2" означает последовательность:
-# (daily=1, weekly=1, monthly=1) → (1,1,2) → (1,2,2) → (2,2,2) → ...
-_rotation_raw = os.getenv("SERVICE_DIGEST_ROTATION", "1-1-1;1-1-2;1-2-2;2-2-2").strip()
-_rotation_seq: list[tuple[int, int, int]] = []
-for chunk in [c for c in _rotation_raw.split(";") if c.strip()]:
-    try:
-        a, b, c = [int(x) for x in chunk.split("-")]
-        a = a if a in (1, 2, 3) else 1
-        b = b if b in (1, 2, 3) else 1
-        c = c if c in (1, 2, 3) else 1
-        _rotation_seq.append((a, b, c))
-    except Exception:
-        continue
-if not _rotation_seq:
-    _rotation_seq = [(1, 1, 1)]
-SERVICE_DIGEST_ROTATION = _rotation_seq
-
-# Каденс ротации: daily|hourly (пока поддержан daily по умолчанию)
-SERVICE_ROTATION_CADENCE = os.getenv("SERVICE_ROTATION_CADENCE", "daily").strip().lower()
 
 # --- Telegram канал для служебных прогнозов ---
 SERVICE_TG_ENABLED = os.getenv("SERVICE_TG_ENABLED", "false").strip().lower() in {"1", "true", "yes"}

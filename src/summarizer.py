@@ -16,11 +16,8 @@ from config import (
     LLM_PRIMARY,
     GEMINI_ENABLED,
     MISTRAL_ENABLED,
-    # Service prompts / rotation
+    # Service prompts
     SERVICE_PROMPTS_ENABLED,
-    SERVICE_SUMMARY_VARIANT,
-    SERVICE_DIGEST_ROTATION,
-    SERVICE_ROTATION_CADENCE,
 )
 
 # Глобальный индекс для перебора ключей
@@ -107,41 +104,14 @@ def _load_prompt_template(filename: str) -> str | None:
     return None
 
 
-# --- 2a. Служебные промпты и ротация ---
-def _select_digest_variants_for_now() -> tuple[int, int, int]:
-    """Возвращает кортеж вариантов (daily, weekly, monthly) согласно ротации и времени.
-
-    Стратегия: индекс = номер дня (UTC) по модулю длины последовательности.
-    Поддерживаются только целочисленные варианты 1..3.
-    """
-    import datetime as _dt
-
-    if not SERVICE_DIGEST_ROTATION:
-        return (1, 1, 1)
-
-    now_utc = _dt.datetime.utcnow()
-    # Каденс может быть 'daily' или 'hourly' в будущем; пока используем daily
-    if SERVICE_ROTATION_CADENCE == "hourly":
-        idx_basis = now_utc.year * 10000 + now_utc.timetuple().tm_yday * 24 + now_utc.hour
-    else:
-        idx_basis = now_utc.year * 1000 + now_utc.timetuple().tm_yday
-    index = idx_basis % len(SERVICE_DIGEST_ROTATION)
-    return SERVICE_DIGEST_ROTATION[index]
-
-
 def _load_service_template(path_in_prompts: str) -> str | None:
     """Загружает шаблон из подпапки service (относительно PROMPTS_DIR)."""
     return _load_prompt_template(path_in_prompts)
 
 
-def create_service_summarization_prompt(article_json: str, variant: int | None = None) -> str:
-    """Создаёт служебный промпт (строгий JSON) для суммаризации одной статьи.
-
-    article_json — строка с JSON статьи. variant ∈ {1,2,3}.
-    """
-    use_variant = int(variant or SERVICE_SUMMARY_VARIANT or 1)
-    use_variant = 1 if use_variant not in (1, 2, 3) else use_variant
-    filename = f"service/summarization_service_v{use_variant}_ru.txt"
+def create_service_summarization_prompt(article_json: str) -> str:
+    """Создаёт служебный промпт (строгий JSON) для суммаризации одной статьи (фиксированный v1)."""
+    filename = "service/summarization_service_v1_ru.txt"
     template = _load_service_template(filename)
     if template:
         return template.replace("{{ARTICLE_JSON}}", article_json)
@@ -156,13 +126,11 @@ def create_service_digest_prompt(
     articles_jsonl: str,
     period_name: str,
     previous_summary_json: str | None = None,
-    variant: int | None = None,
 ) -> str:
     """Создаёт служебный промпт для дайджеста (суточный/недельный/месячный).
 
     period_name: строка, содержащая daily/weekly/monthly или русские аналоги.
     previous_summary_json: JSON предыдущего окна (для дельт), если применимо.
-    variant: принудительный вариант шаблона 1..3 (иначе берётся из ротации).
     """
     lower = period_name.lower()
     is_daily = any(k in lower for k in ["вчера", "сут", "day", "daily"])
@@ -173,19 +141,12 @@ def create_service_digest_prompt(
         # по умолчанию — daily
         is_daily = True
 
-    if variant is None:
-        daily_v, weekly_v, monthly_v = _select_digest_variants_for_now()
-        chosen_variant = daily_v if is_daily else weekly_v if is_weekly else monthly_v
-    else:
-        chosen_variant = int(variant)
-        chosen_variant = 1 if chosen_variant not in (1, 2, 3) else chosen_variant
-
     if is_daily:
-        filename = f"service/digest_daily_service_v{chosen_variant}_ru.txt"
+        filename = "service/digest_daily_service_v1_ru.txt"
     elif is_weekly:
-        filename = f"service/digest_weekly_service_v{chosen_variant}_ru.txt"
+        filename = "service/digest_weekly_service_v1_ru.txt"
     else:
-        filename = f"service/digest_monthly_service_v{chosen_variant}_ru.txt"
+        filename = "service/digest_monthly_service_v1_ru.txt"
 
     template = _load_service_template(filename)
 
@@ -212,9 +173,9 @@ def create_service_digest_prompt(
 
 
 # --- 2b. Публичные генераторы служебного вывода ---
-def generate_service_summary(article_json: str, variant: int | None = None) -> str | None:
+def generate_service_summary(article_json: str) -> str | None:
     """Генерирует служебный JSON-резюме одной статьи, возвращает сырой текст (ожидаемый JSON)."""
-    prompt = create_service_summarization_prompt(article_json, variant=variant)
+    prompt = create_service_summarization_prompt(article_json)
     try:
         return _make_gemini_request(prompt)
     except RetryError as e:
@@ -226,14 +187,12 @@ def generate_service_digest(
     articles_jsonl: str,
     period_name: str,
     previous_summary_json: str | None = None,
-    variant: int | None = None,
 ) -> str | None:
     """Генерирует служебный JSON-дайджест для периода."""
     prompt = create_service_digest_prompt(
         articles_jsonl=articles_jsonl,
         period_name=period_name,
         previous_summary_json=previous_summary_json,
-        variant=variant,
     )
     try:
         return _make_gemini_request(prompt)
