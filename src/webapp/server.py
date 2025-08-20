@@ -32,6 +32,17 @@ app = FastAPI(
 )
 
 app.mount("/static", StaticFiles(directory="src/webapp/static"), name="static")
+# --- Login page route (for WebAuthn mode) ---
+@app.get("/login", tags=["Auth"], include_in_schema=False)
+def login_page():
+    # Serve static template (Jinja will be used from articles router if needed)
+    from fastapi.responses import HTMLResponse
+    try:
+        with open("src/webapp/templates/login.html", "r", encoding="utf-8") as f:
+            return HTMLResponse(f.read())
+    except Exception:
+        return HTMLResponse("<h1>Login</h1>")
+
 
 # --- Sessions ---
 # Enable session middleware for future WebAuthn-based admin auth
@@ -67,8 +78,9 @@ def basic_auth_dependency(credentials: HTTPBasicCredentials = Depends(security))
 auth_user = os.environ.get("WEB_BASIC_AUTH_USER")
 auth_pass = os.environ.get("WEB_BASIC_AUTH_PASSWORD")
 auth_dependency = [Depends(basic_auth_dependency)]
+auth_mode = os.getenv("WEB_AUTH_MODE", "basic").strip().lower()
 
-if auth_user and auth_pass:
+if auth_mode == "basic" and auth_user and auth_pass:
     app.include_router(routes_articles.router, tags=["Frontend"], dependencies=auth_dependency)
     app.include_router(routes_duplicates.router, tags=["Frontend"], dependencies=auth_dependency)
     app.include_router(routes_dlq.router, tags=["Frontend"], dependencies=auth_dependency)
@@ -97,9 +109,9 @@ app.mount("/metrics", metrics_app)
 
 # --- Middlewares ---
 @app.middleware("http")
-async def basic_auth_middleware(request: Request, call_next):
-    """Enforce Basic Auth at request time when credentials are set via env.
-    Allows public access to /healthz, /metrics, /static, /favicon.ico.
+async def auth_middleware(request: Request, call_next):
+    """Enforce either API key, WebAuthn session or Basic Auth.
+    Allows public access to /healthz, /metrics, /static, /favicon.ico, /webauthn, /login.
     """
     public_prefixes = ("/healthz", "/metrics", "/static", "/favicon.ico", "/webauthn")
     path = request.url.path
@@ -130,8 +142,15 @@ async def basic_auth_middleware(request: Request, call_next):
     env_user = os.environ.get("WEB_BASIC_AUTH_USER")
     env_pass = os.environ.get("WEB_BASIC_AUTH_PASSWORD")
 
-    # If credentials are configured, require Authorization header
-    if env_user and env_pass:
+    # If WEB_AUTH_MODE=webauthn — require session for frontend pages
+    if os.getenv("WEB_AUTH_MODE", "basic").strip().lower() == "webauthn":
+        # API enforcement handled above; here protect the rest of the app except public
+        if not request.session.get("admin"):
+            # redirect to login page
+            return Response(status_code=303, headers={"Location": "/login"})
+
+    # Otherwise, if Basic Auth credentials are configured, require Authorization header
+    if os.getenv("WEB_AUTH_MODE", "basic").strip().lower() == "basic" and env_user and env_pass:
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Basic "):
             return Response(status_code=401, headers={"WWW-Authenticate": "Basic"})

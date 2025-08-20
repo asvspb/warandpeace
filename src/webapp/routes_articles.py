@@ -1,4 +1,5 @@
 
+import os
 from fastapi import APIRouter, Request, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -7,13 +8,24 @@ from datetime import datetime, date
 import math
 
 from src.webapp import services
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 router = APIRouter()
 templates = Jinja2Templates(directory="src/webapp/templates")
 
+def _require_admin_session(request: Request):
+    if os.getenv("WEB_AUTH_MODE", "basic").strip().lower() == "webauthn":
+        if not request.session.get("admin"):
+            # redirect to login page
+            return RedirectResponse(url="/login", status_code=303)
+    return None
+
 @router.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
     """Renders the main dashboard page with calendar of current month."""
+    redir = _require_admin_session(request)
+    if redir:
+        return redir
     stats = services.get_dashboard_stats()
     today = date.today()
     calendar_data = services.get_month_calendar_data(today.year, today.month)
@@ -26,6 +38,9 @@ async def list_articles(
     month: Optional[int] = None,
 ):
     """Replaced: render calendar view instead of list."""
+    redir = _require_admin_session(request)
+    if redir:
+        return redir
     today = date.today()
     y = year or today.year
     m = month or today.month
@@ -36,6 +51,9 @@ async def list_articles(
 @router.get("/calendar", response_class=HTMLResponse)
 async def calendar_view(request: Request, year: Optional[int] = None, month: Optional[int] = None):
     """Renders the calendar view for a given month (defaults to current)."""
+    redir = _require_admin_session(request)
+    if redir:
+        return redir
     today = date.today()
     y = year or today.year
     m = month or today.month
@@ -46,6 +64,9 @@ async def calendar_view(request: Request, year: Optional[int] = None, month: Opt
 @router.get("/day/{day_iso}", response_class=HTMLResponse)
 async def daily_feed(request: Request, day_iso: str):
     """Renders the daily news feed for a given date (YYYY-MM-DD)."""
+    redir = _require_admin_session(request)
+    if redir:
+        return redir
     articles = services.get_daily_articles(day_iso)
     return templates.TemplateResponse("daily_feed.html", {"request": request, "day": day_iso, "articles": articles})
 
@@ -55,6 +76,9 @@ async def read_article(
     article_id: int
 ):
     """Renders the detail page for a single article."""
+    redir = _require_admin_session(request)
+    if redir:
+        return redir
     article = services.get_article_by_id(article_id)
     if not article:
         raise HTTPException(status_code=404, detail="Article not found")
