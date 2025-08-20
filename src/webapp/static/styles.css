@@ -158,6 +158,111 @@ button:hover, .btn:hover {
     padding: 20px 0;
 }
 
+/* Calendar */
+.calendar {
+    width: 100%;
+}
+.calendar-header {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+    color: var(--muted);
+    font-weight: 600;
+}
+.calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 8px;
+}
+.calendar-day {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 8px;
+    min-height: 80px;
+}
+.calendar-day .day-number {
+    display: inline-block;
+    font-weight: 600;
+    color: inherit;
+}
+.calendar-day.out-of-month {
+    opacity: 0.5;
+}
+.week-summary {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 8px;
+    min-height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+}
+
+/* Status indicator and tooltip */
+.indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+    border: 1px solid var(--border);
+}
+.indicator.success {
+    background: #0a7a2d;
+    border-color: #0a7a2d33;
+}
+.indicator.muted {
+    background: #9CA3AF; /* gray */
+}
+
+.tooltip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: default;
+}
+.tooltip .tooltiptext {
+    visibility: hidden;
+    opacity: 0;
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--fg);
+    color: var(--bg);
+    border: 1px solid var(--border);
+    padding: 6px 10px;
+    border-radius: 8px;
+    white-space: nowrap;
+    box-shadow: var(--shadow);
+    transition: opacity 0.15s ease, visibility 0.15s ease;
+    z-index: 2;
+    font-size: 12px;
+}
+.tooltip:hover .tooltiptext {
+    visibility: visible;
+    opacity: 1;
+}
+.badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    border: 1px solid var(--border);
+}
+.badge.success {
+    color: #0a7a2d;
+    border-color: #0a7a2d33;
+    background: #0a7a2d11;
+}
+.status.success {
+    color: #0a7a2d;
+}
+
 pre {
     background: #f4f4f4;
     border: 1px solid var(--border);
