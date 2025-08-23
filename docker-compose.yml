@@ -1,6 +1,10 @@
-version: '3.8'
-
 services:
+  redis:
+    image: redis:7-alpine
+    container_name: wp-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
   wg-client:
     image: linuxserver/wireguard:latest
     container_name: wg-client
@@ -43,12 +47,14 @@ services:
       - TZ=${TZ:-Europe/Moscow}
       - METRICS_ENABLED=${METRICS_ENABLED:-true}
       - METRICS_PORT=${METRICS_PORT:-8000}
+      - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
     volumes:
       - ./database:/app/database
       - ./backups:/var/backups/warandpeace
     restart: unless-stopped
     depends_on: # Примечание: в Compose v3 это не ждет healthcheck, только запускает контейнеры в нужном порядке.
       - wg-client
+      - redis
 
   watchdog:
     image: docker:cli
@@ -76,12 +82,16 @@ services:
       - TZ=${TZ:-Europe/Moscow}
       - WEB_ENABLED=true
       - WEB_PORT=8080
+      # Point web dashboard to bot's Prometheus endpoint
+      # The bot shares network namespace with wg-client, exposing metrics on port 8000 there
+      - METRICS_SCRAPE_URL=${METRICS_SCRAPE_URL:-http://wg-client:8000}
       - WEB_AUTH_MODE=${WEB_AUTH_MODE:-basic}
       - WEB_RP_ID=${WEB_RP_ID}
       - WEB_RP_NAME=${WEB_RP_NAME}
       - WEB_SESSION_SECRET=${WEB_SESSION_SECRET}
       - WEB_API_ENABLED=${WEB_API_ENABLED:-false}
       - WEB_API_KEY=${WEB_API_KEY}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
     volumes:
       - ./database:/app/database
     ports:
@@ -107,6 +117,7 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
     depends_on:
       - web
+      - redis
 
   cron:
     build: .

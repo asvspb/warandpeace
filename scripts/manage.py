@@ -9,6 +9,10 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(script_dir)
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
+# Ensure `src` is directly importable for bare imports like `import metrics`
+src_dir = os.path.join(project_root, "src")
+if src_dir not in sys.path:
+    sys.path.insert(0, src_dir)
 
 # --- Импорты ---
 # Все импорты размещены здесь, после модификации пути,
@@ -36,7 +40,7 @@ from src.parser import get_article_text, get_articles_from_page  # noqa: E402
 from src.async_parser import fetch_articles_for_date  # noqa: E402
 from src.summarizer import summarize_text_local as summarize  # noqa: E402
 from src.url_utils import canonicalize_url  # noqa: E402
-from src.metrics import (
+from metrics import (
     ARTICLES_INGESTED,
     ERRORS_TOTAL,
     DLQ_SIZE,

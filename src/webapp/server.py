@@ -12,6 +12,10 @@ from prometheus_client import make_asgi_app, Counter, Histogram, CollectorRegist
 import uvicorn
 
 from src.webapp import routes_articles, routes_duplicates, routes_dlq, routes_api, routes_webauthn
+try:
+    import redis  # type: ignore
+except Exception:  # pragma: no cover
+    redis = None  # type: ignore
 from src.database import init_db
 
 # --- Metrics ---
@@ -36,6 +40,8 @@ app = FastAPI(
 
 app.mount("/static", StaticFiles(directory="src/webapp/static"), name="static")
 templates_login = Jinja2Templates(directory="src/webapp/templates")
+# Expose Redis availability to templates (diagnostics)
+templates_login.env.globals["redis_enabled"] = True if os.getenv("REDIS_URL") else False
 # Capture baseline env for tests to detect runtime overrides
 _BASELINE_BASIC_USER = os.environ.get("WEB_BASIC_AUTH_USER")
 _BASELINE_BASIC_PASS = os.environ.get("WEB_BASIC_AUTH_PASSWORD")
@@ -203,7 +209,8 @@ async def auth_middleware(request: Request, call_next):
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
-    response.headers["Content-Security-Policy"] = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'"
+    # Permit our own static JS and inline styles; disallow inline scripts
+    response.headers["Content-Security-Policy"] = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["X-Content-Type-Options"] = "nosniff"
@@ -220,6 +227,14 @@ async def add_process_time_header(request: Request, call_next):
 
 # --- Server-Sent Events (SSE) for UI live updates ---
 _SSE_SUBSCRIBERS = set()
+
+# --- Redis pub/sub bridge for cross-process events ---
+_redis_client = None
+if os.getenv("REDIS_URL") and redis is not None:
+    try:
+        _redis_client = redis.Redis.from_url(os.getenv("REDIS_URL"), decode_responses=True)
+    except Exception:
+        _redis_client = None
 
 @app.get("/events")
 async def sse_events(request: Request):  # type: ignore[override]
@@ -246,6 +261,12 @@ def _sse_broadcast(obj: dict) -> None:
     """Enqueue an object to all subscribers as JSON."""
     import json
     if not _SSE_SUBSCRIBERS:
+        # Still publish to Redis so late subscribers in other workers get it
+        try:
+            if _redis_client:
+                _redis_client.publish("wp:events", json.dumps(obj, ensure_ascii=False))
+        except Exception:
+            pass
         return
     data = json.dumps(obj, ensure_ascii=False)
     for q in list(_SSE_SUBSCRIBERS):
@@ -253,6 +274,31 @@ def _sse_broadcast(obj: dict) -> None:
             q.put_nowait(data)
         except Exception:
             pass
+
+def _spawn_redis_listener():
+    import threading, json
+    if not _redis_client:
+        return
+    def _worker():
+        try:
+            pubsub = _redis_client.pubsub()
+            pubsub.subscribe("wp:events")
+            for msg in pubsub.listen():
+                if msg.get("type") != "message":
+                    continue
+                data = msg.get("data")
+                if not data:
+                    continue
+                # fan-out to in-memory subscribers
+                for q in list(_SSE_SUBSCRIBERS):
+                    try:
+                        q.put_nowait(data)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+    t = threading.Thread(target=_worker, name="redis-events-listener", daemon=True)
+    t.start()
 
 # --- Startup ---
 @app.on_event("startup")
@@ -262,6 +308,11 @@ async def _startup_init_db():
         init_db()
     except Exception:
         # Avoid crashing on startup; errors will surface in endpoints/logs
+        pass
+    # Start Redis listener thread (if configured)
+    try:
+        _spawn_redis_listener()
+    except Exception:
         pass
 
 # --- Main Entry Point ---

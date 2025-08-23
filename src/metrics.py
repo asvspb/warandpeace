@@ -99,6 +99,13 @@ TOKENS_CONSUMED_COMPLETION_BY_KEY_TOTAL = Counter(
     labelnames=("provider", "key_id"),
 )
 
+# Per-key request counter (how many LLM requests were made)
+LLM_REQUESTS_BY_KEY_TOTAL = Counter(
+    "llm_requests_by_key_total",
+    "Total number of LLM requests per API key",
+    labelnames=("provider", "key_id"),
+)
+
 # Время старта сессии (устанавливается один раз при загрузке приложения)
 SESSION_START_TIME_SECONDS = Gauge(
     "session_start_time_seconds", "Process session start time in seconds since UNIX epoch"

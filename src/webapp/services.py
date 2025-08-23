@@ -268,41 +268,69 @@ def get_session_stats() -> Dict[str, Any]:
 
         # Temporary aggregation for per-key
         per_key: Dict[tuple[str, str], Dict[str, int]] = {}
+        families: Dict[str, Any] = {}
+        import math
+        def _safe_int(v: Any) -> int:
+            try:
+                f = float(v)
+                if not math.isfinite(f):
+                    return 0
+                return int(f)
+            except Exception:
+                return 0
 
         for metric in _iter_metrics():
             name = getattr(metric, "name", "")
-            if name == "external_http_requests_total":
-                stats["external_http_requests"] = int(sum(sample.value for sample in metric.samples))
-            elif name == "session_articles_processed_total":
-                stats["articles_processed"] = int(sum(sample.value for sample in metric.samples))
-            elif name == "tokens_consumed_prompt_total":
-                stats["tokens_prompt"] = int(sum(sample.value for sample in metric.samples))
-            elif name == "tokens_consumed_completion_total":
-                stats["tokens_completion"] = int(sum(sample.value for sample in metric.samples))
-            elif name == "tokens_consumed_prompt_by_key_total":
-                for sample in metric.samples:
-                    labels = getattr(sample, "labels", {}) or {}
-                    provider = labels.get("provider") or ""
-                    key_id = labels.get("key_id") or ""
-                    k = (provider, key_id)
-                    if provider and key_id:
-                        bucket = per_key.setdefault(k, {"prompt": 0, "completion": 0})
-                        bucket["prompt"] += int(sample.value)
-            elif name == "tokens_consumed_completion_by_key_total":
-                for sample in metric.samples:
-                    labels = getattr(sample, "labels", {}) or {}
-                    provider = labels.get("provider") or ""
-                    key_id = labels.get("key_id") or ""
-                    k = (provider, key_id)
-                    if provider and key_id:
-                        bucket = per_key.setdefault(k, {"prompt": 0, "completion": 0})
-                        bucket["completion"] += int(sample.value)
+            families[name] = metric
+            if name == "external_http_requests":
+                # Sum over all label combinations
+                stats["external_http_requests"] = int(sum(_safe_int(sample.value) for sample in metric.samples))
+            elif name == "session_articles_processed":
+                stats["articles_processed"] = int(sum(_safe_int(sample.value) for sample in metric.samples))
+            elif name == "tokens_consumed_prompt":
+                stats["tokens_prompt"] = int(sum(_safe_int(sample.value) for sample in metric.samples))
+            elif name == "tokens_consumed_completion":
+                stats["tokens_completion"] = int(sum(_safe_int(sample.value) for sample in metric.samples))
+            # per-key aggregation handled after the loop
             elif name == "session_start_time_seconds":
                 samples = list(metric.samples)
                 if samples:
                     session_start = float(samples[-1].value)
-                    stats["session_start"] = datetime.fromtimestamp(session_start).isoformat()
+                    # Match bot logs date format: "%d-%m.%y - [%H:%M]"
+                    dt_local = datetime.fromtimestamp(session_start)
+                    stats["session_start"] = dt_local.strftime("%d-%m.%y - [%H:%M]")
                     stats["uptime_seconds"] = int(max(0, time.time() - session_start))
+
+        # Second pass: per-key metrics including request counts
+        if families.get("tokens_consumed_prompt_by_key"):
+            for sample in families["tokens_consumed_prompt_by_key"].samples:
+                labels = getattr(sample, "labels", {}) or {}
+                provider = labels.get("provider") or ""
+                key_id = labels.get("key_id") or ""
+                k = (provider, key_id)
+                if provider and key_id:
+                    bucket = per_key.setdefault(k, {"prompt": 0, "completion": 0, "requests": 0})
+                    bucket["prompt"] += _safe_int(sample.value)
+        if families.get("tokens_consumed_completion_by_key"):
+            for sample in families["tokens_consumed_completion_by_key"].samples:
+                labels = getattr(sample, "labels", {}) or {}
+                provider = labels.get("provider") or ""
+                key_id = labels.get("key_id") or ""
+                k = (provider, key_id)
+                if provider and key_id:
+                    bucket = per_key.setdefault(k, {"prompt": 0, "completion": 0, "requests": 0})
+                    bucket["completion"] += _safe_int(sample.value)
+        # llm_requests_by_key_total counter is optional
+        fam_req = families.get("llm_requests_by_key_total") or families.get("llm_requests_by_key")
+        if fam_req:
+            for sample in fam_req.samples:
+                labels = getattr(sample, "labels", {}) or {}
+                provider = labels.get("provider") or ""
+                key_id = labels.get("key_id") or ""
+                k = (provider, key_id)
+                if provider and key_id:
+                    bucket = per_key.setdefault(k, {"prompt": 0, "completion": 0, "requests": 0})
+                    bucket["requests"] += _safe_int(sample.value)
 
         # Flatten per-key aggregation into a list and sort
         token_keys = []
@@ -312,6 +340,7 @@ def get_session_stats() -> Dict[str, Any]:
                 "key_id": key_id,
                 "prompt": int(vals.get("prompt", 0)),
                 "completion": int(vals.get("completion", 0)),
+                "requests": int(vals.get("requests", 0)),
             })
         token_keys.sort(key=lambda x: (x["provider"], x["key_id"]))
         stats["token_keys"] = token_keys

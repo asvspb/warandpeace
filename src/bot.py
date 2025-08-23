@@ -653,6 +653,7 @@ async def daily_digest_command(update: Update, context: ContextTypes.DEFAULT_TYP
     await send_message_with_retry(bot=context.bot, chat_id=user_id, text="Начинаю подготовку дайджеста за вчерашний день...")
 
     try:
+        logger.info("[DAILY_DIGEST] Старт формирования суточного дайджеста по запросу пользователя id=%s", user_id)
         now = now_msk(APP_TZ)
         yesterday = now - timedelta(days=1)
         start_date = yesterday.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -669,13 +670,16 @@ async def daily_digest_command(update: Update, context: ContextTypes.DEFAULT_TYP
 
         if not summaries:
             await send_message_with_retry(bot=context.bot, chat_id=user_id, text=f"За {yesterday.strftime('%d.%m.%Y')} не найдено статей для создания дайджеста.")
+            logger.info("[DAILY_DIGEST] Нет статей для суточного дайджеста (%s)", yesterday.strftime('%Y-%m-%d'))
             return
 
         period_name = f"вчера, {yesterday.strftime('%d %B %Y')}"
+        logger.info("[DAILY_DIGEST] Начало генерации дайджеста: period='%s', summaries=%d", period_name, len(summaries))
         digest_content = await asyncio.to_thread(create_digest, summaries, period_name)
 
         if not digest_content:
             await send_message_with_retry(bot=context.bot, chat_id=user_id, text="Не удалось создать аналитическую сводку.")
+            logger.warning("[DAILY_DIGEST] Генерация дайджеста не вернула контент")
             return
 
         await asyncio.to_thread(add_digest, f"daily_{yesterday.strftime('%Y-%m-%d')}", digest_content)
@@ -685,6 +689,7 @@ async def daily_digest_command(update: Update, context: ContextTypes.DEFAULT_TYP
             text=f"**Аналитический дайджест за {period_name}:**\n\n{digest_content}",
             parse_mode=ParseMode.MARKDOWN
         )
+        logger.info("[DAILY_DIGEST] Готово: дайджест отправлен, длина=%d символов", len(digest_content or ''))
     except Exception as e:
         logger.error(f"Ошибка при создании суточного дайджеста: {e}", exc_info=True)
         await send_message_with_retry(bot=context.bot, chat_id=user_id, text=f"Произошла ошибка при создании сводки: {e}")
@@ -696,6 +701,7 @@ async def weekly_digest_command(update: Update, context: ContextTypes.DEFAULT_TY
     await send_message_with_retry(bot=context.bot, chat_id=user_id, text="Начинаю подготовку дайджеста за прошлую неделю...")
 
     try:
+        logger.info("[WEEKLY_DIGEST] Старт формирования недельного дайджеста по запросу пользователя id=%s", user_id)
         now = now_msk(APP_TZ)
         last_sunday = now - timedelta(days=now.isoweekday())
         end_of_last_week = last_sunday.replace(hour=23, minute=59, second=59, microsecond=999999)
@@ -712,13 +718,16 @@ async def weekly_digest_command(update: Update, context: ContextTypes.DEFAULT_TY
 
         if not summaries:
             await send_message_with_retry(bot=context.bot, chat_id=user_id, text="За прошлую неделю не найдено статей для создания дайджеста.")
+            logger.info("[WEEKLY_DIGEST] Нет статей для недельного дайджеста (%s - %s)", start_of_last_week.strftime('%Y-%m-%d'), end_of_last_week.strftime('%Y-%m-%d'))
             return
 
         period_name = f"прошлую неделю ({start_of_last_week.strftime('%d.%m')} - {end_of_last_week.strftime('%d.%m.%Y')})"
+        logger.info("[WEEKLY_DIGEST] Начало генерации дайджеста: period='%s', summaries=%d", period_name, len(summaries))
         digest_content = await asyncio.to_thread(create_digest, summaries, period_name)
 
         if not digest_content:
             await send_message_with_retry(bot=context.bot, chat_id=user_id, text="Не удалось создать аналитическую сводку.")
+            logger.warning("[WEEKLY_DIGEST] Генерация дайджеста не вернула контент")
             return
 
         await asyncio.to_thread(add_digest, f"weekly_{start_of_last_week.strftime('%Y-%m-%d')}", digest_content)
@@ -728,6 +737,7 @@ async def weekly_digest_command(update: Update, context: ContextTypes.DEFAULT_TY
             text=f"**Аналитический дайджест за {period_name}:**\n\n{digest_content}",
             parse_mode=ParseMode.MARKDOWN
         )
+        logger.info("[WEEKLY_DIGEST] Готово: дайджест отправлен, длина=%d символов", len(digest_content or ''))
     except Exception as e:
         logger.error(f"Ошибка при создании недельного дайджеста: {e}", exc_info=True)
         await send_message_with_retry(bot=context.bot, chat_id=user_id, text=f"Произошла ошибка при создании сводки: {e}")

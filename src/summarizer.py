@@ -27,6 +27,7 @@ try:
         TOKENS_CONSUMED_COMPLETION_TOTAL,
         TOKENS_CONSUMED_PROMPT_BY_KEY_TOTAL,
         TOKENS_CONSUMED_COMPLETION_BY_KEY_TOTAL,
+        LLM_REQUESTS_BY_KEY_TOTAL,
         EXTERNAL_HTTP_REQUESTS_TOTAL,
         EXTERNAL_HTTP_REQUEST_DURATION_SECONDS,
     )
@@ -42,8 +43,16 @@ except Exception:  # pragma: no cover
     TOKENS_CONSUMED_COMPLETION_TOTAL = _NoopMetric()
     TOKENS_CONSUMED_PROMPT_BY_KEY_TOTAL = _NoopMetric()
     TOKENS_CONSUMED_COMPLETION_BY_KEY_TOTAL = _NoopMetric()
+    LLM_REQUESTS_BY_KEY_TOTAL = _NoopMetric()
     EXTERNAL_HTTP_REQUESTS_TOTAL = _NoopMetric()
     EXTERNAL_HTTP_REQUEST_DURATION_SECONDS = _NoopMetric()
+
+# --- Optional SSE broadcast for web UI updates ---
+try:  # pragma: no cover
+    from src.webapp.server import _sse_broadcast  # type: ignore
+except Exception:  # pragma: no cover
+    def _sse_broadcast(_obj):  # type: ignore
+        return None
 
 # Глобальный индекс для перебора ключей
 current_gemini_key_index = 0
@@ -111,6 +120,40 @@ def _make_gemini_request(prompt: str) -> str | None:
                         TOKENS_CONSUMED_COMPLETION_TOTAL.labels("google", GEMINI_MODEL_NAME).inc(completion_tokens)
                         key_id = f"gemini{current_gemini_key_index + 1}"
                         TOKENS_CONSUMED_COMPLETION_BY_KEY_TOTAL.labels("google", key_id).inc(completion_tokens)
+                    # Ensure per-key series exist even if one of the parts is zero
+                    try:
+                        key_id = f"gemini{current_gemini_key_index + 1}"
+                        if not (isinstance(prompt_tokens, int) and prompt_tokens > 0):
+                            TOKENS_CONSUMED_PROMPT_BY_KEY_TOTAL.labels("google", key_id).inc(0)
+                        if not (isinstance(completion_tokens, int) and completion_tokens > 0):
+                            TOKENS_CONSUMED_COMPLETION_BY_KEY_TOTAL.labels("google", key_id).inc(0)
+                    except Exception:
+                        pass
+                else:
+                    # Usage not provided by provider; register per-key with zero so UI shows the key
+                    try:
+                        key_id = f"gemini{current_gemini_key_index + 1}"
+                        TOKENS_CONSUMED_PROMPT_BY_KEY_TOTAL.labels("google", key_id).inc(0)
+                        TOKENS_CONSUMED_COMPLETION_BY_KEY_TOTAL.labels("google", key_id).inc(0)
+                    except Exception:
+                        pass
+                    # Count request per key
+                    try:
+                        key_id = f"gemini{current_gemini_key_index + 1}"
+                        LLM_REQUESTS_BY_KEY_TOTAL.labels("google", key_id).inc()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            # Always count a successful Gemini request per key
+            try:
+                key_id = f"gemini{current_gemini_key_index + 1}"
+                LLM_REQUESTS_BY_KEY_TOTAL.labels("google", key_id).inc()
+            except Exception:
+                pass
+            # Notify web UI that metrics likely changed
+            try:
+                _sse_broadcast({"type": "metrics_updated"})
             except Exception:
                 pass
             return response.text.strip()
@@ -229,10 +272,25 @@ def create_service_digest_prompt(
 
 # --- 2b. Публичные генераторы служебного вывода ---
 def generate_service_summary(article_json: str) -> str | None:
-    """Генерирует служебный JSON-резюме одной статьи, возвращает сырой текст (ожидаемый JSON)."""
+    """Генерирует служебный JSON-резюме одной статьи, с приоритетом провайдера по LLM_PRIMARY."""
     prompt = create_service_summarization_prompt(article_json)
     try:
-        return _make_gemini_request(prompt)
+        if LLM_PRIMARY == "mistral" and MISTRAL_ENABLED and MISTRAL_API_KEY:
+            # Непосредственный вызов Mistral на сыром промпте
+            out = _mistral_generate_raw_prompt(prompt)
+            try:
+                LLM_REQUESTS_BY_KEY_TOTAL.labels("mistral", "mistral").inc()
+            except Exception:
+                pass
+            return out
+        # По умолчанию Gemini с фолбэком
+        if GEMINI_ENABLED and GOOGLE_API_KEYS:
+            result = _make_gemini_request(prompt)
+            if result:
+                return result
+        if MISTRAL_ENABLED and MISTRAL_API_KEY:
+            return _mistral_generate_raw_prompt(prompt)
+        return None
     except RetryError as e:
         logger.error(f"Не удалось получить служебное резюме: {e}")
         return None
@@ -250,7 +308,25 @@ def generate_service_digest(
         previous_summary_json=previous_summary_json,
     )
     try:
-        return _make_gemini_request(prompt)
+        if LLM_PRIMARY == "mistral" and MISTRAL_ENABLED and MISTRAL_API_KEY:
+            result = _mistral_generate_raw_prompt(prompt)
+            if result:
+                return result
+            if GEMINI_ENABLED and GOOGLE_API_KEYS:
+                return _make_gemini_request(prompt)
+            return None
+        if GEMINI_ENABLED and GOOGLE_API_KEYS:
+            result = _make_gemini_request(prompt)
+            if result:
+                return result
+        if MISTRAL_ENABLED and MISTRAL_API_KEY:
+            res = _mistral_generate_raw_prompt(prompt)
+            try:
+                LLM_REQUESTS_BY_KEY_TOTAL.labels("mistral", "mistral").inc()
+            except Exception:
+                pass
+            return res
+        return None
     except RetryError as e:
         logger.error(f"Не удалось получить служебный дайджест: {e}")
         return None
@@ -381,7 +457,25 @@ def create_digest(summaries: list[str], period_name: str) -> str | None:
     
     prompt = create_digest_prompt(summaries, period_name)
     try:
-        return _make_gemini_request(prompt)
+        if LLM_PRIMARY == "mistral" and MISTRAL_ENABLED and MISTRAL_API_KEY:
+            result = _mistral_generate_raw_prompt(prompt)
+            if result:
+                return result
+            if GEMINI_ENABLED and GOOGLE_API_KEYS:
+                return _make_gemini_request(prompt)
+            return None
+        if GEMINI_ENABLED and GOOGLE_API_KEYS:
+            result = _make_gemini_request(prompt)
+            if result:
+                return result
+        if MISTRAL_ENABLED and MISTRAL_API_KEY:
+            ret = _mistral_generate_raw_prompt(prompt)
+            try:
+                LLM_REQUESTS_BY_KEY_TOTAL.labels("mistral", "mistral").inc()
+            except Exception:
+                pass
+            return ret
+        return None
     except RetryError as e:
         logger.error(f"Не удалось создать дайджест после исчерпания всех ключей: {e}")
         return None
@@ -396,9 +490,71 @@ def create_annual_digest(digest_contents: list[str]) -> str | None:
 
     prompt = create_annual_digest_prompt(digest_contents)
     try:
-        return _make_gemini_request(prompt)
+        if LLM_PRIMARY == "mistral" and MISTRAL_ENABLED and MISTRAL_API_KEY:
+            result = _mistral_generate_raw_prompt(prompt)
+            if result:
+                return result
+            if GEMINI_ENABLED and GOOGLE_API_KEYS:
+                return _make_gemini_request(prompt)
+            return None
+        if GEMINI_ENABLED and GOOGLE_API_KEYS:
+            result = _make_gemini_request(prompt)
+            if result:
+                return result
+        if MISTRAL_ENABLED and MISTRAL_API_KEY:
+            return _mistral_generate_raw_prompt(prompt)
+        return None
     except RetryError as e:
         logger.error(f"Не удалось создать годовой дайджест: {e}")
+        return None
+
+def _mistral_generate_raw_prompt(prompt: str) -> str | None:
+    """Отправляет сырой промпт в Mistral и учитывает токены."""
+    from mistralai.client import MistralClient
+    if not MISTRAL_API_KEY:
+        logger.error("API-ключ для Mistrал не найден.")
+        return None
+    try:
+        import time as _t
+        client = MistralClient(api_key=MISTRAL_API_KEY)
+        messages = [{"role": "user", "content": prompt}]
+        _start = _t.time()
+        chat_response = client.chat(model=MISTRAL_MODEL_NAME, messages=messages)
+        try:
+            _dur = max(0.0, _t.time() - _start)
+            EXTERNAL_HTTP_REQUEST_DURATION_SECONDS.labels("llm").observe(_dur)
+            EXTERNAL_HTTP_REQUESTS_TOTAL.labels("llm", "POST", "2xx").inc()
+            # Count request per key for Mistral
+            try:
+                LLM_REQUESTS_BY_KEY_TOTAL.labels("mistral", "mistral").inc()
+            except Exception:
+                pass
+        except Exception:
+            pass
+        try:
+            usage = getattr(chat_response, "usage", None)
+            pt = (getattr(usage, "prompt_tokens", None) or getattr(usage, "input_tokens", None) or (isinstance(usage, dict) and (usage.get("prompt_tokens") or usage.get("input_tokens"))))
+            ct = (getattr(usage, "completion_tokens", None) or getattr(usage, "output_tokens", None) or (isinstance(usage, dict) and (usage.get("completion_tokens") or usage.get("output_tokens"))))
+            if isinstance(pt, int) and pt > 0:
+                TOKENS_CONSUMED_PROMPT_TOTAL.labels("mistral", MISTRAL_MODEL_NAME).inc(pt)
+                TOKENS_CONSUMED_PROMPT_BY_KEY_TOTAL.labels("mistral", "mistral").inc(pt)
+            else:
+                TOKENS_CONSUMED_PROMPT_BY_KEY_TOTAL.labels("mistral", "mistral").inc(0)
+            if isinstance(ct, int) and ct > 0:
+                TOKENS_CONSUMED_COMPLETION_TOTAL.labels("mistral", MISTRAL_MODEL_NAME).inc(ct)
+                TOKENS_CONSUMED_COMPLETION_BY_KEY_TOTAL.labels("mistral", "mistral").inc(ct)
+            else:
+                TOKENS_CONSUMED_COMPLETION_BY_KEY_TOTAL.labels("mistral", "mistral").inc(0)
+        except Exception:
+            pass
+        text = chat_response.choices[0].message.content
+        return (text or "").strip()
+    except Exception as e:
+        logger.error(f"Ошибка при запросе к Mistral (raw): {e}")
+        try:
+            EXTERNAL_HTTP_REQUESTS_TOTAL.labels("llm", "POST", "5xx").inc()
+        except Exception:
+            pass
         return None
 
 def summarize_with_mistral(text_to_summarize: str) -> str | None:
@@ -428,6 +584,10 @@ def summarize_with_mistral(text_to_summarize: str) -> str | None:
             _dur = max(0.0, _t.time() - _start)
             EXTERNAL_HTTP_REQUEST_DURATION_SECONDS.labels("llm").observe(_dur)
             EXTERNAL_HTTP_REQUESTS_TOTAL.labels("llm", "POST", "2xx").inc()
+            try:
+                LLM_REQUESTS_BY_KEY_TOTAL.labels("mistral", "mistral").inc()
+            except Exception:
+                pass
         except Exception:
             pass
 
@@ -449,11 +609,27 @@ def summarize_with_mistral(text_to_summarize: str) -> str | None:
             if isinstance(completion_tokens, int) and completion_tokens > 0:
                 TOKENS_CONSUMED_COMPLETION_TOTAL.labels("mistral", MISTRAL_MODEL_NAME).inc(completion_tokens)
                 TOKENS_CONSUMED_COMPLETION_BY_KEY_TOTAL.labels("mistral", "mistral").inc(completion_tokens)
+            # Ensure per-key series exist even if usage is missing/zero
+            if not (isinstance(prompt_tokens, int) and prompt_tokens > 0):
+                try:
+                    TOKENS_CONSUMED_PROMPT_BY_KEY_TOTAL.labels("mistral", "mistral").inc(0)
+                except Exception:
+                    pass
+            if not (isinstance(completion_tokens, int) and completion_tokens > 0):
+                try:
+                    TOKENS_CONSUMED_COMPLETION_BY_KEY_TOTAL.labels("mistral", "mistral").inc(0)
+                except Exception:
+                    pass
         except Exception:
             pass
 
         summary = chat_response.choices[0].message.content
         logger.info("Резюме успешно получено от Mistral.")
+        # Notify web UI that metrics likely changed
+        try:
+            _sse_broadcast({"type": "metrics_updated"})
+        except Exception:
+            pass
         return summary.strip()
 
     except Exception as e:

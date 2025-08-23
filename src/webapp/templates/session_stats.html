@@ -12,19 +12,19 @@
         <div class="grid">
             <article>
                 <h4>Исходящих HTTP‑запросов</h4>
-                <h2><b>{{ stats.external_http_requests | int }}</b></h2>
+                <h2><b><span id="http-count">{{ stats.external_http_requests | int }}</span></b></h2>
             </article>
             <article>
                 <h4>Обработано новостей</h4>
-                <h2><b>{{ stats.articles_processed | int }}</b></h2>
+                <h2><b><span id="articles-count">{{ stats.articles_processed | int }}</span></b></h2>
             </article>
             <article>
                 <h4>Потрачено токенов (prompt)</h4>
-                <h2><b>{{ stats.tokens_prompt | int }}</b></h2>
+                <h2><b><span id="tokens-prompt">{{ stats.tokens_prompt | int }}</span></b></h2>
             </article>
             <article>
                 <h4>Потрачено токенов (completion)</h4>
-                <h2><b>{{ stats.tokens_completion | int }}</b></h2>
+                <h2><b><span id="tokens-completion">{{ stats.tokens_completion | int }}</span></b></h2>
             </article>
         </div>
 
@@ -35,22 +35,24 @@
                     <tr>
                         <th style="text-align:left; padding:8px; border-bottom:1px solid var(--border);">Провайдер</th>
                         <th style="text-align:left; padding:8px; border-bottom:1px solid var(--border);">Ключ</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid var(--border);">Кол-во запросов</th>
                         <th style="text-align:left; padding:8px; border-bottom:1px solid var(--border);">Prompt</th>
                         <th style="text-align:left; padding:8px; border-bottom:1px solid var(--border);">Completion</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="token-keys-body">
                     {% for row in stats.token_keys %}
                     <tr>
                         <td style="padding:8px;">{{ row.provider }}</td>
                         <td style="padding:8px;">{{ row.key_id }}</td>
+                        <td style="padding:8px;">{{ row.requests | int }}</td>
                         <td style="padding:8px;">{{ row.prompt | int }}</td>
                         <td style="padding:8px;">{{ row.completion | int }}</td>
                     </tr>
                     {% endfor %}
                     {% if not stats.token_keys %}
                     <tr>
-                        <td colspan="4" class="muted" style="padding:8px;">Ключи не использовались</td>
+                        <td colspan="5" class="muted" style="padding:8px;">Ключи не использовались</td>
                     </tr>
                     {% endif %}
                 </tbody>
@@ -59,25 +61,10 @@
 
         <article>
             <h4>Детали</h4>
-            <p>Время начала сессии: {{ stats.session_start or '—' }}</p>
-            <p>Аптайм: {{ (stats.uptime_seconds or 0) // 3600 }}ч {{ ((stats.uptime_seconds or 0) % 3600) // 60 }}м</p>
+            <p>Время начала сессии: <span id="session-start">{{ stats.session_start or '—' }}</span></p>
+            <p>Аптайм: <span id="uptime">{{ (stats.uptime_seconds or 0) // 3600 }}ч {{ ((stats.uptime_seconds or 0) % 3600) // 60 }}м</span></p>
         </article>
     <section>
     </section>
-    <script>
-    (function(){
-        const source = new EventSource('/events');
-        const reloadOn = ['article_published'];
-        source.addEventListener('message', function(e){
-            try {
-                const data = JSON.parse(e.data || '{}');
-                if (data && reloadOn.includes(data.type)) {
-                    location.reload();
-                }
-            } catch(_){}
-        });
-        source.addEventListener('open', function(){ /* connected */ });
-        source.addEventListener('error', function(){ /* ignore */ });
-    })();
-    </script>
+    <script src="/static/stats.js"></script>
 {% endblock %}
