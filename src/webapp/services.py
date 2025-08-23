@@ -4,6 +4,8 @@ from typing import List, Dict, Any, Optional
 from datetime import date, datetime, timedelta
 import calendar as py_calendar
 from src.database import get_db_connection, get_content_hash_groups, list_articles_by_content_hash, list_dlq_items
+from prometheus_client import REGISTRY  # type: ignore
+import time
 
 def get_articles(page: int = 1, page_size: int = 50, q: Optional[str] = None, 
                  start_date: Optional[str] = None, end_date: Optional[str] = None, has_content: int = 1) -> (List[Dict[str, Any]], int):
@@ -214,3 +216,49 @@ def get_daily_articles(day_iso: str) -> List[Dict[str, Any]]:
             (day_iso,),
         )
         return [dict(row) for row in cursor.fetchall()]
+
+
+# --- Session Stats (Prometheus-based) ---
+
+def get_session_stats() -> Dict[str, Any]:
+    """Aggregates selected session metrics from Prometheus default REGISTRY.
+
+    Returns a dict with keys:
+    - external_http_requests: int
+    - articles_processed: int
+    - tokens_prompt: int
+    - tokens_completion: int
+    - session_start: ISO8601 or None
+    - uptime_seconds: int
+    """
+    stats: Dict[str, Any] = {
+        "external_http_requests": 0,
+        "articles_processed": 0,
+        "tokens_prompt": 0,
+        "tokens_completion": 0,
+        "session_start": None,
+        "uptime_seconds": 0,
+    }
+
+    try:
+        for metric in REGISTRY.collect():
+            name = getattr(metric, "name", "")
+            if name == "external_http_requests_total":
+                stats["external_http_requests"] = int(sum(sample.value for sample in metric.samples))
+            elif name == "session_articles_processed_total":
+                stats["articles_processed"] = int(sum(sample.value for sample in metric.samples))
+            elif name == "tokens_consumed_prompt_total":
+                stats["tokens_prompt"] = int(sum(sample.value for sample in metric.samples))
+            elif name == "tokens_consumed_completion_total":
+                stats["tokens_completion"] = int(sum(sample.value for sample in metric.samples))
+            elif name == "session_start_time_seconds":
+                samples = list(metric.samples)
+                if samples:
+                    session_start = float(samples[-1].value)
+                    stats["session_start"] = datetime.fromtimestamp(session_start).isoformat()
+                    stats["uptime_seconds"] = int(max(0, time.time() - session_start))
+    except Exception:
+        # Be conservative; return what we have
+        pass
+
+    return stats

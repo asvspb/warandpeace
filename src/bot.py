@@ -23,7 +23,14 @@ from config import (
     SERVICE_TG_CHANNEL_ID,
 )
 from time_utils import now_msk, to_utc, utc_to_local
-from metrics import start_metrics_server, JOB_DURATION, ARTICLES_POSTED, ERRORS_TOTAL, update_last_article_age
+from metrics import (
+    start_metrics_server,
+    JOB_DURATION,
+    ARTICLES_POSTED,
+    ERRORS_TOTAL,
+    update_last_article_age,
+    SESSION_ARTICLES_PROCESSED,
+)
 from database import (
     init_db,
     add_article,
@@ -264,6 +271,10 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
                     summary,
                 )
                 posted_count += 1
+                try:
+                    SESSION_ARTICLES_PROCESSED.inc()
+                except Exception:
+                    pass
                 await asyncio.sleep(10)  # Пауза
 
                 # 4.1 Теневой служебный прогноз в отдельный канал (если включено)
@@ -455,6 +466,10 @@ async def flush_pending_publications(context: ContextTypes.DEFAULT_TYPE):
             await asyncio.to_thread(delete_sent_publication, article["id"])
             logger.info(f"Отложенная статья '{article['title']}' успешно опубликована.")
             ARTICLES_POSTED.inc()
+            try:
+                SESSION_ARTICLES_PROCESSED.inc()
+            except Exception:
+                pass
             await asyncio.sleep(10) # Пауза
 
         except Exception as e:
@@ -790,6 +805,13 @@ def main():
     except Exception:
         pass
     start_metrics_server()
+    # Устанавливаем время начала сессии
+    try:
+        from metrics import SESSION_START_TIME_SECONDS
+        import time
+        SESSION_START_TIME_SECONDS.set(time.time())
+    except Exception:
+        pass
     # Тюнинг HTTP-клиента Telegram для устойчивости к сетевым сбоям
     request = HTTPXRequest(
         read_timeout=float(os.getenv("TG_READ_TIMEOUT", "60")),

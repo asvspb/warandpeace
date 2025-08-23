@@ -85,3 +85,13 @@ async def read_article(
     if not article:
         raise HTTPException(status_code=404, detail="Article not found")
     return templates.TemplateResponse("article_detail.html", {"request": request, "article": article})
+
+
+@router.get("/stats", response_class=HTMLResponse)
+async def session_stats(request: Request):
+    """Renders session stats dashboard for the current process session."""
+    redir = _require_admin_session(request)
+    if redir:
+        return redir
+    stats = services.get_session_stats()
+    return templates.TemplateResponse("session_stats.html", {"request": request, "stats": stats})

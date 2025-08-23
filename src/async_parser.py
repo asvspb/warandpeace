@@ -9,6 +9,20 @@ import re
 
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
+# Metrics (optional)
+try:
+    from metrics import EXTERNAL_HTTP_REQUESTS_TOTAL, EXTERNAL_HTTP_REQUEST_DURATION_SECONDS
+except Exception:  # pragma: no cover
+    class _NoopMetric:
+        def labels(self, *args, **kwargs):
+            return self
+        def inc(self, *args, **kwargs):
+            return None
+        def observe(self, *args, **kwargs):
+            return None
+    EXTERNAL_HTTP_REQUESTS_TOTAL = _NoopMetric()
+    EXTERNAL_HTTP_REQUEST_DURATION_SECONDS = _NoopMetric()
+
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -26,8 +40,17 @@ async def get_articles_from_main_page(client: httpx.AsyncClient, page: int = 1):
     """
     url = f"{NEWS_URL}?page={page}"
     try:
+        import time as _t
+        _start = _t.time()
         response = await client.get(url, timeout=20)
         response.raise_for_status()
+        _dur = max(0.0, _t.time() - _start)
+        try:
+            EXTERNAL_HTTP_REQUEST_DURATION_SECONDS.labels("rss").observe(_dur)
+            status_group = f"{response.status_code // 100}xx"
+            EXTERNAL_HTTP_REQUESTS_TOTAL.labels("rss", "GET", status_group).inc()
+        except Exception:
+            pass
         response.encoding = 'windows-1251'
         soup = BeautifulSoup(response.text, 'html.parser')
         
@@ -56,6 +79,10 @@ async def get_articles_from_main_page(client: httpx.AsyncClient, page: int = 1):
                 articles.append({"title": title, "link": article_url, "published_at": dt_object})
         return articles
     except httpx.RequestError as e:
+        try:
+            EXTERNAL_HTTP_REQUESTS_TOTAL.labels("rss", "GET", "timeout").inc()
+        except Exception:
+            pass
         logger.error(f"Ошибка сети или HTTP при загрузке страницы новостей {url}: {e}")
         return []
     except Exception as e:
@@ -76,8 +103,17 @@ async def get_articles_from_archive(client: httpx.AsyncClient, target_date_str: 
         f"date_en={target_date_str}&archive_sort="
     )
     try:
+        import time as _t
+        _start = _t.time()
         response = await client.get(search_url, timeout=30)
         response.raise_for_status()
+        _dur = max(0.0, _t.time() - _start)
+        try:
+            EXTERNAL_HTTP_REQUEST_DURATION_SECONDS.labels("rss").observe(_dur)
+            status_group = f"{response.status_code // 100}xx"
+            EXTERNAL_HTTP_REQUESTS_TOTAL.labels("rss", "GET", status_group).inc()
+        except Exception:
+            pass
         response.encoding = 'windows-1251'
         soup = BeautifulSoup(response.text, 'html.parser')
         
@@ -100,6 +136,10 @@ async def get_articles_from_archive(client: httpx.AsyncClient, target_date_str: 
 
         return articles, total_pages
     except httpx.RequestError as e:
+        try:
+            EXTERNAL_HTTP_REQUESTS_TOTAL.labels("rss", "GET", "timeout").inc()
+        except Exception:
+            pass
         logger.error(f"Ошибка сети или HTTP при загрузке страницы архива {search_url}: {e}")
         return [], 0
     except Exception as e:

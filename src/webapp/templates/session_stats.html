@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}Статистика сессии - {{ super() }}{% endblock %}
+
+{% block content %}
+    <header style="margin-bottom: 24px;">
+        <h1>Статистика текущей сессии</h1>
+        <p class="muted">Метрики работы бота с момента последнего перезапуска.</p>
+    </header>
+
+    <section>
+        <div class="grid">
+            <article>
+                <h4>Исходящих HTTP‑запросов</h4>
+                <h2><b>{{ stats.external_http_requests | int }}</b></h2>
+            </article>
+            <article>
+                <h4>Обработано новостей</h4>
+                <h2><b>{{ stats.articles_processed | int }}</b></h2>
+            </article>
+            <article>
+                <h4>Потрачено токенов (prompt)</h4>
+                <h2><b>{{ stats.tokens_prompt | int }}</b></h2>
+            </article>
+            <article>
+                <h4>Потрачено токенов (completion)</h4>
+                <h2><b>{{ stats.tokens_completion | int }}</b></h2>
+            </article>
+        </div>
+
+        <article>
+            <h4>Детали</h4>
+            <p>Время начала сессии: {{ stats.session_start or '—' }}</p>
+            <p>Аптайм: {{ (stats.uptime_seconds or 0) // 3600 }}ч {{ ((stats.uptime_seconds or 0) % 3600) // 60 }}м</p>
+        </article>
+    </section>
+{% endblock %}

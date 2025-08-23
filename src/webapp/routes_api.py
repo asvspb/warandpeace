@@ -25,3 +25,12 @@ async def api_read_article(article_id: int):
     if not article:
         return {"error": "Article not found"}
     return article
+
+
+@router.get("/admin/stats")
+async def api_admin_session_stats() -> Dict[str, Any]:
+    """Admin JSON endpoint returning current session stats.
+
+    Note: Global auth middleware in server.py protects /api when enabled and key is configured.
+    """
+    return services.get_session_stats()

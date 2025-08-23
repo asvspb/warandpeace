@@ -1,5 +1,6 @@
 import sys
 import os
+import time
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '.')))
 
@@ -12,6 +13,23 @@ from url_utils import canonicalize_url
 
 from config import NEWS_URL, APP_TZ
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+
+# Import metrics
+try:
+    from metrics import EXTERNAL_HTTP_REQUESTS_TOTAL, EXTERNAL_HTTP_REQUEST_DURATION_SECONDS
+except ImportError:
+    # Fallback if metrics module is not available
+    class _NoopMetric:
+        def __init__(self, *args, **kwargs):
+            pass
+        def inc(self, *args, **kwargs):
+            return None
+        def observe(self, *args, **kwargs):
+            return None
+        def labels(self, *args, **kwargs):
+            return self
+    EXTERNAL_HTTP_REQUESTS_TOTAL = _NoopMetric()
+    EXTERNAL_HTTP_REQUEST_DURATION_SECONDS = _NoopMetric()
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -44,8 +62,17 @@ def get_article_text(url: str) -> str | None:
     Синхронно получает полный текст статьи по URL.
     """
     try:
+        start = time.time()
         response = requests.get(url, timeout=30)
         response.raise_for_status()
+        duration = max(0.0, time.time() - start)
+        # Observe duration and increment counters
+        try:
+            EXTERNAL_HTTP_REQUEST_DURATION_SECONDS.labels("rss").observe(duration)
+            status_group = f"{response.status_code // 100}xx"
+            EXTERNAL_HTTP_REQUESTS_TOTAL.labels("rss", "GET", status_group).inc()
+        except Exception:
+            pass
         response.encoding = 'windows-1251'
         
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -61,6 +88,10 @@ def get_article_text(url: str) -> str | None:
             return None
             
     except requests.exceptions.RequestException as e:
+        try:
+            EXTERNAL_HTTP_REQUESTS_TOTAL.labels("rss", "GET", "timeout" if isinstance(e, requests.Timeout) else "5xx").inc()
+        except Exception:
+            pass
         logger.error(f"Ошибка сети или HTTP при загрузке статьи {url}: {e}")
         return None
     except Exception as e:
@@ -78,8 +109,16 @@ def get_articles_from_page(page=1):
     list_url = f"{NEWS_URL}?page={page}"
     base_url = "https://www.warandpeace.ru"
     try:
+        start = time.time()
         response = requests.get(list_url, timeout=20)
         response.raise_for_status()
+        duration = max(0.0, time.time() - start)
+        try:
+            EXTERNAL_HTTP_REQUEST_DURATION_SECONDS.labels("rss").observe(duration)
+            status_group = f"{response.status_code // 100}xx"
+            EXTERNAL_HTTP_REQUESTS_TOTAL.labels("rss", "GET", status_group).inc()
+        except Exception:
+            pass
         response.encoding = 'windows-1251'
         soup = BeautifulSoup(response.text, 'html.parser')
         
@@ -110,6 +149,10 @@ def get_articles_from_page(page=1):
                 })
         return articles
     except requests.exceptions.RequestException as e:
+        try:
+            EXTERNAL_HTTP_REQUESTS_TOTAL.labels("rss", "GET", "timeout" if isinstance(e, requests.Timeout) else "5xx").inc()
+        except Exception:
+            pass
         logger.error(f"Ошибка сети или HTTP при загрузке страницы новостей: {e}")
         return []
     except Exception as e:
