@@ -35,6 +35,22 @@
                     <td style="padding:8px;"><b>{{ stats.tokens_completion | int }}</b></td>
                 </tr>
                 <tr>
+                    <td style="padding:8px;">tokens_prompt_google</td>
+                    <td style="padding:8px;"><b>{{ stats.tokens_prompt_google | int }}</b></td>
+                </tr>
+                <tr>
+                    <td style="padding:8px;">tokens_completion_google</td>
+                    <td style="padding:8px;"><b>{{ stats.tokens_completion_google | int }}</b></td>
+                </tr>
+                <tr>
+                    <td style="padding:8px;">tokens_prompt_mistral</td>
+                    <td style="padding:8px;"><b>{{ stats.tokens_prompt_mistral | int }}</b></td>
+                </tr>
+                <tr>
+                    <td style="padding:8px;">tokens_completion_mistral</td>
+                    <td style="padding:8px;"><b>{{ stats.tokens_completion_mistral | int }}</b></td>
+                </tr>
+                <tr>
                     <td style="padding:8px;">session_start</td>
                     <td style="padding:8px;">{{ stats.session_start or '—' }}</td>
                 </tr>

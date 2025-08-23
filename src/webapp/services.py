@@ -241,6 +241,10 @@ def get_session_stats() -> Dict[str, Any]:
     }
 
     try:
+        # Temporary accumulators for provider-specific breakdown
+        prompt_by_provider: Dict[str, int] = {}
+        completion_by_provider: Dict[str, int] = {}
+
         for metric in REGISTRY.collect():
             name = getattr(metric, "name", "")
             if name == "external_http_requests_total":
@@ -248,15 +252,38 @@ def get_session_stats() -> Dict[str, Any]:
             elif name == "session_articles_processed_total":
                 stats["articles_processed"] = int(sum(sample.value for sample in metric.samples))
             elif name == "tokens_consumed_prompt_total":
-                stats["tokens_prompt"] = int(sum(sample.value for sample in metric.samples))
+                total = 0
+                for sample in metric.samples:
+                    v = int(sample.value)
+                    total += v
+                    labels = getattr(sample, "labels", {}) or {}
+                    provider = labels.get("provider")
+                    if provider:
+                        prompt_by_provider[provider] = prompt_by_provider.get(provider, 0) + v
+                stats["tokens_prompt"] = total
             elif name == "tokens_consumed_completion_total":
-                stats["tokens_completion"] = int(sum(sample.value for sample in metric.samples))
+                total = 0
+                for sample in metric.samples:
+                    v = int(sample.value)
+                    total += v
+                    labels = getattr(sample, "labels", {}) or {}
+                    provider = labels.get("provider")
+                    if provider:
+                        completion_by_provider[provider] = completion_by_provider.get(provider, 0) + v
+                stats["tokens_completion"] = total
             elif name == "session_start_time_seconds":
                 samples = list(metric.samples)
                 if samples:
                     session_start = float(samples[-1].value)
                     stats["session_start"] = datetime.fromtimestamp(session_start).isoformat()
                     stats["uptime_seconds"] = int(max(0, time.time() - session_start))
+
+        # Flatten provider-specific counters for most common providers
+        # Known providers in this app: "google" (Gemini) and "mistral"
+        stats["tokens_prompt_google"] = int(prompt_by_provider.get("google", 0))
+        stats["tokens_completion_google"] = int(completion_by_provider.get("google", 0))
+        stats["tokens_prompt_mistral"] = int(prompt_by_provider.get("mistral", 0))
+        stats["tokens_completion_mistral"] = int(completion_by_provider.get("mistral", 0))
     except Exception:
         # Be conservative; return what we have
         pass
