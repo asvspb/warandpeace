@@ -20,6 +20,27 @@ from config import (
     SERVICE_PROMPTS_ENABLED,
 )
 
+# --- Metrics (optional) ---
+try:
+    from metrics import (
+        TOKENS_CONSUMED_PROMPT_TOTAL,
+        TOKENS_CONSUMED_COMPLETION_TOTAL,
+        EXTERNAL_HTTP_REQUESTS_TOTAL,
+        EXTERNAL_HTTP_REQUEST_DURATION_SECONDS,
+    )
+except Exception:  # pragma: no cover
+    class _NoopMetric:
+        def labels(self, *args, **kwargs):
+            return self
+        def inc(self, *args, **kwargs):
+            return None
+        def observe(self, *args, **kwargs):
+            return None
+    TOKENS_CONSUMED_PROMPT_TOTAL = _NoopMetric()
+    TOKENS_CONSUMED_COMPLETION_TOTAL = _NoopMetric()
+    EXTERNAL_HTTP_REQUESTS_TOTAL = _NoopMetric()
+    EXTERNAL_HTTP_REQUEST_DURATION_SECONDS = _NoopMetric()
+
 # Глобальный индекс для перебора ключей
 current_gemini_key_index = 0
 
@@ -57,11 +78,32 @@ def _make_gemini_request(prompt: str) -> str | None:
         raise Exception("Не удалось сконфигурировать модель Gemini, пробую следующий ключ.")
 
     try:
+        import time as _t
         logger.info(f"Отправка запроса к Gemini API с ключом #{current_gemini_key_index + 1}...")
+        _start = _t.time()
         response = gemini_model.generate_content(prompt)
         
         if response.text:
             logger.info(f"Ответ успешно получен с ключом #{current_gemini_key_index + 1}.")
+            # Metrics: duration + request count
+            try:
+                _dur = max(0.0, _t.time() - _start)
+                EXTERNAL_HTTP_REQUEST_DURATION_SECONDS.labels("llm").observe(_dur)
+                EXTERNAL_HTTP_REQUESTS_TOTAL.labels("llm", "POST", "2xx").inc()
+            except Exception:
+                pass
+            # Token usage if available
+            try:
+                usage = getattr(response, "usage_metadata", None)
+                if usage:
+                    prompt_tokens = getattr(usage, "prompt_token_count", None) or getattr(usage, "input_token_count", None)
+                    completion_tokens = getattr(usage, "candidates_token_count", None) or getattr(usage, "output_token_count", None)
+                    if isinstance(prompt_tokens, int) and prompt_tokens > 0:
+                        TOKENS_CONSUMED_PROMPT_TOTAL.labels("google", GEMINI_MODEL_NAME).inc(prompt_tokens)
+                    if isinstance(completion_tokens, int) and completion_tokens > 0:
+                        TOKENS_CONSUMED_COMPLETION_TOTAL.labels("google", GEMINI_MODEL_NAME).inc(completion_tokens)
+            except Exception:
+                pass
             return response.text.strip()
         else:
             logger.warning(f"Gemini API с ключом #{current_gemini_key_index + 1} вернул пустой ответ.")
@@ -73,6 +115,10 @@ def _make_gemini_request(prompt: str) -> str | None:
     except Exception as e:
         message_text = str(e)
         logger.error(f"Ошибка с ключом #{current_gemini_key_index + 1}: {message_text}")
+        try:
+            EXTERNAL_HTTP_REQUESTS_TOTAL.labels("llm", "POST", "5xx").inc()
+        except Exception:
+            pass
         # Если регион недоступен для Gemini — нет смысла перебирать ключи
         if 'location is not supported' in message_text.lower():
             logger.warning("Регион не поддерживается для Gemini API. Переходим к запасному провайдеру без повторов.")
@@ -357,16 +403,43 @@ def summarize_with_mistral(text_to_summarize: str) -> str | None:
         return None
 
     try:
+        import time as _t
         client = MistralClient(api_key=MISTRAL_API_KEY)
 
         prompt = create_summarization_prompt(text_to_summarize)
         # Используем универсальный формат сообщений без зависимости от моделей SDK
         messages = [{"role": "user", "content": prompt}]
 
+        _start = _t.time()
         chat_response = client.chat(
             model=MISTRAL_MODEL_NAME,
             messages=messages,
         )
+        try:
+            _dur = max(0.0, _t.time() - _start)
+            EXTERNAL_HTTP_REQUEST_DURATION_SECONDS.labels("llm").observe(_dur)
+            EXTERNAL_HTTP_REQUESTS_TOTAL.labels("llm", "POST", "2xx").inc()
+        except Exception:
+            pass
+
+        # Token usage if available
+        try:
+            usage = getattr(chat_response, "usage", None)
+            prompt_tokens = None
+            completion_tokens = None
+            if usage is not None:
+                if isinstance(usage, dict):
+                    prompt_tokens = usage.get("prompt_tokens") or usage.get("input_tokens")
+                    completion_tokens = usage.get("completion_tokens") or usage.get("output_tokens")
+                else:
+                    prompt_tokens = getattr(usage, "prompt_tokens", None) or getattr(usage, "input_tokens", None)
+                    completion_tokens = getattr(usage, "completion_tokens", None) or getattr(usage, "output_tokens", None)
+            if isinstance(prompt_tokens, int) and prompt_tokens > 0:
+                TOKENS_CONSUMED_PROMPT_TOTAL.labels("mistral", MISTRAL_MODEL_NAME).inc(prompt_tokens)
+            if isinstance(completion_tokens, int) and completion_tokens > 0:
+                TOKENS_CONSUMED_COMPLETION_TOTAL.labels("mistral", MISTRAL_MODEL_NAME).inc(completion_tokens)
+        except Exception:
+            pass
 
         summary = chat_response.choices[0].message.content
         logger.info("Резюме успешно получено от Mistral.")
@@ -374,6 +447,10 @@ def summarize_with_mistral(text_to_summarize: str) -> str | None:
 
     except Exception as e:
         logger.error(f"Ошибка при получении резюме от Mistral: {e}")
+        try:
+            EXTERNAL_HTTP_REQUESTS_TOTAL.labels("llm", "POST", "5xx").inc()
+        except Exception:
+            pass
         return None
 
 # --- Блок для проверки ---
