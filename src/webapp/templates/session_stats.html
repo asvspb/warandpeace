@@ -28,6 +28,29 @@
             </article>
         </div>
 
+        <div class="grid" style="margin-top: 16px;">
+            <article>
+                <h4>Mistral (prompt/completion)</h4>
+                <h2><b>{{ stats.tokens_prompt_mistral | int }} / {{ stats.tokens_completion_mistral | int }}</b></h2>
+            </article>
+            <article>
+                <h4>Gemini #1 (prompt/completion)</h4>
+                <h2><b>{{ stats.tokens_prompt_gemini1 | int }} / {{ stats.tokens_completion_gemini1 | int }}</b></h2>
+            </article>
+            <article>
+                <h4>Gemini #2 (prompt/completion)</h4>
+                <h2><b>{{ stats.tokens_prompt_gemini2 | int }} / {{ stats.tokens_completion_gemini2 | int }}</b></h2>
+            </article>
+            <article>
+                <h4>Gemini #3 (prompt/completion)</h4>
+                <h2><b>{{ stats.tokens_prompt_gemini3 | int }} / {{ stats.tokens_completion_gemini3 | int }}</b></h2>
+            </article>
+            <article>
+                <h4>Gemini #4 (prompt/completion)</h4>
+                <h2><b>{{ stats.tokens_prompt_gemini4 | int }} / {{ stats.tokens_completion_gemini4 | int }}</b></h2>
+            </article>
+        </div>
+
         <article>
             <h4>Детали</h4>
             <p>Время начала сессии: {{ stats.session_start or '—' }}</p>

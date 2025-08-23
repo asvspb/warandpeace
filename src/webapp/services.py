@@ -236,6 +236,17 @@ def get_session_stats() -> Dict[str, Any]:
         "articles_processed": 0,
         "tokens_prompt": 0,
         "tokens_completion": 0,
+        # per-key (columns)
+        "tokens_prompt_mistral": 0,
+        "tokens_completion_mistral": 0,
+        "tokens_prompt_gemini1": 0,
+        "tokens_completion_gemini1": 0,
+        "tokens_prompt_gemini2": 0,
+        "tokens_completion_gemini2": 0,
+        "tokens_prompt_gemini3": 0,
+        "tokens_completion_gemini3": 0,
+        "tokens_prompt_gemini4": 0,
+        "tokens_completion_gemini4": 0,
         "session_start": None,
         "uptime_seconds": 0,
     }
@@ -251,6 +262,31 @@ def get_session_stats() -> Dict[str, Any]:
                 stats["tokens_prompt"] = int(sum(sample.value for sample in metric.samples))
             elif name == "tokens_consumed_completion_total":
                 stats["tokens_completion"] = int(sum(sample.value for sample in metric.samples))
+            elif name == "tokens_consumed_prompt_by_key_total":
+                # provider: google|mistral; key_id: gemini1..N or mistral
+                for sample in metric.samples:
+                    labels = getattr(sample, "labels", {}) or {}
+                    provider = labels.get("provider")
+                    key_id = labels.get("key_id")
+                    v = int(sample.value)
+                    if provider == "mistral" and key_id == "mistral":
+                        stats["tokens_prompt_mistral"] += v
+                    elif provider == "google" and key_id:
+                        k = f"tokens_prompt_{key_id}"
+                        if k in stats:
+                            stats[k] += v
+            elif name == "tokens_consumed_completion_by_key_total":
+                for sample in metric.samples:
+                    labels = getattr(sample, "labels", {}) or {}
+                    provider = labels.get("provider")
+                    key_id = labels.get("key_id")
+                    v = int(sample.value)
+                    if provider == "mistral" and key_id == "mistral":
+                        stats["tokens_completion_mistral"] += v
+                    elif provider == "google" and key_id:
+                        k = f"tokens_completion_{key_id}"
+                        if k in stats:
+                            stats[k] += v
             elif name == "session_start_time_seconds":
                 samples = list(metric.samples)
                 if samples:

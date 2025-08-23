@@ -59,6 +59,51 @@ NETWORK_INFO = Gauge(
     labelnames=("default_iface", "egress_ip", "public_ip"),
 )
 
+# --- Session metrics ---
+# Внешние HTTP-вызовы (к источникам, LLM-провайдерам и т.п.)
+EXTERNAL_HTTP_REQUESTS_TOTAL = Counter(
+    "external_http_requests_total",
+    "Total number of outgoing HTTP requests",
+    labelnames=("target", "method", "status_group"),  # target: rss|llm|tg|other; status_group: 2xx|4xx|5xx|timeout
+)
+
+EXTERNAL_HTTP_REQUEST_DURATION_SECONDS = Histogram(
+    "external_http_request_duration_seconds",
+    "Outgoing HTTP request duration (seconds)",
+    labelnames=("target",),
+    buckets=(0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
+)
+
+# Статистика обработанных новостей за сессию
+SESSION_ARTICLES_PROCESSED = Counter(
+    "session_articles_processed_total", "Number of articles processed in current session"
+)
+
+# Токены LLM (разделяем prompt/completion для большей наглядности)
+TOKENS_CONSUMED_PROMPT_TOTAL = Counter(
+    "tokens_consumed_prompt_total", "Total prompt tokens consumed", labelnames=("provider", "model")
+)
+TOKENS_CONSUMED_COMPLETION_TOTAL = Counter(
+    "tokens_consumed_completion_total", "Total completion tokens consumed", labelnames=("provider", "model")
+)
+
+# Per-key token counters (provider + key id)
+TOKENS_CONSUMED_PROMPT_BY_KEY_TOTAL = Counter(
+    "tokens_consumed_prompt_by_key_total",
+    "Total prompt tokens consumed per API key",
+    labelnames=("provider", "key_id"),
+)
+TOKENS_CONSUMED_COMPLETION_BY_KEY_TOTAL = Counter(
+    "tokens_consumed_completion_by_key_total",
+    "Total completion tokens consumed per API key",
+    labelnames=("provider", "key_id"),
+)
+
+# Время старта сессии (устанавливается один раз при загрузке приложения)
+SESSION_START_TIME_SECONDS = Gauge(
+    "session_start_time_seconds", "Process session start time in seconds since UNIX epoch"
+)
+
 
 def start_metrics_server() -> None:
     """Starts Prometheus metrics HTTP server if enabled by env."""

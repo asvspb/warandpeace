@@ -25,6 +25,8 @@ try:
     from metrics import (
         TOKENS_CONSUMED_PROMPT_TOTAL,
         TOKENS_CONSUMED_COMPLETION_TOTAL,
+        TOKENS_CONSUMED_PROMPT_BY_KEY_TOTAL,
+        TOKENS_CONSUMED_COMPLETION_BY_KEY_TOTAL,
         EXTERNAL_HTTP_REQUESTS_TOTAL,
         EXTERNAL_HTTP_REQUEST_DURATION_SECONDS,
     )
@@ -38,6 +40,8 @@ except Exception:  # pragma: no cover
             return None
     TOKENS_CONSUMED_PROMPT_TOTAL = _NoopMetric()
     TOKENS_CONSUMED_COMPLETION_TOTAL = _NoopMetric()
+    TOKENS_CONSUMED_PROMPT_BY_KEY_TOTAL = _NoopMetric()
+    TOKENS_CONSUMED_COMPLETION_BY_KEY_TOTAL = _NoopMetric()
     EXTERNAL_HTTP_REQUESTS_TOTAL = _NoopMetric()
     EXTERNAL_HTTP_REQUEST_DURATION_SECONDS = _NoopMetric()
 
@@ -100,8 +104,13 @@ def _make_gemini_request(prompt: str) -> str | None:
                     completion_tokens = getattr(usage, "candidates_token_count", None) or getattr(usage, "output_token_count", None)
                     if isinstance(prompt_tokens, int) and prompt_tokens > 0:
                         TOKENS_CONSUMED_PROMPT_TOTAL.labels("google", GEMINI_MODEL_NAME).inc(prompt_tokens)
+                        # per-key breakdown by index (gemini1..N)
+                        key_id = f"gemini{current_gemini_key_index + 1}"
+                        TOKENS_CONSUMED_PROMPT_BY_KEY_TOTAL.labels("google", key_id).inc(prompt_tokens)
                     if isinstance(completion_tokens, int) and completion_tokens > 0:
                         TOKENS_CONSUMED_COMPLETION_TOTAL.labels("google", GEMINI_MODEL_NAME).inc(completion_tokens)
+                        key_id = f"gemini{current_gemini_key_index + 1}"
+                        TOKENS_CONSUMED_COMPLETION_BY_KEY_TOTAL.labels("google", key_id).inc(completion_tokens)
             except Exception:
                 pass
             return response.text.strip()
@@ -436,8 +445,10 @@ def summarize_with_mistral(text_to_summarize: str) -> str | None:
                     completion_tokens = getattr(usage, "completion_tokens", None) or getattr(usage, "output_tokens", None)
             if isinstance(prompt_tokens, int) and prompt_tokens > 0:
                 TOKENS_CONSUMED_PROMPT_TOTAL.labels("mistral", MISTRAL_MODEL_NAME).inc(prompt_tokens)
+                TOKENS_CONSUMED_PROMPT_BY_KEY_TOTAL.labels("mistral", "mistral").inc(prompt_tokens)
             if isinstance(completion_tokens, int) and completion_tokens > 0:
                 TOKENS_CONSUMED_COMPLETION_TOTAL.labels("mistral", MISTRAL_MODEL_NAME).inc(completion_tokens)
+                TOKENS_CONSUMED_COMPLETION_BY_KEY_TOTAL.labels("mistral", "mistral").inc(completion_tokens)
         except Exception:
             pass
 
