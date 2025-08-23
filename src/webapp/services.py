@@ -5,6 +5,8 @@ from datetime import date, datetime, timedelta
 import calendar as py_calendar
 from src.database import get_db_connection, get_content_hash_groups, list_articles_by_content_hash, list_dlq_items
 from prometheus_client import REGISTRY  # type: ignore
+from prometheus_client.parser import text_string_to_metric_families  # type: ignore
+import os
 import time
 
 def get_articles(page: int = 1, page_size: int = 50, q: Optional[str] = None, 
@@ -243,10 +245,31 @@ def get_session_stats() -> Dict[str, Any]:
     }
 
     try:
+        def _iter_metrics():
+            """Yield metric families either from remote scrape or local REGISTRY."""
+            scrape_url = os.getenv("METRICS_SCRAPE_URL")
+            if not scrape_url:
+                port = os.getenv("METRICS_PORT", "8000").strip()
+                # Assume bot exposes Prometheus on this port (start_metrics_server)
+                scrape_url = f"http://127.0.0.1:{port}/"
+            # Try remote scrape first
+            try:
+                import requests  # lazy import to avoid test env issues
+                resp = requests.get(scrape_url.rstrip("/") + "/metrics", timeout=1.5)
+                if resp.ok and resp.text:
+                    for fam in text_string_to_metric_families(resp.text):
+                        yield fam
+                    return
+            except Exception:
+                # Fallback to local registry
+                pass
+            for fam in REGISTRY.collect():
+                yield fam
+
         # Temporary aggregation for per-key
         per_key: Dict[tuple[str, str], Dict[str, int]] = {}
 
-        for metric in REGISTRY.collect():
+        for metric in _iter_metrics():
             name = getattr(metric, "name", "")
             if name == "external_http_requests_total":
                 stats["external_http_requests"] = int(sum(sample.value for sample in metric.samples))
