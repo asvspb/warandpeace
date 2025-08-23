@@ -28,27 +28,33 @@
             </article>
         </div>
 
-        <div class="grid" style="margin-top: 16px;">
-            <article>
-                <h4>Mistral (prompt/completion)</h4>
-                <h2><b>{{ stats.tokens_prompt_mistral | int }} / {{ stats.tokens_completion_mistral | int }}</b></h2>
-            </article>
-            <article>
-                <h4>Gemini #1 (prompt/completion)</h4>
-                <h2><b>{{ stats.tokens_prompt_gemini1 | int }} / {{ stats.tokens_completion_gemini1 | int }}</b></h2>
-            </article>
-            <article>
-                <h4>Gemini #2 (prompt/completion)</h4>
-                <h2><b>{{ stats.tokens_prompt_gemini2 | int }} / {{ stats.tokens_completion_gemini2 | int }}</b></h2>
-            </article>
-            <article>
-                <h4>Gemini #3 (prompt/completion)</h4>
-                <h2><b>{{ stats.tokens_prompt_gemini3 | int }} / {{ stats.tokens_completion_gemini3 | int }}</b></h2>
-            </article>
-            <article>
-                <h4>Gemini #4 (prompt/completion)</h4>
-                <h2><b>{{ stats.tokens_prompt_gemini4 | int }} / {{ stats.tokens_completion_gemini4 | int }}</b></h2>
-            </article>
+        <div class="card" style="margin-top: 16px;">
+            <h3 style="margin-top:0;">Токены по ключам</h3>
+            <table class="table" style="width:100%; border-collapse: collapse;">
+                <thead>
+                    <tr>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid var(--border);">Провайдер</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid var(--border);">Ключ</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid var(--border);">Prompt</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid var(--border);">Completion</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in stats.token_keys %}
+                    <tr>
+                        <td style="padding:8px;">{{ row.provider }}</td>
+                        <td style="padding:8px;">{{ row.key_id }}</td>
+                        <td style="padding:8px;">{{ row.prompt | int }}</td>
+                        <td style="padding:8px;">{{ row.completion | int }}</td>
+                    </tr>
+                    {% endfor %}
+                    {% if not stats.token_keys %}
+                    <tr>
+                        <td colspan="4" class="muted" style="padding:8px;">Ключи не использовались</td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
         </div>
 
         <article>

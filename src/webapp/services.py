@@ -236,22 +236,16 @@ def get_session_stats() -> Dict[str, Any]:
         "articles_processed": 0,
         "tokens_prompt": 0,
         "tokens_completion": 0,
-        # per-key (columns)
-        "tokens_prompt_mistral": 0,
-        "tokens_completion_mistral": 0,
-        "tokens_prompt_gemini1": 0,
-        "tokens_completion_gemini1": 0,
-        "tokens_prompt_gemini2": 0,
-        "tokens_completion_gemini2": 0,
-        "tokens_prompt_gemini3": 0,
-        "tokens_completion_gemini3": 0,
-        "tokens_prompt_gemini4": 0,
-        "tokens_completion_gemini4": 0,
+        # dynamic per-key breakdown: list of {provider, key_id, prompt, completion}
+        "token_keys": [],
         "session_start": None,
         "uptime_seconds": 0,
     }
 
     try:
+        # Temporary aggregation for per-key
+        per_key: Dict[tuple[str, str], Dict[str, int]] = {}
+
         for metric in REGISTRY.collect():
             name = getattr(metric, "name", "")
             if name == "external_http_requests_total":
@@ -263,36 +257,41 @@ def get_session_stats() -> Dict[str, Any]:
             elif name == "tokens_consumed_completion_total":
                 stats["tokens_completion"] = int(sum(sample.value for sample in metric.samples))
             elif name == "tokens_consumed_prompt_by_key_total":
-                # provider: google|mistral; key_id: gemini1..N or mistral
                 for sample in metric.samples:
                     labels = getattr(sample, "labels", {}) or {}
-                    provider = labels.get("provider")
-                    key_id = labels.get("key_id")
-                    v = int(sample.value)
-                    if provider == "mistral" and key_id == "mistral":
-                        stats["tokens_prompt_mistral"] += v
-                    elif provider == "google" and key_id:
-                        k = f"tokens_prompt_{key_id}"
-                        if k in stats:
-                            stats[k] += v
+                    provider = labels.get("provider") or ""
+                    key_id = labels.get("key_id") or ""
+                    k = (provider, key_id)
+                    if provider and key_id:
+                        bucket = per_key.setdefault(k, {"prompt": 0, "completion": 0})
+                        bucket["prompt"] += int(sample.value)
             elif name == "tokens_consumed_completion_by_key_total":
                 for sample in metric.samples:
                     labels = getattr(sample, "labels", {}) or {}
-                    provider = labels.get("provider")
-                    key_id = labels.get("key_id")
-                    v = int(sample.value)
-                    if provider == "mistral" and key_id == "mistral":
-                        stats["tokens_completion_mistral"] += v
-                    elif provider == "google" and key_id:
-                        k = f"tokens_completion_{key_id}"
-                        if k in stats:
-                            stats[k] += v
+                    provider = labels.get("provider") or ""
+                    key_id = labels.get("key_id") or ""
+                    k = (provider, key_id)
+                    if provider and key_id:
+                        bucket = per_key.setdefault(k, {"prompt": 0, "completion": 0})
+                        bucket["completion"] += int(sample.value)
             elif name == "session_start_time_seconds":
                 samples = list(metric.samples)
                 if samples:
                     session_start = float(samples[-1].value)
                     stats["session_start"] = datetime.fromtimestamp(session_start).isoformat()
                     stats["uptime_seconds"] = int(max(0, time.time() - session_start))
+
+        # Flatten per-key aggregation into a list and sort
+        token_keys = []
+        for (provider, key_id), vals in per_key.items():
+            token_keys.append({
+                "provider": provider,
+                "key_id": key_id,
+                "prompt": int(vals.get("prompt", 0)),
+                "completion": int(vals.get("completion", 0)),
+            })
+        token_keys.sort(key=lambda x: (x["provider"], x["key_id"]))
+        stats["token_keys"] = token_keys
     except Exception:
         # Be conservative; return what we have
         pass
