@@ -8,30 +8,41 @@
         <p class="muted">Метрики работы бота с момента последнего перезапуска.</p>
     </header>
 
-    <section>
-        <div class="grid">
-            <article>
-                <h4>Исходящих HTTP‑запросов</h4>
-                <h2><b>{{ stats.external_http_requests | int }}</b></h2>
-            </article>
-            <article>
-                <h4>Обработано новостей</h4>
-                <h2><b>{{ stats.articles_processed | int }}</b></h2>
-            </article>
-            <article>
-                <h4>Потрачено токенов (prompt)</h4>
-                <h2><b>{{ stats.tokens_prompt | int }}</b></h2>
-            </article>
-            <article>
-                <h4>Потрачено токенов (completion)</h4>
-                <h2><b>{{ stats.tokens_completion | int }}</b></h2>
-            </article>
-        </div>
-
-        <article>
-            <h4>Детали</h4>
-            <p>Время начала сессии: {{ stats.session_start or '—' }}</p>
-            <p>Аптайм: {{ (stats.uptime_seconds or 0) // 3600 }}ч {{ ((stats.uptime_seconds or 0) % 3600) // 60 }}м</p>
-        </article>
+    <section class="card">
+        <h2 style="margin-top:0;">Сводка</h2>
+        <table class="table" style="width:100%; border-collapse: collapse;">
+            <thead>
+                <tr>
+                    <th style="text-align:left; padding:8px; border-bottom:1px solid var(--border);"><small>Ключ</small></th>
+                    <th style="text-align:left; padding:8px; border-bottom:1px solid var(--border);"><small>Значение</small></th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td style="padding:8px;">external_http_requests</td>
+                    <td style="padding:8px;"><b>{{ stats.external_http_requests | int }}</b></td>
+                </tr>
+                <tr>
+                    <td style="padding:8px;">articles_processed</td>
+                    <td style="padding:8px;"><b>{{ stats.articles_processed | int }}</b></td>
+                </tr>
+                <tr>
+                    <td style="padding:8px;">tokens_prompt</td>
+                    <td style="padding:8px;"><b>{{ stats.tokens_prompt | int }}</b></td>
+                </tr>
+                <tr>
+                    <td style="padding:8px;">tokens_completion</td>
+                    <td style="padding:8px;"><b>{{ stats.tokens_completion | int }}</b></td>
+                </tr>
+                <tr>
+                    <td style="padding:8px;">session_start</td>
+                    <td style="padding:8px;">{{ stats.session_start or '—' }}</td>
+                </tr>
+                <tr>
+                    <td style="padding:8px;">uptime_seconds</td>
+                    <td style="padding:8px;">{{ stats.uptime_seconds or 0 }}</td>
+                </tr>
+            </tbody>
+        </table>
     </section>
 {% endblock %}
