@@ -8,7 +8,7 @@ from datetime import datetime, date
 import math
 
 from src.webapp import services
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
 router = APIRouter()
 templates = Jinja2Templates(directory="src/webapp/templates")
@@ -95,3 +95,12 @@ async def session_stats(request: Request):
         return redir
     stats = services.get_session_stats()
     return templates.TemplateResponse("session_stats.html", {"request": request, "stats": stats})
+
+
+@router.get("/stats.json")
+async def session_stats_json(request: Request):
+    """Returns JSON for the current session stats for logged-in admins."""
+    redir = _require_admin_session(request)
+    if redir:
+        return redir
+    return JSONResponse(services.get_session_stats())

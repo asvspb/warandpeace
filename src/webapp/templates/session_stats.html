@@ -8,7 +8,7 @@
         <p class="muted">Метрики работы бота с момента последнего перезапуска.</p>
     </header>
 
-    <section>
+    <section id="stats-root">
         <div class="grid">
             <article>
                 <h4>Исходящих HTTP‑запросов</h4>
@@ -64,4 +64,20 @@
         </article>
     <section>
     </section>
+    <script>
+    (function(){
+        const source = new EventSource('/events');
+        const reloadOn = ['article_published'];
+        source.addEventListener('message', function(e){
+            try {
+                const data = JSON.parse(e.data || '{}');
+                if (data && reloadOn.includes(data.type)) {
+                    location.reload();
+                }
+            } catch(_){}
+        });
+        source.addEventListener('open', function(){ /* connected */ });
+        source.addEventListener('error', function(){ /* ignore */ });
+    })();
+    </script>
 {% endblock %}

@@ -55,6 +55,12 @@ from summarizer import (
     generate_service_summary,
 )
 from notifications import notify_admin
+try:
+    # Optional SSE broadcast for web UI updates
+    from src.webapp.server import _sse_broadcast  # type: ignore
+except Exception:  # pragma: no cover
+    def _sse_broadcast(_obj):
+        return None
 
 # Настройка логирования (тихий режим для сторонних библиотек и управляемый уровень для приложения)
 log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -275,6 +281,10 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
                     SESSION_ARTICLES_PROCESSED.inc()
                 except Exception:
                     pass
+                try:
+                    _sse_broadcast({"type": "article_published"})
+                except Exception:
+                    pass
                 await asyncio.sleep(10)  # Пауза
 
                 # 4.1 Теневой служебный прогноз в отдельный канал (если включено)
@@ -468,6 +478,10 @@ async def flush_pending_publications(context: ContextTypes.DEFAULT_TYPE):
             ARTICLES_POSTED.inc()
             try:
                 SESSION_ARTICLES_PROCESSED.inc()
+            except Exception:
+                pass
+            try:
+                _sse_broadcast({"type": "article_published"})
             except Exception:
                 pass
             await asyncio.sleep(10) # Пауза

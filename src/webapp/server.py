@@ -4,6 +4,7 @@ import secrets
 import base64
 from fastapi import FastAPI, Depends, HTTPException, Request, Response, Form
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import StreamingResponse
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
@@ -216,6 +217,42 @@ async def add_process_time_header(request: Request, call_next):
         response = await call_next(request)
         REQUEST_COUNT.labels(request.method, request.url.path, response.status_code).inc()
     return response
+
+# --- Server-Sent Events (SSE) for UI live updates ---
+_SSE_SUBSCRIBERS = set()
+
+@app.get("/events")
+async def sse_events(request: Request):  # type: ignore[override]
+    """Very lightweight SSE endpoint for admin UI. Broadcast-only.
+
+    Note: auth middleware protects it; we don't send historical events.
+    """
+    async def event_stream():
+        from asyncio import Queue
+        q = Queue()
+        _SSE_SUBSCRIBERS.add(q)
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                data = await q.get()
+                yield f"data: {data}\n\n"
+        finally:
+            _SSE_SUBSCRIBERS.discard(q)
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+def _sse_broadcast(obj: dict) -> None:
+    """Enqueue an object to all subscribers as JSON."""
+    import json
+    if not _SSE_SUBSCRIBERS:
+        return
+    data = json.dumps(obj, ensure_ascii=False)
+    for q in list(_SSE_SUBSCRIBERS):
+        try:
+            q.put_nowait(data)
+        except Exception:
+            pass
 
 # --- Startup ---
 @app.on_event("startup")
