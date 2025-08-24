@@ -48,6 +48,9 @@ services:
       - METRICS_ENABLED=${METRICS_ENABLED:-true}
       - METRICS_PORT=${METRICS_PORT:-8000}
       - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
+      # Autodiscovery of web status endpoint (bot tries multiple, but this helps)
+      - BACKFILL_STATUS_URL=${BACKFILL_STATUS_URL:-http://web:8080}
+      - BACKFILL_API_KEY=${WEB_API_KEY}
     volumes:
       - ./database:/app/database
       - ./backups:/var/backups/warandpeace
@@ -89,7 +92,7 @@ services:
       - WEB_RP_ID=${WEB_RP_ID}
       - WEB_RP_NAME=${WEB_RP_NAME}
       - WEB_SESSION_SECRET=${WEB_SESSION_SECRET}
-      - WEB_API_ENABLED=${WEB_API_ENABLED:-false}
+      - WEB_API_ENABLED=${WEB_API_ENABLED:-true}
       - WEB_API_KEY=${WEB_API_KEY}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
     volumes:

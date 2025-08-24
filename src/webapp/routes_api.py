@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, Query
 from typing import Optional, List, Dict, Any
 
 from src.webapp import services
+from src.backfill import get_status as backfill_get_status
 
 router = APIRouter(prefix="/api")
 
@@ -34,3 +35,9 @@ async def api_admin_session_stats() -> Dict[str, Any]:
     Note: Global auth middleware in server.py protects /api when enabled and key is configured.
     """
     return services.get_session_stats()
+
+
+@router.get("/backfill/status")
+async def api_backfill_status() -> Dict[str, Any]:
+    """Public API (protected by API key when enabled) for backfill progress."""
+    return backfill_get_status()

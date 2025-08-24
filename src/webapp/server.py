@@ -10,8 +10,12 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
 from prometheus_client import make_asgi_app, Counter, Histogram, CollectorRegistry
 import uvicorn
+import logging
 
 from src.webapp import routes_articles, routes_duplicates, routes_dlq, routes_api, routes_webauthn
+from src.webapp import routes_admin  # admin JSON control endpoints
+from src import config
+from src import backfill
 try:
     import redis  # type: ignore
 except Exception:  # pragma: no cover
@@ -38,8 +42,35 @@ app = FastAPI(
     openapi_url=None
 )
 
-app.mount("/static", StaticFiles(directory="src/webapp/static"), name="static")
-templates_login = Jinja2Templates(directory="src/webapp/templates")
+# Resolve absolute paths for static and templates to be robust under pytest CWDs
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+_STATIC_DIR = os.path.join(_BASE_DIR, "static")
+_TEMPLATES_DIR = os.path.join(_BASE_DIR, "templates")
+
+app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
+templates_login = Jinja2Templates(directory=_TEMPLATES_DIR)
+# Standardize logging format to approved format across the process
+try:
+    _level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+    _level = getattr(logging, _level_name, logging.INFO)
+    logging.basicConfig(
+        level=_level,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        datefmt="%d-%m.%y - [%H:%M]",
+        force=True,
+    )
+    _root_logger = logging.getLogger()
+    _formatter = logging.Formatter(
+        fmt="%(asctime)s - %(levelname)s - %(message)s",
+        datefmt="%d-%m.%y - [%H:%M]",
+    )
+    for _h in list(_root_logger.handlers):
+        try:
+            _h.setFormatter(_formatter)
+        except Exception:
+            pass
+except Exception:
+    pass
 # Expose Redis availability to templates (diagnostics)
 templates_login.env.globals["redis_enabled"] = True if os.getenv("REDIS_URL") else False
 # Capture baseline env for tests to detect runtime overrides
@@ -115,6 +146,8 @@ app.include_router(routes_dlq.router, tags=["Frontend"])
 if os.getenv("WEB_API_ENABLED", "false").lower() == "true":
     app.include_router(routes_api.router, tags=["API"])
 app.include_router(routes_webauthn.router, tags=["Auth"]) 
+app.include_router(routes_admin.router, tags=["Admin"]) 
+app.include_router(routes_admin.public_router, tags=["Public"]) 
 
 
 # --- Public Endpoints ---
@@ -133,7 +166,7 @@ async def auth_middleware(request: Request, call_next):
     """Enforce either API key, WebAuthn session or Basic Auth.
     Allows public access to /healthz, /metrics, /static, /favicon.ico, /webauthn, /login.
     """
-    public_prefixes = ("/healthz", "/metrics", "/static", "/favicon.ico", "/webauthn", "/login", "/register-key", "/basic-login")
+    public_prefixes = ("/healthz", "/metrics", "/static", "/favicon.ico", "/webauthn", "/login", "/register-key", "/basic-login", "/backfill/status-public")
     path = request.url.path
 
     # Skip auth for public endpoints
@@ -210,7 +243,13 @@ async def auth_middleware(request: Request, call_next):
 async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
     # Permit our own static JS and inline styles; disallow inline scripts
-    response.headers["Content-Security-Policy"] = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    # Allow self host scripts and disallow inline scripts
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "img-src 'self' data:; "
+        "style-src 'self' 'unsafe-inline'; "
+        "script-src 'self'"
+    )
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["X-Content-Type-Options"] = "nosniff"
@@ -309,6 +348,22 @@ async def _startup_init_db():
     except Exception:
         # Avoid crashing on startup; errors will surface in endpoints/logs
         pass
+    # Autostart background workers based on env
+    try:
+        if config.BASE_AUTO_UPDATE == "auto":
+            logging.getLogger(__name__).debug(
+                "Autostart: Backfill-Collect (target<=%s)", config.BASE_AUTO_UPDATE_TARGET_DT
+            )
+            backfill.start_collect(until_dt=config.BASE_AUTO_UPDATE_TARGET_DT)
+        if config.BASE_AUTO_SUM == "auto":
+            logging.getLogger(__name__).debug(
+                "Autostart: Backfill-Summarize (target<=%s, model=%s)",
+                config.BASE_AUTO_UPDATE_TARGET_DT,
+                config.BASE_AUTO_SUM_MODEL,
+            )
+            backfill.start_summarize(until_dt=config.BASE_AUTO_UPDATE_TARGET_DT, model=config.BASE_AUTO_SUM_MODEL)
+    except Exception as e:
+        logging.getLogger(__name__).exception("Autostart workers failed: %s", e)
     # Start Redis listener thread (if configured)
     try:
         _spawn_redis_listener()

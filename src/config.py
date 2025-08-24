@@ -6,6 +6,7 @@ except Exception:  # optional dependency in local runs/tests
     def load_dotenv(*args, **kwargs):  # type: ignore
         return False
 from zoneinfo import ZoneInfo
+from datetime import datetime
 
 # Определяем абсолютный путь к директории, где находится этот файл (src)
 src_dir = os.path.dirname(os.path.abspath(__file__))
@@ -87,3 +88,60 @@ SERVICE_PROMPTS_ENABLED = os.getenv("SERVICE_PROMPTS_ENABLED", "true").strip().l
 # --- Telegram канал для служебных прогнозов ---
 SERVICE_TG_ENABLED = os.getenv("SERVICE_TG_ENABLED", "false").strip().lower() in {"1", "true", "yes"}
 SERVICE_TG_CHANNEL_ID = os.getenv("SERVICE_TG_CHANNEL_ID")
+
+# --- Автообновление и авто-суммаризация ---
+# Режимы: auto|manual. По умолчанию manual (ничего не запускаем автоматически)
+BASE_AUTO_UPDATE = os.getenv("BASE_AUTO_UPDATE", "manual").strip().lower()
+BASE_AUTO_SUM = os.getenv("BASE_AUTO_SUM", "manual").strip().lower()
+
+# Модель для авто-суммаризации: gemini|mistral (по умолчанию gemini)
+BASE_AUTO_SUM_MODEL = os.getenv("BASE_AUTO_SUM_MODEL", "gemini").strip().lower()
+
+# Целевая дата (нижняя граница), до которой идем «от настоящего к прошлому».
+# Ожидаемый формат: "ДД.ММ.ГГГГ". Если не задано или неверно — используем 01.01.1970.
+_date_str = os.getenv("BASE_AUTO_UPDATE_DATE_TARGET", "01.01.1970").strip()
+def _parse_target_date(date_str: str) -> datetime:
+    try:
+        # Начало суток в таймзоне приложения
+        dt = datetime.strptime(date_str, "%d.%m.%Y").replace(hour=0, minute=0, second=0, microsecond=0)
+        # Преобразуем в aware с таймзоной приложения
+        return dt.replace(tzinfo=APP_TZ)
+    except Exception:
+        # Фолбэк на эпоху, чтобы не блокировать работу
+        return datetime(1970, 1, 1, tzinfo=APP_TZ)
+
+BASE_AUTO_UPDATE_TARGET_DT = _parse_target_date(_date_str)
+
+# Optional explicit period string: "DD.MM.YYYY-DD.MM.YYYY" (left=upper bound/to, right=lower bound/from)
+BASE_AUTO_UPDATE_PERIOD = os.getenv("BASE_AUTO_UPDATE_PERIOD", "").strip()
+def _parse_period(period_str: str):
+    try:
+        if not period_str:
+            return None, None, None
+        parts = [p.strip() for p in period_str.split("-")]
+        if len(parts) != 2:
+            return None, None, None
+        to_dt = datetime.strptime(parts[0], "%d.%m.%Y").replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=APP_TZ)
+        from_dt = datetime.strptime(parts[1], "%d.%m.%Y").replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=APP_TZ)
+        return period_str, to_dt, from_dt
+    except Exception:
+        return None, None, None
+
+_period_str, BASE_AUTO_UPDATE_FROM_DT, _from_dt_override = _parse_period(BASE_AUTO_UPDATE_PERIOD)
+# If period provided, prefer its lower bound for target; otherwise keep original target
+if _from_dt_override is not None:
+    BASE_AUTO_UPDATE_TARGET_DT = _from_dt_override
+
+def _compute_period_string() -> str:
+    try:
+        # If explicit period string provided and parsed, reuse as-is
+        if _period_str:
+            return _period_str
+        # Else construct from now (upper bound) to target (lower bound)
+        now_str = datetime.now(APP_TZ).strftime("%d.%m.%Y")
+        from_str = BASE_AUTO_UPDATE_TARGET_DT.strftime("%d.%m.%Y")
+        return f"{now_str}-{from_str}"
+    except Exception:
+        return ""
+
+BASE_AUTO_UPDATE_PERIOD_STRING = _compute_period_string()

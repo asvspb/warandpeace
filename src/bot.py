@@ -546,6 +546,190 @@ async def post_init(application: Application):
     )
     logger.info("Фоновая задача для отправки отложенных публикаций запущена.")
 
+    # Периодический лог прогресса бэкфилла (если веб-автообновление активно)
+    async def log_backfill_progress(context: ContextTypes.DEFAULT_TYPE):
+        try:
+            # 1) HTTP-попытка к веб-сервису с автообнаружением базового URL
+            def _default_gateway_ip() -> str | None:
+                try:
+                    with open("/proc/net/route", "r") as f:
+                        for line in f.readlines():
+                            parts = line.strip().split()  # Iface Dest Gateway Flags RefCnt Use Metric Mask MTU Window IRTT
+                            if len(parts) >= 3 and parts[1] == "00000000":
+                                gw_hex = parts[2]
+                                # Hex little-endian
+                                gw = ".".join(str(int(gw_hex[i:i+2], 16)) for i in (6, 4, 2, 0))
+                                return gw
+                except Exception:
+                    return None
+                return None
+
+            port = os.getenv("WEB_PORT", "8080").strip()
+            env_base = os.getenv("BACKFILL_STATUS_URL")
+            candidates = []
+            if env_base:
+                candidates.append(env_base)
+            # Hints from env
+            host = os.getenv("WEB_HOST")
+            if host:
+                candidates.append(f"http://{host}:{port}")
+            # Common docker-compose names and local fallbacks
+            for host_hint in ("web", "warandpeace-web", "localhost", "127.0.0.1", "host.docker.internal"):
+                candidates.append(f"http://{host_hint}:{port}")
+            gw = _default_gateway_ip()
+            if gw:
+                candidates.append(f"http://{gw}:{port}")
+
+            c_run = c_page = c_proc = None
+            c_ts = None
+            s_run = s_proc = None
+            upd = None
+            try:
+                headers = {}
+                api_key = os.getenv("BACKFILL_API_KEY")
+                if api_key:
+                    headers["X-API-Key"] = api_key.strip()
+                resp = None
+                ok = False
+                # Cache a working base to speed up next polls
+                cached = getattr(log_backfill_progress, "_base_ok", None)
+                if cached:
+                    candidates = [cached] + [c for c in candidates if c != cached]
+                for base in candidates:
+                    base = (base or "").strip()
+                    if not base:
+                        continue
+                    url_api = base.rstrip("/") + "/api/backfill/status"
+                    url_public = base.rstrip("/") + "/backfill/status-public"
+                    url_admin = base.rstrip("/") + "/admin/backfill/status"
+                    for url in (url_api, url_public, url_admin):
+                        try:
+                            resp = await asyncio.to_thread(requests.get, url, timeout=3.0, headers=headers)
+                            if resp.ok:
+                                ok = True
+                                log_backfill_progress._base_ok = base  # type: ignore[attr-defined]
+                                break
+                        except Exception:
+                            continue
+                    if ok:
+                        break
+                if ok and resp is not None:
+                    j = resp.json()
+                    c_run = bool(j.get("collect_running"))
+                    c_page = int(j.get("collect_last_page") or 0)
+                    c_proc = int(j.get("collect_processed") or 0)
+                    c_ts = j.get("collect_last_ts")
+                    s_run = bool(j.get("sum_running"))
+                    s_proc = int(j.get("sum_processed") or 0)
+                    upd = None
+            except Exception:
+                # 2) Фолбэк на прямое чтение БД, если общий том подключен
+                try:
+                    from src.database import get_db_connection
+                    def _read_progress():
+                        with get_db_connection() as conn:
+                            cur = conn.cursor()
+                            cur.execute(
+                                "SELECT collect_running, collect_last_page, collect_processed, collect_last_ts, "
+                                "sum_running, sum_processed, updated_at FROM backfill_progress WHERE id=1"
+                            )
+                            return cur.fetchone()
+                    row = await asyncio.to_thread(_read_progress)
+                    if row:
+                        c_run, c_page, c_proc, c_ts, s_run, s_proc, upd = row
+                except Exception:
+                    pass
+
+            if c_run is not None:
+                # Короткие сообщения о старте/окончании
+                if bool(c_run) and not hasattr(log_backfill_progress, "_collect_was_running"):
+                    logger.info("Процесс обновления начался")
+                if (not bool(c_run)) and getattr(log_backfill_progress, "_collect_was_running", False):
+                    logger.info("Процесс обновления завершен")
+                if bool(s_run) and not hasattr(log_backfill_progress, "_sum_was_running"):
+                    logger.info("Процесс суммаризации начался")
+                if (not bool(s_run)) and getattr(log_backfill_progress, "_sum_was_running", False):
+                    logger.info("Процесс суммаризации завершен")
+                # Обновляем флаги прошлых состояний
+                setattr(log_backfill_progress, "_collect_was_running", bool(c_run))
+                setattr(log_backfill_progress, "_sum_was_running", bool(s_run))
+                # Прогресс‑бар обновления по точной цели (collect_goal_total)
+                try:
+                    pct = None
+                    try:
+                        j = resp.json()
+                        if isinstance(j, dict):
+                            pct = j.get("collect_progress_pct")
+                            # Если идёт предварительное сканирование — не показываем бар, логируем статус
+                            if bool(j.get("collect_scanning")):
+                                scan_page = j.get("collect_scan_page")
+                                goal_pages = j.get("collect_goal_pages")
+                                logger.info("[COLLECT] Сканирование периода: страница %s/%s", int(scan_page or 0), int(goal_pages or 0))
+                                pct = None
+                            else:
+                                # Сканирование уже выполнено — сообщаем один раз перед началом обновления (с датами)
+                                if getattr(log_backfill_progress, "_scan_reported", None) is None:
+                                    period = j.get("collect_period")
+                                    if period:
+                                        logger.info("Сканирование периода уже выполнено (%s)", period)
+                                    else:
+                                        from_date = j.get("collect_until")
+                                        try:
+                                            # Try to convert ISO to DD.MM.YYYY
+                                            from datetime import datetime as _dt
+                                            if isinstance(from_date, str):
+                                                dt = _dt.fromisoformat(from_date.replace("Z","+00:00"))
+                                                from_date = dt.strftime("%d.%m.%Y")
+                                        except Exception:
+                                            pass
+                                        logger.info("Сканирование периода уже выполнено (%s-?)", from_date or "?")
+                                    setattr(log_backfill_progress, "_scan_reported", True)
+                    except Exception:
+                        pct = None
+                    if bool(c_run) and isinstance(pct, int):
+                        bars = max(0, min(20, int((pct/100)*20)))
+                        bar = "█"*bars + "─"*(20-bars)
+                        logger.info("[COLLECT] [%s] %s%% (page=%s,total=%s)", bar, pct, int(c_page or 0), int(c_proc or 0))
+                except Exception:
+                    pass
+
+                # Прогресс‑бар суммаризации только когда суммаризация запущена
+                if bool(s_run):
+                    try:
+                        goal = None
+                        # Попробуем достать через API
+                        try:
+                            j = resp.json()
+                            if isinstance(j, dict):
+                                goal = j.get("sum_goal_total")
+                        except Exception:
+                            goal = None
+                        if goal is None:
+                            # Фолбэк к простому счетчику без процента
+                            logger.info("[SUM] Прогресс: %s обработано", s_proc if s_proc is not None else 0)
+                        else:
+                            pct = 0
+                            try:
+                                pct = int(round(100.0 * (s_proc or 0) / max(1, int(goal))))
+                            except Exception:
+                                pct = 0
+                            bars = max(0, min(20, int((pct/100)*20)))
+                            bar = "█"*bars + "─"*(20-bars)
+                            logger.info("[SUM] [%s] %s%% (%s/%s)", bar, pct, int(s_proc or 0), int(goal))
+                    except Exception:
+                        pass
+        except Exception:
+            # silent fail to avoid impacting bot
+            pass
+
+    application.job_queue.run_repeating(
+        log_backfill_progress,
+        interval=60,
+        first=15,
+        name="LogBackfillProgress",
+        job_kwargs=job_kwargs,
+    )
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Отправляет приветственное сообщение."""
     await update.message.reply_text("Привет! Я бот для новостного канала 'Война и мир'.")

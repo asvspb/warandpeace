@@ -213,6 +213,55 @@ def init_db():
         
         logger.info("Инициализация базы данных завершена.")
 
+        # 8. Таблица прогресса бэкфилла (для мониторинга и возобновления)
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS backfill_progress (
+                id INTEGER PRIMARY KEY CHECK(id = 1),
+                collect_running INTEGER DEFAULT 0,
+                collect_until TEXT,
+                collect_scanning INTEGER DEFAULT 0,
+                collect_scan_page INTEGER DEFAULT 0,
+                collect_last_page INTEGER DEFAULT 0,
+                collect_processed INTEGER DEFAULT 0,
+                collect_last_ts TEXT,
+                collect_goal_pages INTEGER,
+                collect_goal_total INTEGER,
+                sum_running INTEGER DEFAULT 0,
+                sum_until TEXT,
+                sum_processed INTEGER DEFAULT 0,
+                sum_last_article_id INTEGER,
+                sum_model TEXT,
+                sum_goal_total INTEGER,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        # Ensure single row exists
+        cursor.execute("INSERT OR IGNORE INTO backfill_progress (id) VALUES (1)")
+        # Backward-compatible: add missing columns if table existed earlier
+        try:
+            cursor.execute("ALTER TABLE backfill_progress ADD COLUMN sum_goal_total INTEGER")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE backfill_progress ADD COLUMN collect_scanning INTEGER DEFAULT 0")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE backfill_progress ADD COLUMN collect_scan_page INTEGER DEFAULT 0")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE backfill_progress ADD COLUMN collect_goal_pages INTEGER")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE backfill_progress ADD COLUMN collect_goal_total INTEGER")
+        except Exception:
+            pass
+        conn.commit()
+
 
 def get_articles_for_backfill(status: Optional[str] = None) -> List[Dict[str, Any]]:
     """

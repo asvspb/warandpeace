@@ -11,7 +11,11 @@ from src.webapp import services
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
 router = APIRouter()
-templates = Jinja2Templates(directory="src/webapp/templates")
+# Resolve absolute templates path to be robust under pytest CWDs
+import os as _os
+_BASE_DIR = _os.path.dirname(_os.path.abspath(__file__))
+_TEMPLATES_DIR = _os.path.join(_BASE_DIR, "templates")
+templates = Jinja2Templates(directory=_TEMPLATES_DIR)
 
 def _require_admin_session(request: Request):
     mode = os.getenv("WEB_AUTH_MODE", "basic").strip().lower()
@@ -95,6 +99,15 @@ async def session_stats(request: Request):
         return redir
     stats = services.get_session_stats()
     return templates.TemplateResponse("session_stats.html", {"request": request, "stats": stats})
+
+
+@router.get("/admin", response_class=HTMLResponse)
+async def admin_panel(request: Request):
+    """Simple admin panel page to control backfill workers."""
+    redir = _require_admin_session(request)
+    if redir:
+        return redir
+    return templates.TemplateResponse("admin.html", {"request": request})
 
 
 @router.get("/stats.json")
