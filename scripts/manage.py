@@ -205,14 +205,18 @@ def ingest_page(page: int, limit: int):
 @click.option('--archive-only', is_flag=True, help='Использовать только архив (быстрее для старых дат).')
 @click.option('--max-workers', type=int, default=4, help='Ограничение параллелизма (в разработке: используется последовательная обработка).')
 def backfill_range(from_date: str, to_date: str, archive_only: bool, max_workers: int):
-    """Backfill «сырых» статей за диапазон дат (без суммаризации)."""
+    """Backfill «сырых» статей за диапазон дат (без суммаризации).
+
+    Идёт от верхней границы периода (to_date) к нижней (from_date),
+    т.е. «от сегодня в прошлое», чтобы как можно быстрее покрыть новые дни.
+    """
     start = datetime.fromisoformat(from_date).date()
     end = datetime.fromisoformat(to_date).date()
     assert start <= end, "from_date должен быть меньше или равен to_date"
 
     total_added = 0
-    current = start
-    while current <= end:
+    current = end
+    while current >= start:
         click.echo(f"Сбор статей за {current.isoformat()}...")
         pairs = asyncio.run(fetch_articles_for_date(current, archive_only=archive_only))
         for title, link in pairs:
@@ -220,7 +224,7 @@ def backfill_range(from_date: str, to_date: str, archive_only: bool, max_workers
                 text = get_article_text(link)
                 if not text:
                     raise ValueError("Контент пустой")
-                
+
                 dt_naive = datetime.combine(current, datetime.min.time())
                 published_at_utc_iso = _to_utc_iso(dt_naive)
                 upsert_raw_article(link, title, published_at_utc_iso, text)
@@ -230,7 +234,7 @@ def backfill_range(from_date: str, to_date: str, archive_only: bool, max_workers
                 logging.error(f"Backfill: ошибка для {link}: {e}")
                 dlq_record('article', link, error_code=type(e).__name__, error_payload=str(e)[:500])
                 ERRORS_TOTAL.labels(type=type(e).__name__).inc()
-        current += timedelta(days=1)
+        current -= timedelta(days=1)
     _echo_with_dlq_tail(f"Backfill завершён. Обработано статей: {total_added}")
 
 

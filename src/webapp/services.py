@@ -1,6 +1,6 @@
 
 import sqlite3
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from datetime import date, datetime, timedelta
 import calendar as py_calendar
 from src.database import get_db_connection, get_content_hash_groups, list_articles_by_content_hash, list_dlq_items
@@ -119,6 +119,24 @@ def _month_bounds(year: int, month: int) -> (str, str):
     return start_iso, end_iso
 
 
+def _prev_next_month(year: int, month: int) -> Tuple[Tuple[int, int], Tuple[int, int]]:
+    prev_y, prev_m = (year, month - 1)
+    next_y, next_m = (year, month + 1)
+    if prev_m == 0:
+        prev_m = 12
+        prev_y -= 1
+    if next_m == 13:
+        next_m = 1
+        next_y += 1
+    return (prev_y, prev_m), (next_y, next_m)
+
+
+_RU_MONTHS = {
+    1: "Январь", 2: "Февраль", 3: "Март", 4: "Апрель", 5: "Май", 6: "Июнь",
+    7: "Июль", 8: "Август", 9: "Сентябрь", 10: "Октябрь", 11: "Ноябрь", 12: "Декабрь",
+}
+
+
 def get_month_calendar_data(year: int, month: int) -> Dict[str, Any]:
     """Builds a calendar data model for the given month.
 
@@ -182,10 +200,14 @@ def get_month_calendar_data(year: int, month: int) -> Dict[str, Any]:
                     "all_summarized": all_summarized,
                 })
 
+            (py, pm), (ny, nm) = _prev_next_month(year, month)
             return {
                 "year": year,
                 "month": month,
+                "month_name": _RU_MONTHS.get(month, str(month)),
                 "weeks": weeks,
+                "prev": {"year": py, "month": pm},
+                "next": {"year": ny, "month": nm},
             }
     except Exception:
         # Fallback for empty/missing DB or environment without write access

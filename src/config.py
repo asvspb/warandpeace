@@ -145,3 +145,8 @@ def _compute_period_string() -> str:
         return ""
 
 BASE_AUTO_UPDATE_PERIOD_STRING = _compute_period_string()
+
+# --- Backfill performance knobs ---
+BACKFILL_CONCURRENCY = int(os.getenv("BACKFILL_CONCURRENCY", "4").strip() or "4")
+BACKFILL_SLEEP_ITEM_MS = int(os.getenv("BACKFILL_SLEEP_ITEM_MS", "50").strip() or "50")
+BACKFILL_SLEEP_PAGE_MS = int(os.getenv("BACKFILL_SLEEP_PAGE_MS", "200").strip() or "200")

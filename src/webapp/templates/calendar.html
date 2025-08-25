@@ -4,12 +4,24 @@
 
 {% block content %}
     <header style="margin-bottom: 24px;">
-        <h1>Календарь</h1>
-        <p class="muted">Обзор статей по дням текущего месяца.</p>
+        <h1>Календарь — {{ calendar.month_name }} {{ calendar.year }}</h1>
+        <p class="muted">Обзор статей по дням выбранного месяца.</p>
+        <div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
+            <a class="btn" href="/calendar?year={{ calendar.prev.year }}&month={{ calendar.prev.month }}">← Пред</a>
+            <a class="btn" href="/calendar?year={{ calendar.next.year }}&month={{ calendar.next.month }}">След →</a>
+            <a class="btn" href="/calendar">Текущий месяц</a>
+            <a class="btn" href="/">На главную</a>
+        </div>
+        <div style="margin-top:8px;">
+            Масштаб: 
+            <a class="btn" href="/calendar">Месяц</a>
+            <a class="btn" href="/day/{{ (calendar.year|string) ~ '-' ~ ("%02d"|format(calendar.month)) ~ '-01' }}">День</a>
+            <!-- Для недели и года можно сделать отдельные страницы позже -->
+        </div>
     </header>
 
     <section class="card">
-        <div class="calendar">
+        <div class="calendar" id="calendar-root" data-year="{{ calendar.year }}" data-month="{{ calendar.month }}">
             <div class="calendar-header">
                 <div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div><div>Сб</div><div>Вс</div><div></div>
             </div>
@@ -43,4 +55,5 @@
             </div>
         </div>
     </section>
+    <script src="/static/calendar.js"></script>
 {% endblock %}

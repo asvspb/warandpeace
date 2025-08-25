@@ -3,9 +3,16 @@
 {% block title %}Лента за {{ day }} - {{ super() }}{% endblock %}
 
 {% block content %}
-    <header style="margin-bottom: 24px;">
-        <h1>Лента за {{ day }}</h1>
-        <p class="muted">Все статьи, опубликованные в этот день.</p>
+    <div id="daily-root" data-day="{{ day }}">
+    <header style="margin-bottom: 24px; display:flex; align-items:center; gap:12px; justify-content:space-between;">
+        <div>
+            <h1 style="margin:0;">Лента за {{ day }}</h1>
+            <p class="muted" style="margin:4px 0 0;">Все статьи, опубликованные в этот день.</p>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center;">
+            <button class="btn" id="btn-ingest">Скачать все за день</button>
+            <button class="btn" id="btn-refresh">Обновить</button>
+        </div>
     </header>
 
     <section class="card">
@@ -42,4 +49,6 @@
             <div class="muted" style="text-align:center; padding: 24px;">В этот день записей нет.</div>
         {% endif %}
     </section>
+    </div>
+    <script src="/static/daily.js"></script>
 {% endblock %}

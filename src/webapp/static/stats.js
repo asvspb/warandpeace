@@ -1,6 +1,7 @@
 (function(){
   const source = new EventSource('/events');
   const reloadOn = ['article_published'];
+  const softRefreshCalendarOn = ['article_published','backfill_updated'];
   const softRefreshOn = ['metrics_updated'];
   source.addEventListener('message', function(e){
     try { console.log('[SSE] message raw:', e.data); } catch(_) {}
@@ -8,11 +9,26 @@
       const data = JSON.parse(e.data || '{}');
       if (!data || !data.type) return;
       if (reloadOn.includes(data.type)) {
-        try { console.log('[SSE] article_published → reload'); } catch(_) {}
-        location.reload();
+        // Soft refresh calendar if method present; fallback to full reload
+        if (typeof window.refreshCalendarSection === 'function') {
+          try { console.log('[SSE] article_published → refreshCalendarSection()'); } catch(_) {}
+          window.refreshCalendarSection();
+        } else {
+          try { console.log('[SSE] article_published → reload'); } catch(_) {}
+          location.reload();
+        }
       } else if (softRefreshOn.includes(data.type)) {
         try { console.log('[SSE] metrics_updated → refreshStats()'); } catch(_) {}
         refreshStats();
+      } else if (softRefreshCalendarOn.includes(data.type)) {
+        if (typeof window.refreshCalendarSection === 'function') {
+          try { console.log('[SSE] backfill_updated → refreshCalendarSection()'); } catch(_) {}
+          window.refreshCalendarSection();
+        }
+        if (typeof window.refreshBackfillProgress === 'function') {
+          try { console.log('[SSE] backfill_updated → refreshBackfillProgress()'); } catch(_) {}
+          window.refreshBackfillProgress();
+        }
       }
     } catch(_){ }
   });
@@ -85,4 +101,8 @@
 
   refreshStats();
   setInterval(refreshStats, 60 * 1000);
+  if (typeof window.refreshBackfillProgress === 'function') {
+    try { window.refreshBackfillProgress(); } catch(_) {}
+    setInterval(function(){ try { window.refreshBackfillProgress(); } catch(_) {} }, 60 * 1000);
+  }
 })();

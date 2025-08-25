@@ -2,7 +2,8 @@ import threading
 import time
 import logging
 import os
-from datetime import datetime
+import asyncio
+from datetime import datetime, timedelta, date
 from typing import Optional, Dict, Any, List
 
 from . import config
@@ -12,8 +13,17 @@ from .database import (
     set_article_summary,
 )
 from .parser import get_articles_from_page, get_article_text
+from .async_parser import fetch_articles_for_date
+from .time_utils import to_utc
 
 logger = logging.getLogger(__name__)
+
+# Optional SSE broadcast for web UI updates
+try:  # pragma: no cover
+    from src.webapp.server import _sse_broadcast  # type: ignore
+except Exception:  # pragma: no cover
+    def _sse_broadcast(_obj: dict) -> None:  # type: ignore
+        return None
 
 
 class _BackfillState:
@@ -42,24 +52,7 @@ class _BackfillState:
         self._stop_event_sum = threading.Event()
 
     def snapshot(self) -> Dict[str, Any]:
-        # Compute progress percentages (best-effort)
-        collect_progress_pct: int | None = None
-        try:
-            if self.collect_running and isinstance(self.collect_goal_total, int) and self.collect_goal_total > 0:
-                collect_progress_pct = int(
-                    max(0.0, min(100.0, (float(self.collect_processed) / float(self.collect_goal_total)) * 100.0))
-                )
-        except Exception:
-            collect_progress_pct = None
-
-        sum_progress_pct: int | None = None
-        try:
-            if self.sum_running and isinstance(self.sum_goal_total, int) and self.sum_goal_total > 0:
-                sum_progress_pct = int(max(0.0, min(100.0, (float(self.sum_processed) / float(self.sum_goal_total)) * 100.0)))
-        except Exception:
-            sum_progress_pct = None
-
-        # Period string (e.g., 24.08.2025-01.01.2025)
+        # Build period string (e.g., 24.08.2025-01.12.2024)
         try:
             from datetime import datetime as _dt
             _from = self.collect_until.strftime("%d.%m.%Y")
@@ -68,16 +61,92 @@ class _BackfillState:
         except Exception:
             collect_period = None
 
+        # Day-based progress that accounts for already populated historical data
+        # Compute lower UTC date corresponding to local midnight of collect_until
+        days_total: int | None = None
+        days_done: int | None = None
+        try:
+            lower_local_midnight = datetime(
+                self.collect_until.year,
+                self.collect_until.month,
+                self.collect_until.day,
+                0,
+                0,
+                0,
+                tzinfo=self.collect_until.tzinfo or config.APP_TZ,
+            )
+            lower_utc_date = to_utc(lower_local_midnight, config.APP_TZ).date().isoformat()
+        except Exception:
+            try:
+                lower_utc_date = self.collect_until.date().isoformat()
+            except Exception:
+                lower_utc_date = None  # give up
+
+        # Query DB for distinct days filled since lower_utc_date
+        if lower_utc_date:
+            try:
+                with get_db_connection() as conn:
+                    cur = conn.cursor()
+                    # days_done: number of distinct calendar days in DB between lower_utc_date and today (UTC)
+                    cur.execute(
+                        """
+                        SELECT COUNT(DISTINCT date(published_at))
+                        FROM articles
+                        WHERE date(published_at) BETWEEN ? AND date('now')
+                        """,
+                        (lower_utc_date,),
+                    )
+                    row = cur.fetchone()
+                    days_done = int(row[0] if row and row[0] is not None else 0)
+
+                    # days_total: inclusive number of days from lower_utc_date to today
+                    cur.execute(
+                        """
+                        SELECT CAST((julianday(date('now')) - julianday(?)) AS INTEGER) + 1
+                        """,
+                        (lower_utc_date,),
+                    )
+                    row2 = cur.fetchone()
+                    days_total = int(row2[0] if row2 and row2[0] is not None else 0)
+            except Exception:
+                days_total, days_done = None, None
+
+        # Compute percentage based on days
+        collect_progress_pct: int | None = None
+        try:
+            if isinstance(days_total, int) and days_total > 0 and isinstance(days_done, int):
+                collect_progress_pct = int(
+                    max(0.0, min(100.0, (float(days_done) / float(days_total)) * 100.0))
+                )
+        except Exception:
+            collect_progress_pct = None
+
+        # Summarization progress remains item-based
+        sum_progress_pct: int | None = None
+        try:
+            if self.sum_running and isinstance(self.sum_goal_total, int) and self.sum_goal_total > 0:
+                sum_progress_pct = int(
+                    max(0.0, min(100.0, (float(self.sum_processed) / float(self.sum_goal_total)) * 100.0))
+                )
+        except Exception:
+            sum_progress_pct = None
+
+        # Expose day-based totals in existing fields for UI compatibility
+        goal_pages = days_total if isinstance(days_total, int) else self.collect_goal_pages
+        scan_page = days_done if isinstance(days_done, int) else self.collect_scan_page
+        goal_total = days_total if isinstance(days_total, int) else self.collect_goal_total
+        processed = days_done if isinstance(days_done, int) else self.collect_processed
+
         return {
             "collect_running": self.collect_running,
             "collect_until": self.collect_until.isoformat(),
             "collect_last_page": self.collect_last_page,
-            "collect_processed": self.collect_processed,
+            "collect_processed": processed,
             "collect_last_ts": self.collect_last_ts,
             "collect_scanning": self.collect_scanning,
-            "collect_scan_page": self.collect_scan_page,
-            "collect_goal_pages": self.collect_goal_pages,
-            "collect_goal_total": self.collect_goal_total,
+            "collect_scan_page": scan_page,
+            "collect_goal_pages": goal_pages,
+            "collect_goal_total": goal_total,
             "collect_period": collect_period,
             "collect_progress_pct": collect_progress_pct,
             "sum_running": self.sum_running,
@@ -198,119 +267,169 @@ def _should_stop_sum() -> bool:
 # --- Collect worker ---
 
 def _collect_loop():
-    logger.debug("Backfill-Collect: started. Target <= %s", STATE.collect_until)
-    try:
-        # 0) One-time scan forward to determine goal pages and total items up to target
-        if STATE.collect_scanning or STATE.collect_goal_total is None or STATE.collect_goal_pages is None:
-            try:
-                logger.info("Процесс сканирования периода начался (%s)", config.BASE_AUTO_UPDATE_PERIOD_STRING)
-            except Exception:
-                pass
-            STATE.collect_scanning = True
-            # keep existing scan_page if resuming
-            STATE.persist()
-            goal_pages = 0
-            goal_total = 0
-            scan_page = max(1, int(STATE.collect_scan_page or 0))
-            while True:
-                arts = get_articles_from_page(scan_page)
-                if not arts:
-                    break
-                all_older = True
-                for a in arts:
-                    if a["published_at"] >= STATE.collect_until:
-                        goal_total += 1
-                        all_older = False
-                goal_pages += 1
-                STATE.collect_scan_page = scan_page
-                # Persist incremental goal so bots/UI can show 0% bar immediately
-                STATE.collect_goal_pages = goal_pages
-                STATE.collect_goal_total = goal_total
-                STATE.persist()
-                if all_older:
-                    break
-                scan_page += 1
-                time.sleep(0.05)
-            # Final persist already done incrementally
-            STATE.collect_scanning = False
-            try:
-                logger.info("Процесс сканирования периода завершен (%s)", config.BASE_AUTO_UPDATE_PERIOD_STRING)
-            except Exception:
-                pass
-            STATE.persist()
+    """
+    Дата‑ориентированный сбор: идём от сегодня к целевой дате STATE.collect_until (в прошлое),
+    для каждого дня собираем пары (title, link) через архив и сохраняем контент.
 
-        # 1) Main collection pass from last known page (resume), refetching the same page for idempotency
-        if (STATE.collect_goal_total is not None and STATE.collect_goal_pages is not None) and not STATE.collect_scanning:
-            try:
-                logger.info("Сканирование периода уже выполнено (%s)", config.BASE_AUTO_UPDATE_PERIOD_STRING)
-            except Exception:
-                pass
+    Это гарантирует покрытие календарных дней, в отличие от обхода ленты по страницам.
+    """
+    logger.debug("Backfill-Collect: started (date mode). Target <= %s", STATE.collect_until)
+    try:
+        # Определяем границы в локальной TZ приложения
+        today_local: date = datetime.now(config.APP_TZ).date()
         try:
-            logger.info("Процесс обновления начался")
+            lower_local: date = STATE.collect_until.astimezone(config.APP_TZ).date()
+        except Exception:
+            lower_local = STATE.collect_until.date()  # best‑effort
+
+        if lower_local > today_local:
+            logger.debug("Backfill-Collect: target is in the future; nothing to do.")
+            return
+
+        total_days = (today_local - lower_local).days + 1
+        # Цели прогресса: страницами считаем «дни»
+        STATE.collect_scanning = False
+        STATE.collect_goal_pages = total_days
+        STATE.collect_goal_total = 0  # будет обновляться по мере обнаружения статей
+        STATE.collect_last_page = 0
+        STATE.collect_scan_page = 0
+        STATE.collect_processed = 0
+        STATE.collect_last_ts = None
+        STATE.persist()
+        try:
+            _sse_broadcast({"type": "backfill_updated"})
         except Exception:
             pass
-        page = max(1, int(STATE.collect_last_page or 0))
-        STATE.collect_last_page = 0
-        while not _should_stop_collect():
-            logger.debug("Backfill-Collect: fetching page %s", page)
-            articles = get_articles_from_page(page)
-            STATE.collect_last_page = page
-            if not articles:
-                logger.debug("Backfill-Collect: no articles on page %s, stopping.", page)
-                break
 
-            # Articles on the listing are ordered newest->older within the page.
-            # Process top-to-bottom; stop condition when all items are older than target.
-            reached_target_on_page = True
-            page_added = 0
-            for a in articles:
-                published_at: datetime = a["published_at"]
-                if published_at >= STATE.collect_until:
-                    reached_target_on_page = False  # still at or after target boundary
-                # Stop collecting beyond target only when strictly older than target
-                if published_at < STATE.collect_until:
-                    # Skip items older than target
-                    continue
+        from concurrent.futures import ThreadPoolExecutor, as_completed
 
-                url = a["link"]
-                title = a["title"]
-                # Try fetch full text for richer DB entry
-                text = get_article_text(url) or ""
-                # upsert to avoid duplicates; increment processed only when insert/update occurs
-                before = STATE.collect_processed
-                upsert_raw_article(url=url, title=title, published_at_iso=_iso(published_at), content=text)
-                # We can't easily know if upsert inserted vs updated; still treat as progressed
-                STATE.collect_processed = before + 1
-                page_added += 1
-                STATE.collect_last_ts = _iso(published_at)
-                STATE.persist()
-                if _should_stop_collect():
-                    break
-                time.sleep(0.1)
-
+        for day_index in range(total_days):
             if _should_stop_collect():
                 break
+            target_day = today_local - timedelta(days=day_index)
+            try:
+                logger.info("Сбор статей за %s...", target_day.isoformat())
+            except Exception:
+                pass
+
+            # Рассчитываем UTC-день, в который попадает локальная полночь target_day
+            dt_local_midnight = datetime.combine(target_day, datetime.min.time())
+            try:
+                utc_dt = to_utc(dt_local_midnight, config.APP_TZ)
+                db_day_iso = utc_dt.date().isoformat()
+            except Exception:
+                utc_dt = dt_local_midnight
+                db_day_iso = target_day.isoformat()
+
+            # Оптимизация: если за этот UTC-день уже есть записи — пропускаем сетевые запросы
+            try:
+                with get_db_connection() as _conn:
+                    _cur = _conn.cursor()
+                    _cur.execute("SELECT 1 FROM articles WHERE date(published_at) = ? LIMIT 1", (db_day_iso,))
+                    _row = _cur.fetchone()
+                    if _row:
+                        STATE.collect_scan_page = day_index + 1
+                        STATE.collect_last_page = day_index + 1
+                        STATE.persist()
+                        try:
+                            _sse_broadcast({"type": "backfill_updated"})
+                        except Exception:
+                            pass
+                        try:
+                            logger.debug("Пропуск %s: уже заполнено для UTC-дня %s", target_day.isoformat(), db_day_iso)
+                        except Exception:
+                            pass
+                        # Пейсинг между днями и далее
+                        try:
+                            time.sleep(max(0.0, float(config.BACKFILL_SLEEP_PAGE_MS) / 1000.0))
+                        except Exception:
+                            pass
+                        continue
+            except Exception:
+                # Если запрос к БД не удался — никак не оптимизируем, продолжаем обычный сбор
+                pass
+
+            # Получаем список ссылок за конкретный день (архивом для скорости и полноты)
+            try:
+                pairs: List[tuple[str, str]] = asyncio.run(
+                    fetch_articles_for_date(target_day, archive_only=True)
+                )
+            except Exception:
+                pairs = []
+
+            STATE.collect_goal_total = int(STATE.collect_goal_total or 0) + len(pairs)
+            STATE.collect_scan_page = day_index + 1
+            STATE.collect_last_page = day_index + 1
+            STATE.persist()
+            try:
+                _sse_broadcast({"type": "backfill_updated"})
+            except Exception:
+                pass
+
+            if not pairs:
+                # Ничего не нашли за день — двигаемся дальше
+                try:
+                    time.sleep(0.05)
+                except Exception:
+                    pass
+                continue
+
+            # Подготовим timestamp публикации (UTC ISO) как «начало суток» для этого дня
+            try:
+                published_at_utc_iso = utc_dt.isoformat()
+            except Exception:
+                # Фолбэк: локальный ISO без TZ
+                published_at_utc_iso = _iso(dt_local_midnight)
+
+            def _process_pair(pair: tuple[str, str]) -> bool:
+                title, link = pair
+                text = get_article_text(link) or ""
+                if not text:
+                    return False
+                upsert_raw_article(url=link, title=title, published_at_iso=published_at_utc_iso, content=text)
+                return True
+
+            added_today = 0
+            with ThreadPoolExecutor(max_workers=config.BACKFILL_CONCURRENCY) as executor:
+                futures = [executor.submit(_process_pair, p) for p in pairs]
+                for fut in as_completed(futures):
+                    try:
+                        if fut.result():
+                            STATE.collect_processed += 1
+                            added_today += 1
+                            STATE.collect_last_ts = _iso(datetime.now(config.APP_TZ))
+                            STATE.persist()
+                    except Exception:
+                        pass
+
             logger.debug(
-                "Backfill-Collect: page %s done: +%s, total=%s, last_ts=%s",
-                page,
-                page_added,
+                "Backfill-Collect: %s done: +%s, total=%s",
+                target_day.isoformat(),
+                added_today,
                 STATE.collect_processed,
-                STATE.collect_last_ts,
             )
             STATE.persist()
-            # If every item on this page was strictly older than target, we can stop
-            if reached_target_on_page:
-                logger.debug("Backfill-Collect: target boundary reached on page %s, stopping.", page)
-                break
-            page += 1
-            time.sleep(0.5)
+            try:
+                _sse_broadcast({"type": "backfill_updated"})
+            except Exception:
+                pass
+
+            # Пейсинг между днями
+            try:
+                time.sleep(max(0.0, float(config.BACKFILL_SLEEP_PAGE_MS) / 1000.0))
+            except Exception:
+                pass
     except Exception as e:
         logger.exception("Backfill-Collect: crashed: %s", e)
     finally:
         STATE.collect_running = False
         STATE._stop_event_collect.clear()
         STATE.persist()
-        logger.debug("Backfill-Collect: stopped. processed=%s last_page=%s", STATE.collect_processed, STATE.collect_last_page)
+        logger.debug(
+            "Backfill-Collect: stopped. processed=%s last_page=%s",
+            STATE.collect_processed,
+            STATE.collect_last_page,
+        )
 
 
 # --- Summarization worker ---

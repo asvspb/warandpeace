@@ -722,10 +722,12 @@ async def post_init(application: Application):
             # silent fail to avoid impacting bot
             pass
 
+    # Reduce log frequency to 15 minutes by default (override via env)
+    log_interval = int(os.getenv("BACKFILL_LOG_INTERVAL_SEC", "900"))
     application.job_queue.run_repeating(
         log_backfill_progress,
-        interval=60,
-        first=15,
+        interval=log_interval,
+        first=min(15, log_interval),
         name="LogBackfillProgress",
         job_kwargs=job_kwargs,
     )

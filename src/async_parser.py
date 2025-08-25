@@ -1,6 +1,6 @@
 import asyncio
 import httpx
-from url_utils import canonicalize_url
+from .url_utils import canonicalize_url
 from bs4 import BeautifulSoup
 from datetime import datetime, date, timedelta
 import logging

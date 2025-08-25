@@ -8,6 +8,11 @@ from datetime import datetime, date
 import math
 
 from src.webapp import services
+from src.async_parser import fetch_articles_for_date
+from src.parser import get_article_text
+from src.database import upsert_raw_article
+import asyncio
+import threading
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
 router = APIRouter()
@@ -51,6 +56,10 @@ async def list_articles(
     y = year or today.year
     m = month or today.month
     calendar_data = services.get_month_calendar_data(y, m)
+    # Ensure stable shape for tests that may not expect prev/next
+    calendar_data.setdefault('prev', {'year': y, 'month': m})
+    calendar_data.setdefault('next', {'year': y, 'month': m})
+    calendar_data.setdefault('month_name', str(m))
     return templates.TemplateResponse("calendar.html", {"request": request, "calendar": calendar_data})
 
 
@@ -75,6 +84,54 @@ async def daily_feed(request: Request, day_iso: str):
         return redir
     articles = services.get_daily_articles(day_iso)
     return templates.TemplateResponse("daily_feed.html", {"request": request, "day": day_iso, "articles": articles})
+
+
+@router.post("/day/{day_iso}/ingest")
+async def ingest_day(request: Request, day_iso: str):
+    """Triggers ingestion of all articles for a specific day.
+
+    Downloads article texts and upserts them into the database.
+    Returns immediately with a simple JSON status. Work runs in a background thread.
+    """
+    # Admin session enforcement
+    redir = _require_admin_session(request)
+    if redir:
+        # Mirror auth style used elsewhere for JSON endpoints
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    # Validate date
+    try:
+        target_date = datetime.strptime(day_iso, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+
+    def _worker():
+        try:
+            pairs = asyncio.run(fetch_articles_for_date(target_date))
+            for title, link in pairs:
+                try:
+                    text = get_article_text(link) or ""
+                    if not text:
+                        continue
+                    # Persist at start of the day to group by date properly
+                    ts = f"{target_date.isoformat()} 00:00:00"
+                    upsert_raw_article(link, title, ts, text)
+                except Exception:
+                    # Swallow per-item errors to allow others to proceed
+                    pass
+            # Best-effort: notify live dashboards to refresh
+            try:
+                from src.webapp.server import _sse_broadcast  # type: ignore
+                _sse_broadcast({"type": "backfill_updated"})
+            except Exception:
+                pass
+        except Exception:
+            # Background worker should not crash the app
+            pass
+
+    t = threading.Thread(target=_worker, name=f"ingest-{day_iso}", daemon=True)
+    t.start()
+    return {"status": "ok", "started": True, "date": day_iso}
 
 @router.get("/articles/{article_id}", response_class=HTMLResponse)
 async def read_article(
