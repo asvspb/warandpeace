@@ -40,6 +40,11 @@ from src.parser import get_article_text, get_articles_from_page  # noqa: E402
 from src.async_parser import fetch_articles_for_date  # noqa: E402
 from src.summarizer import summarize_text_local as summarize  # noqa: E402
 from src.url_utils import canonicalize_url  # noqa: E402
+from src.database import (
+    get_api_usage_daily_range,
+    recalc_api_usage_daily_for_range,
+    prune_api_usage_old_events,
+)
 from metrics import (
     ARTICLES_INGESTED,
     ERRORS_TOTAL,
@@ -415,6 +420,59 @@ def near_duplicates(days: int, limit: int, threshold: float):
     pairs.sort(key=lambda x: x[2], reverse=True)
     for a_id, b_id, sim, a_title, b_title in pairs[:200]:
         click.echo(f"{sim:.2f}: id={a_id} ~ id={b_id} | '{a_title}' ~ '{b_title}'")
+
+
+# --- API usage CLI ---
+
+@cli.command('api-usage-show')
+@click.option('--from-date', 'from_date', required=True, help='Начало периода (YYYY-MM-DD, UTC)')
+@click.option('--to-date', 'to_date', required=True, help='Конец периода (YYYY-MM-DD, UTC)')
+@click.option('--provider', default=None, help='Фильтр провайдера (gemini|mistral|...)')
+@click.option('--model', default=None, help='Фильтр модели')
+@click.option('--csv', 'as_csv', is_flag=True, help='Вывести в CSV-формате')
+def api_usage_show(from_date: str, to_date: str, provider: str | None, model: str | None, as_csv: bool):
+    """Показывает агрегаты использования API за диапазон дат."""
+    rows = get_api_usage_daily_range(from_date, to_date, provider=provider, model=model)
+    if as_csv:
+        import csv, sys
+        writer = csv.writer(sys.stdout)
+        writer.writerow(["day_utc", "provider", "model", "api_key_hash", "req_count", "success_count", "tokens_in_total", "tokens_out_total", "cost_usd_total", "latency_ms_sum"])
+        for r in rows:
+            writer.writerow([
+                r.get('day_utc'), r.get('provider'), r.get('model'), r.get('api_key_hash'),
+                r.get('req_count'), r.get('success_count'), r.get('tokens_in_total'), r.get('tokens_out_total'),
+                r.get('cost_usd_total'), r.get('latency_ms_sum')
+            ])
+    else:
+        click.echo(f"API usage {from_date}..{to_date} (provider={provider or '*'}, model={model or '*'})")
+        for r in rows:
+            click.echo(
+                f"{r.get('day_utc')} {r.get('provider')}/{r.get('model') or ''} key={str(r.get('api_key_hash') or '')[:8]}... "
+                f"req={r.get('req_count')} ok={r.get('success_count')} tokens(in/out)={r.get('tokens_in_total')}/{r.get('tokens_out_total')} cost=${r.get('cost_usd_total'):.4f} lat_sum_ms={r.get('latency_ms_sum')}"
+            )
+
+
+@cli.command('api-usage-recalc')
+@click.option('--from-date', 'from_date', required=True, help='Начало периода (YYYY-MM-DD, UTC)')
+@click.option('--to-date', 'to_date', required=True, help='Конец периода (YYYY-MM-DD, UTC)')
+def api_usage_recalc(from_date: str, to_date: str):
+    """Пересчитывает агрегаты использования API за диапазон дат из сырых событий."""
+    recalc_api_usage_daily_for_range(from_date, to_date)
+    click.echo(f"Готово: агрегаты пересчитаны за {from_date}..{to_date}")
+
+
+@cli.command('api-usage-prune')
+@click.option('--ttl-days', type=int, default=None, help='Срок хранения в днях (по умолчанию из окружения)')
+def api_usage_prune(ttl_days: int | None):
+    """Удаляет сырые события и агрегаты, старше TTL (по умолчанию 30 дней)."""
+    if ttl_days is None:
+        try:
+            from src.config import API_USAGE_EVENTS_TTL_DAYS
+            ttl_days = int(API_USAGE_EVENTS_TTL_DAYS)
+        except Exception:
+            ttl_days = 30
+    res = prune_api_usage_old_events(ttl_days=ttl_days)
+    click.echo(f"Удалено: events={res.get('events',0)} daily={res.get('daily',0)} (ttl_days={ttl_days})")
 
 if __name__ == '__main__':
     cli()

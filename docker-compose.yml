@@ -74,8 +74,7 @@ services:
       - WG_UNHEALTHY_THRESHOLD=${WG_UNHEALTHY_THRESHOLD:-7}
       - WG_DISABLE_MINUTES=${WG_DISABLE_MINUTES:-15}
     restart: unless-stopped
-    entrypoint: ["/bin/sh","-lc","wg_watchdog.sh"]
-
+    entrypoint: ["/bin/sh", "-lc", "wg_watchdog.sh"]
 
   web:
     build: .
@@ -106,32 +105,33 @@ services:
       timeout: 3s
       retries: 3
 
-  caddy:
-    image: caddy:2-alpine
-    container_name: wp-caddy
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    environment:
-      - CADDY_DOMAIN=${CADDY_DOMAIN}
-      - CADDY_EMAIL=${CADDY_EMAIL}
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-    depends_on:
-      - web
-      - redis
+  # caddy:
+  #   image: caddy:2-alpine
+  #   container_name: wp-caddy
+  #   restart: unless-stopped
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   environment:
+  #     - CADDY_DOMAIN=${CADDY_DOMAIN}
+  #     - CADDY_EMAIL=${CADDY_EMAIL}
+  #   volumes:
+  #     - ./Caddyfile:/etc/caddy/Caddyfile:ro
+  #   depends_on:
+  #     - web
+  #     - redis
 
   cron:
     build: .
     # Команда `cron -f` запускает cron в foreground-режиме, что необходимо для Docker.
-    # `&& tail -f /var/log/cron.log` позволяет видеть логи крона через `docker-compose logs`.
+    # Перенаправляем логи cron в stdout для просмотра через `docker-compose logs`.
     command: >
       bash -c "
-        echo '${BACKUP_CRON:-0 3 * * *} python3 /app/tools/backup.py --component db --backend local >> /var/log/cron.log 2>&1' > /etc/cron.d/backup-cron &&
+        echo '${BACKUP_CRON:-0 3 * * *} python3 /app/tools/backup.py --component db --backend local 2>&1' > /etc/cron.d/backup-cron &&
+        echo '' >> /etc/cron.d/backup-cron &&
         chmod 0644 /etc/cron.d/backup-cron &&
-        touch /var/log/cron.log &&
-        cron -f & tail -f /var/log/cron.log
+        crontab /etc/cron.d/backup-cron &&
+        cron -f -L 15
       "
     env_file:
       - .env

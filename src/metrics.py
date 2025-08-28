@@ -111,6 +111,43 @@ SESSION_START_TIME_SECONDS = Gauge(
     "session_start_time_seconds", "Process session start time in seconds since UNIX epoch"
 )
 
+# --- API usage session metrics (persisted separately to SQLite) ---
+# Per-session (resets on process restart)
+SESSION_API_REQUESTS_TOTAL = Counter(
+    "session_api_requests_total",
+    "API requests in current process session",
+    labelnames=("provider", "model"),
+)
+SESSION_API_TOKENS_IN_TOTAL = Counter(
+    "session_api_tokens_in_total",
+    "API input tokens in current session",
+    labelnames=("provider", "model"),
+)
+SESSION_API_TOKENS_OUT_TOTAL = Counter(
+    "session_api_tokens_out_total",
+    "API output tokens in current session",
+    labelnames=("provider", "model"),
+)
+SESSION_API_COST_USD_TOTAL = Counter(
+    "session_api_cost_usd_total",
+    "Estimated API cost (USD) in current session",
+    labelnames=("provider", "model"),
+)
+
+# Daily aggregates (read from SQLite, not reset on restart)
+DAILY_API_REQUESTS_TOTAL = Gauge(
+    "daily_api_requests_total",
+    "Daily aggregated API requests from SQLite",
+    labelnames=("provider", "model", "period"),  # period: today|yesterday
+)
+
+# Daily per-key aggregates (read from SQLite)
+DAILY_API_REQUESTS_BY_KEY_TOTAL = Gauge(
+    "daily_api_requests_by_key_total",
+    "Daily aggregated API requests by API key from SQLite",
+    labelnames=("provider", "model", "key_id", "period"),
+)
+
 
 def start_metrics_server() -> None:
     """Starts Prometheus metrics HTTP server if enabled by env."""

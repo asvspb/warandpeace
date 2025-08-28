@@ -22,6 +22,11 @@ from config import (
     SERVICE_TG_ENABLED,
     SERVICE_TG_CHANNEL_ID,
 )
+from config import (
+    API_USAGE_PERSISTENCE_ENABLED,
+    API_USAGE_FLUSH_INTERVAL_SEC,
+    API_USAGE_EVENTS_TTL_DAYS,
+)
 from time_utils import now_msk, to_utc, utc_to_local
 from metrics import (
     start_metrics_server,
@@ -121,6 +126,19 @@ logger = logging.getLogger(__name__)
 # Импортируем предохранитель после настройки логирования,
 # чтобы первое сообщение тоже было в новом формате
 from connectivity import circuit_breaker, log_network_context  # noqa: E402
+# --- API usage persistence (optional) ---
+try:
+    from api_usage import flush_api_events_to_db, init_session, close_session
+except Exception:  # pragma: no cover
+    def flush_api_events_to_db():
+        return 0
+    def init_session(session_id=None, git_sha=None, container_id=None):
+        return None
+    def close_session():
+        return None
+
+import atexit
+import uuid
 
 # --- Утилиты с ретраями и Circuit Breaker ---
 
@@ -546,6 +564,28 @@ async def post_init(application: Application):
     )
     logger.info("Фоновая задача для отправки отложенных публикаций запущена.")
 
+    # Периодический flush in-memory событий API в БД
+    if API_USAGE_PERSISTENCE_ENABLED:
+        async def _flush_api_usage(_context: ContextTypes.DEFAULT_TYPE):
+            try:
+                await asyncio.to_thread(flush_api_events_to_db)
+            except Exception:
+                pass
+
+        application.job_queue.run_repeating(
+            _flush_api_usage,
+            interval=max(5, int(API_USAGE_FLUSH_INTERVAL_SEC)),
+            first=API_USAGE_FLUSH_INTERVAL_SEC,
+            name="FlushApiUsageEvents",
+            job_kwargs={
+                "misfire_grace_time": int(os.getenv("JOB_MISFIRE_GRACE", "60")),
+                "coalesce": True,
+                "max_instances": 1,
+                "jitter": 0,
+            },
+        )
+        logger.info("Фоновая задача сброса метрик API запущена (интервал=%ss)", API_USAGE_FLUSH_INTERVAL_SEC)
+
     # Периодический лог прогресса бэкфилла (если веб-автообновление активно)
     async def log_backfill_progress(context: ContextTypes.DEFAULT_TYPE):
         try:
@@ -731,6 +771,23 @@ async def post_init(application: Application):
         name="LogBackfillProgress",
         job_kwargs=job_kwargs,
     )
+
+    # Периодическая очистка старых событий по TTL
+    if API_USAGE_PERSISTENCE_ENABLED:
+        async def _prune_api_usage(_context: ContextTypes.DEFAULT_TYPE):
+            try:
+                from src.database import prune_api_usage_old_events
+                await asyncio.to_thread(prune_api_usage_old_events, API_USAGE_EVENTS_TTL_DAYS)
+            except Exception:
+                pass
+        # Раз в сутки
+        application.job_queue.run_repeating(
+            _prune_api_usage,
+            interval=24*60*60,
+            first=60,
+            name="PruneApiUsageTTL",
+            job_kwargs=job_kwargs,
+        )
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Отправляет приветственное сообщение."""
@@ -1022,6 +1079,15 @@ def main():
         SESSION_START_TIME_SECONDS.set(time.time())
     except Exception:
         pass
+    # Инициализация логической сессии и graceful shutdown
+    if API_USAGE_PERSISTENCE_ENABLED:
+        try:
+            session_id = str(uuid.uuid4())
+            init_session(session_id=session_id)
+            atexit.register(lambda: (flush_api_events_to_db(), close_session()))
+        except Exception:
+            pass
+
     # Тюнинг HTTP-клиента Telegram для устойчивости к сетевым сбоям
     request = HTTPXRequest(
         read_timeout=float(os.getenv("TG_READ_TIMEOUT", "60")),

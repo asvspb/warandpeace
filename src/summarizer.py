@@ -46,6 +46,16 @@ except Exception:  # pragma: no cover
     LLM_REQUESTS_BY_KEY_TOTAL = _NoopMetric()
     EXTERNAL_HTTP_REQUESTS_TOTAL = _NoopMetric()
     EXTERNAL_HTTP_REQUEST_DURATION_SECONDS = _NoopMetric()
+# --- API usage persistence (optional) ---
+try:
+    from api_usage import record_api_event, estimate_event_cost_usd, hash_api_key_to_id
+except Exception:  # pragma: no cover
+    def record_api_event(_e):
+        return None
+    def estimate_event_cost_usd(_p, _m, _ti, _to):
+        return 0.0
+    def hash_api_key_to_id(_s):
+        return None
 
 # --- Optional SSE broadcast for web UI updates ---
 try:  # pragma: no cover
@@ -145,6 +155,37 @@ def _make_gemini_request(prompt: str) -> str | None:
                         pass
             except Exception:
                 pass
+            # Persisted API usage event (success)
+            try:
+                _dur_ms = int(max(0.0, _t.time() - _start) * 1000.0)
+                usage = getattr(response, "usage_metadata", None)
+                pt = None
+                ct = None
+                if usage:
+                    pt = getattr(usage, "prompt_token_count", None) or getattr(usage, "input_token_count", None)
+                    ct = getattr(usage, "candidates_token_count", None) or getattr(usage, "output_token_count", None)
+                tokens_in = int(pt or 0)
+                tokens_out = int(ct or 0)
+                cost_usd = estimate_event_cost_usd("gemini", GEMINI_MODEL_NAME, tokens_in, tokens_out)
+                api_key_hash = hash_api_key_to_id(api_key)
+                record_api_event({
+                    "ts_utc": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
+                    "provider": "gemini",
+                    "model": GEMINI_MODEL_NAME,
+                    "api_key_hash": api_key_hash,
+                    "endpoint": "generate_content",
+                    "req_count": 1,
+                    "success": True,
+                    "http_status": None,
+                    "latency_ms": _dur_ms,
+                    "tokens_in": tokens_in,
+                    "tokens_out": tokens_out,
+                    "cost_usd": float(cost_usd),
+                    "error_code": None,
+                    "extra_json": None,
+                })
+            except Exception:
+                pass
             # Always count a successful Gemini request per key
             try:
                 key_id = f"gemini{current_gemini_key_index + 1}"
@@ -169,6 +210,29 @@ def _make_gemini_request(prompt: str) -> str | None:
         logger.error(f"Ошибка с ключом #{current_gemini_key_index + 1}: {message_text}")
         try:
             EXTERNAL_HTTP_REQUESTS_TOTAL.labels("llm", "POST", "5xx").inc()
+        except Exception:
+            pass
+        # Persist failed event
+        try:
+            import time as _t2
+            _dur_ms = int(max(0.0, (_t2.time() - _start) if ' _start' in locals() else 0.0) * 1000.0)
+            api_key_hash = hash_api_key_to_id(api_key)
+            record_api_event({
+                "ts_utc": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
+                "provider": "gemini",
+                "model": GEMINI_MODEL_NAME,
+                "api_key_hash": api_key_hash,
+                "endpoint": "generate_content",
+                "req_count": 1,
+                "success": False,
+                "http_status": None,
+                "latency_ms": _dur_ms,
+                "tokens_in": 0,
+                "tokens_out": 0,
+                "cost_usd": 0.0,
+                "error_code": type(e).__name__,
+                "extra_json": None,
+            })
         except Exception:
             pass
         # Если регион недоступен для Gemini — нет смысла перебирать ключи
@@ -547,12 +611,60 @@ def _mistral_generate_raw_prompt(prompt: str) -> str | None:
                 TOKENS_CONSUMED_COMPLETION_BY_KEY_TOTAL.labels("mistral", "mistral").inc(0)
         except Exception:
             pass
+        # Persisted API usage event (success)
+        try:
+            tokens_in = int(pt or 0) if 'pt' in locals() else 0
+            tokens_out = int(ct or 0) if 'ct' in locals() else 0
+            cost_usd = estimate_event_cost_usd("mistral", MISTRAL_MODEL_NAME, tokens_in, tokens_out)
+            _dur_ms = int(max(0.0, _t.time() - _start) * 1000.0)
+            api_key_hash = hash_api_key_to_id(MISTRAL_API_KEY)
+            record_api_event({
+                "ts_utc": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
+                "provider": "mistral",
+                "model": MISTRAL_MODEL_NAME,
+                "api_key_hash": api_key_hash,
+                "endpoint": "chat",
+                "req_count": 1,
+                "success": True,
+                "http_status": None,
+                "latency_ms": _dur_ms,
+                "tokens_in": tokens_in,
+                "tokens_out": tokens_out,
+                "cost_usd": float(cost_usd),
+                "error_code": None,
+                "extra_json": None,
+            })
+        except Exception:
+            pass
         text = chat_response.choices[0].message.content
         return (text or "").strip()
     except Exception as e:
         logger.error(f"Ошибка при запросе к Mistral (raw): {e}")
         try:
             EXTERNAL_HTTP_REQUESTS_TOTAL.labels("llm", "POST", "5xx").inc()
+        except Exception:
+            pass
+        # Persist failed event
+        try:
+            import time as _t2
+            _dur_ms = int(max(0.0, (_t2.time() - _start) if ' _start' in locals() else 0.0) * 1000.0)
+            api_key_hash = hash_api_key_to_id(MISTRAL_API_KEY)
+            record_api_event({
+                "ts_utc": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
+                "provider": "mistral",
+                "model": MISTRAL_MODEL_NAME,
+                "api_key_hash": api_key_hash,
+                "endpoint": "chat",
+                "req_count": 1,
+                "success": False,
+                "http_status": None,
+                "latency_ms": _dur_ms,
+                "tokens_in": 0,
+                "tokens_out": 0,
+                "cost_usd": 0.0,
+                "error_code": type(e).__name__,
+                "extra_json": None,
+            })
         except Exception:
             pass
         return None

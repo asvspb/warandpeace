@@ -150,3 +150,9 @@ BASE_AUTO_UPDATE_PERIOD_STRING = _compute_period_string()
 BACKFILL_CONCURRENCY = int(os.getenv("BACKFILL_CONCURRENCY", "4").strip() or "4")
 BACKFILL_SLEEP_ITEM_MS = int(os.getenv("BACKFILL_SLEEP_ITEM_MS", "50").strip() or "50")
 BACKFILL_SLEEP_PAGE_MS = int(os.getenv("BACKFILL_SLEEP_PAGE_MS", "200").strip() or "200")
+
+# --- API usage persistence config ---
+API_USAGE_PERSISTENCE_ENABLED = os.getenv("API_USAGE_PERSISTENCE_ENABLED", "true").strip().lower() in {"1", "true", "yes"}
+API_USAGE_FLUSH_INTERVAL_SEC = int(os.getenv("API_USAGE_FLUSH_INTERVAL_SEC", "60").strip() or "60")
+API_USAGE_INCLUDE_TELEGRAM = os.getenv("API_USAGE_INCLUDE_TELEGRAM", "false").strip().lower() in {"1", "true", "yes"}
+API_USAGE_EVENTS_TTL_DAYS = int(os.getenv("API_USAGE_EVENTS_TTL_DAYS", "30").strip() or "30")
