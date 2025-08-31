@@ -4,6 +4,9 @@ from typing import List, Dict, Any, Optional, Tuple
 from datetime import date, datetime, timedelta
 import calendar as py_calendar
 from src.database import get_db_connection, get_content_hash_groups, list_articles_by_content_hash, list_dlq_items
+from src.database import (
+    get_session_stats_daily_range,
+)
 from prometheus_client import REGISTRY  # type: ignore
 from prometheus_client.parser import text_string_to_metric_families  # type: ignore
 import os
@@ -371,3 +374,42 @@ def get_session_stats() -> Dict[str, Any]:
         pass
 
     return stats
+
+
+# --- Session Stats History (DB-based) ---
+
+def get_session_stats_history(days: int = 14) -> Dict[str, Any]:
+    """Returns per-day history for the last N days from SQLite persistence.
+
+    Shape:
+      {
+        "days": [
+          {"day": "YYYY-MM-DD", "http": int, "articles": int, "tokens_in": int, "tokens_out": int},
+          ... (ordered ascending by day)
+        ]
+      }
+    """
+    try:
+        from datetime import datetime, timedelta, timezone
+        today = datetime.now(timezone.utc).date()
+        from_date = (today - timedelta(days=max(0, int(days) - 1))).isoformat()
+        to_date = today.isoformat()
+        rows = get_session_stats_daily_range(from_date, to_date)
+        by_day = {r["day_utc"]: r for r in rows}
+        ordered: List[Dict[str, Any]] = []
+        d = datetime.fromisoformat(from_date).date()
+        end = datetime.fromisoformat(to_date).date()
+        while d <= end:
+            iso = d.isoformat()
+            r = by_day.get(iso, {})
+            ordered.append({
+                "day": iso,
+                "http": int(r.get("http_requests_total", 0) or 0),
+                "articles": int(r.get("articles_processed_total", 0) or 0),
+                "tokens_in": int(r.get("tokens_in_total", 0) or 0),
+                "tokens_out": int(r.get("tokens_out_total", 0) or 0),
+            })
+            d = d + timedelta(days=1)
+        return {"days": ordered}
+    except Exception:
+        return {"days": []}

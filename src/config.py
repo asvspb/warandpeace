@@ -156,3 +156,8 @@ API_USAGE_PERSISTENCE_ENABLED = os.getenv("API_USAGE_PERSISTENCE_ENABLED", "true
 API_USAGE_FLUSH_INTERVAL_SEC = int(os.getenv("API_USAGE_FLUSH_INTERVAL_SEC", "60").strip() or "60")
 API_USAGE_INCLUDE_TELEGRAM = os.getenv("API_USAGE_INCLUDE_TELEGRAM", "false").strip().lower() in {"1", "true", "yes"}
 API_USAGE_EVENTS_TTL_DAYS = int(os.getenv("API_USAGE_EVENTS_TTL_DAYS", "30").strip() or "30")
+
+# --- Session stats persistence (per-day) ---
+# When enabled, selected runtime counters (HTTP requests, articles processed)
+# are persisted into SQLite per calendar day and available in web UI history.
+SESSION_STATS_ENABLED = os.getenv("SESSION_STATS", "false").strip().lower() in {"1", "true", "yes"}

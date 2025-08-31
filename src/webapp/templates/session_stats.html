@@ -63,6 +63,9 @@
             <h4>Детали</h4>
             <p>Время начала сессии: <span id="session-start">{{ stats.session_start or '—' }}</span></p>
             <p>Аптайм: <span id="uptime">{{ (stats.uptime_seconds or 0) // 3600 }}ч {{ ((stats.uptime_seconds or 0) % 3600) // 60 }}м</span></p>
+            <p class="muted" style="margin-top:8px;">
+                История по дням: <a href="/stats/history">открыть</a>
+            </p>
         </article>
     <section>
     </section>

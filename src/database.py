@@ -217,6 +217,12 @@ def init_db():
         except Exception as e:
             logger.error(f"Не удалось инициализировать схему метрик API: {e}")
 
+        # --- Session stats daily persistence schema (ensure) ---
+        try:
+            ensure_session_stats_schema(cursor)
+        except Exception as e:
+            logger.error(f"Не удалось инициализировать схему session_stats: {e}")
+
         logger.info("Инициализация базы данных завершена.")
 
         # 8. Таблица прогресса бэкфилла (для мониторинга и возобновления)
@@ -752,6 +758,169 @@ def prune_api_usage_old_events(ttl_days: int = 30) -> Dict[str, int]:
         cur.execute("DELETE FROM api_usage_daily WHERE day_utc < ?", (cutoff_day,))
         conn.commit()
     return {"events": removed_events, "daily": removed_daily}
+
+
+# -------------------- SESSION STATS (DAILY) PERSISTENCE --------------------
+
+def ensure_session_stats_schema(cursor: Optional[sqlite3.Cursor] = None) -> None:
+    """Создает таблицы для посуточной статистики UI и состояние курсора.
+
+    Таблицы:
+      - session_stats_daily(day_utc, http_requests_total, articles_processed_total, tokens_in_total, tokens_out_total, updated_at)
+      - session_stats_state(id=1, last_session_start REAL, last_http_counter INTEGER)
+    """
+    if cursor is None:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            _ensure_session_stats_schema_inner(cur)
+            conn.commit()
+        return
+    _ensure_session_stats_schema_inner(cursor)
+
+
+def _ensure_session_stats_schema_inner(cur: sqlite3.Cursor) -> None:
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS session_stats_daily (
+          day_utc TEXT PRIMARY KEY,
+          http_requests_total INTEGER NOT NULL DEFAULT 0,
+          articles_processed_total INTEGER NOT NULL DEFAULT 0,
+          tokens_in_total INTEGER NOT NULL DEFAULT 0,
+          tokens_out_total INTEGER NOT NULL DEFAULT 0,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS session_stats_state (
+          id INTEGER PRIMARY KEY CHECK(id = 1),
+          last_session_start REAL,
+          last_http_counter INTEGER NOT NULL DEFAULT 0
+        )
+        """
+    )
+    # Ensure single state row exists
+    cur.execute("INSERT OR IGNORE INTO session_stats_state (id) VALUES (1)")
+
+
+def get_session_stats_state() -> Dict[str, Any]:
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        ensure_session_stats_schema(cur)
+        cur.execute("SELECT last_session_start, last_http_counter FROM session_stats_state WHERE id=1")
+        row = cur.fetchone()
+        if not row:
+            return {"last_session_start": None, "last_http_counter": 0}
+        return {"last_session_start": row[0], "last_http_counter": int(row[1] or 0)}
+
+
+def update_session_stats_state(last_session_start: Optional[float], last_http_counter: int) -> None:
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        ensure_session_stats_schema(cur)
+        cur.execute(
+            "UPDATE session_stats_state SET last_session_start = ?, last_http_counter = ? WHERE id = 1",
+            (last_session_start, int(last_http_counter or 0)),
+        )
+        conn.commit()
+
+
+def upsert_session_stats_daily(
+    day_utc: str,
+    http_requests_total: int,
+    articles_processed_total: int,
+    tokens_in_total: int,
+    tokens_out_total: int,
+) -> None:
+    """Устанавливает агрегированные значения за день (идемпотентно)."""
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        ensure_session_stats_schema(cur)
+        cur.execute(
+            """
+            INSERT INTO session_stats_daily (
+              day_utc, http_requests_total, articles_processed_total, tokens_in_total, tokens_out_total
+            ) VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(day_utc) DO UPDATE SET
+              http_requests_total = excluded.http_requests_total,
+              articles_processed_total = excluded.articles_processed_total,
+              tokens_in_total = excluded.tokens_in_total,
+              tokens_out_total = excluded.tokens_out_total,
+              updated_at = CURRENT_TIMESTAMP
+            """,
+            (
+                day_utc,
+                int(http_requests_total or 0),
+                int(articles_processed_total or 0),
+                int(tokens_in_total or 0),
+                int(tokens_out_total or 0),
+            ),
+        )
+        conn.commit()
+
+
+def get_session_stats_daily_for_day(day_utc: str) -> Optional[Dict[str, Any]]:
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        ensure_session_stats_schema(cur)
+        cur.execute(
+            "SELECT day_utc, http_requests_total, articles_processed_total, tokens_in_total, tokens_out_total, updated_at FROM session_stats_daily WHERE day_utc = ?",
+            (day_utc,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        return {
+            "day_utc": row[0],
+            "http_requests_total": int(row[1] or 0),
+            "articles_processed_total": int(row[2] or 0),
+            "tokens_in_total": int(row[3] or 0),
+            "tokens_out_total": int(row[4] or 0),
+            "updated_at": row[5],
+        }
+
+
+def get_session_stats_daily_range(from_date: str, to_date: str) -> List[Dict[str, Any]]:
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        ensure_session_stats_schema(cur)
+        cur.execute(
+            """
+            SELECT day_utc, http_requests_total, articles_processed_total, tokens_in_total, tokens_out_total, updated_at
+            FROM session_stats_daily
+            WHERE day_utc BETWEEN ? AND ?
+            ORDER BY day_utc ASC
+            """,
+            (from_date, to_date),
+        )
+        rows = cur.fetchall()
+        return [
+            {
+                "day_utc": r[0],
+                "http_requests_total": int(r[1] or 0),
+                "articles_processed_total": int(r[2] or 0),
+                "tokens_in_total": int(r[3] or 0),
+                "tokens_out_total": int(r[4] or 0),
+                "updated_at": r[5],
+            }
+            for r in rows
+        ]
+
+
+def count_articles_for_day(day_utc: str) -> int:
+    """Возвращает число статей с датой публикации day_utc (UTC), по префиксу строки."""
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                "SELECT COUNT(*) FROM articles WHERE substr(published_at, 1, 10) = ?",
+                (day_utc,),
+            )
+            row = cur.fetchone()
+            return int(row[0] or 0) if row else 0
+        except Exception:
+            return 0
 
 
 def upsert_raw_article(url: str, title: str, published_at_iso: str, content: str) -> Optional[int]:

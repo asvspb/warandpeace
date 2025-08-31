@@ -174,3 +174,19 @@ async def session_stats_json(request: Request):
     if redir:
         return redir
     return JSONResponse(services.get_session_stats())
+
+
+@router.get("/stats/history", response_class=HTMLResponse)
+async def session_stats_history(request: Request, days: int = Query(14, ge=1, le=90)):
+    """Renders daily history of session stats from SQLite persistence."""
+    redir = _require_admin_session(request)
+    if redir:
+        return redir
+    hist = services.get_session_stats_history(days=days)
+    return templates.TemplateResponse("session_stats_history.html", {"request": request, "hist": hist, "days": days})
+
+
+@router.get("/stats/history.json")
+async def session_stats_history_json(days: int = Query(14, ge=1, le=90)):
+    """Returns JSON daily history for charts (admin-only via middleware)."""
+    return JSONResponse(services.get_session_stats_history(days=days))

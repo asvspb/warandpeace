@@ -27,6 +27,7 @@ from config import (
     API_USAGE_FLUSH_INTERVAL_SEC,
     API_USAGE_EVENTS_TTL_DAYS,
 )
+from config import SESSION_STATS_ENABLED
 from time_utils import now_msk, to_utc, utc_to_local
 from metrics import (
     start_metrics_server,
@@ -585,6 +586,23 @@ async def post_init(application: Application):
             },
         )
         logger.info("Фоновая задача сброса метрик API запущена (интервал=%ss)", API_USAGE_FLUSH_INTERVAL_SEC)
+
+    # Периодическое сохранение session stats в БД (если включено)
+    if SESSION_STATS_ENABLED:
+        async def _persist_session_stats(_context: ContextTypes.DEFAULT_TYPE):
+            try:
+                from src.session_stats_persist import persist_session_stats_once  # type: ignore
+                await asyncio.to_thread(persist_session_stats_once)
+            except Exception:
+                pass
+        application.job_queue.run_repeating(
+            _persist_session_stats,
+            interval=int(os.getenv("SESSION_STATS_FLUSH_INTERVAL_SEC", "60") or 60),
+            first=10,
+            name="PersistSessionStatsDaily",
+            job_kwargs=job_kwargs,
+        )
+        logger.info("Фоновая задача сохранения session stats включена")
 
     # Периодический лог прогресса бэкфилла (если веб-автообновление активно)
     async def log_backfill_progress(context: ContextTypes.DEFAULT_TYPE):
