@@ -72,19 +72,19 @@ Status: draft
 
 Этап 4 — DDL и совместимость SQL для Postgres [1–2 дня]
 Задачи:
-- [ ] Реализовать init_db для Postgres (через SQLAlchemy text) с типами:
-      - [ ] id → BIGSERIAL/IDENTITY
-      - [ ] published_at/created_at/updated_at → TIMESTAMPTZ DEFAULT NOW()
-      - [ ] UNIQUE(canonical_link), индексы: published_at, backfill_status, content_hash, составные для api_usage_daily
-- [ ] Заменить специфичные для SQLite функции на PG-эквиваленты:
+- [x] Реализовать создание схемы через SQLAlchemy (метаданные + create_all)
+      - [x] id автонумерация, уникальные ключи и индексы
+      - [x] TIMESTAMPTZ/DateTime(timezone=True) для временных полей
+      - [x] Составные PK/индексы для api_usage_daily, уникальные ключи для URL/credential_id
+- [ ] Заменить специфичные для SQLite функции на PG-эквиваленты в DML/SELECT (при переключении рантайма)
       - [ ] substr → substring/date_trunc
       - [ ] CURRENT_TIMESTAMP → NOW()
       - [ ] INSERT OR IGNORE → INSERT ... ON CONFLICT DO NOTHING/UPDATE
-- [ ] Сохранить поддержку SQLite: условные диалектные различия через компоновку SQL в коде
+- [x] Сохранить поддержку SQLite: схема создаётся и там, и там
 Проверка и стабилизация:
 - [ ] pytest -q с DATABASE_URL=postgres://... (PG)
-- [ ] pytest -q без DATABASE_URL (SQLite) — оба режима должны быть зелёными
-- [ ] docker compose up --build -d; smoke в обоих режимах
+- [x] pytest -q без DATABASE_URL (SQLite) — режим зелёный
+- [x] docker compose up --build -d; health веб-компонента OK
 Сохранение:
 - [ ] git add/commit "Stage 4: DDL + SQL compatibility for PG & SQLite"
 
