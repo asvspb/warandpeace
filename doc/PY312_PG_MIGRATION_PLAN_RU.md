@@ -45,13 +45,13 @@ Status: draft
 
 Этап 2 — Добавить Postgres в docker-compose [0.5–1 день]
 Задачи:
-- [ ] Добавить сервис postgres (image: postgres:16-alpine) с volume ./pgdata, healthcheck pg_isready
-- [ ] Расширить .env.example: POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD, DATABASE_URL
-- [ ] Для сервисов web и telegram-bot добавить переменную DATABASE_URL (пока пустую в .env)
+- [x] Добавить сервис postgres (image: postgres:16-alpine) с volume ./pgdata, healthcheck pg_isready
+- [x] Расширить .env.example: POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD, DATABASE_URL
+- [x] Для сервисов web и telegram-bot добавить переменную DATABASE_URL (пока пустую в .env)
 Проверка и стабилизация:
-- [ ] docker compose up -d postgres; дождаться health=healthy
-- [ ] docker compose exec postgres pg_isready -U $POSTGRES_USER -d $POSTGRES_DB
-- [ ] pytest -q (поведение прежнее, т.к. DATABASE_URL ещё не задан)
+- [x] docker compose up -d postgres; дождаться health=healthy
+- [x] docker compose exec postgres pg_isready -U $POSTGRES_USER -d $POSTGRES_DB
+- [x] pytest -q (поведение прежнее, т.к. DATABASE_URL ещё не задан)
 Сохранение:
 - [ ] git add/commit "Stage 2: Compose: Postgres service + env example"
 
