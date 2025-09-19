@@ -14,7 +14,7 @@
 - Полезные файлы: `.env.example`, `requirements.txt`, `docker-compose.yml`, `DEPLOYMENT.md`.
 
 2) Сбор конфигурации и технологий:
-- Ядро: Python 3.10+, FastAPI + Uvicorn, python-telegram-bot (JobQueue), SQLite, Prometheus metrics.
+- Ядро: Python 3.12+, FastAPI + Uvicorn, python-telegram-bot (JobQueue), PostgreSQL (runtime) с dual-backend (SQLite для dev/pytest), Prometheus metrics.
 - Время/таймзона: хранение UTC, прикладная `TIMEZONE` (обычно `Europe/Moscow`).
 
 3) Состояние рабочей ветки:

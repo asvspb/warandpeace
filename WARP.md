@@ -4,7 +4,7 @@ This file provides guidance to WARP (warp.dev) when working with code in this re
 
 ## 1) Часто используемые команды
 
-- Подготовка локального окружения (Python 3.10+):
+- Подготовка локального окружения (Python 3.12+):
   - python -m venv .venv && source .venv/bin/activate
   - pip install -r requirements.txt
   - cp .env.example .env  # заполните переменные окружения согласно примеру
@@ -59,7 +59,7 @@ This file provides guidance to WARP (warp.dev) when working with code in this re
   - src/async_parser.py — асинхронный сбор по датам из архива (httpx + tenacity). Универсальная функция fetch_articles_for_date объединяет ленту и архив, возвращая пары (title, link). Оба парсера учитывают кодировку Windows‑1251 и публикуют метрики внешних HTTP-вызовов.
 
 - Хранилище и модели данных
-  - src/database.py — слой доступа к SQLite (файл по умолчанию /app/database/articles.db, примонтирован как ./database). Ключевые таблицы: articles (url, canonical_link, title, published_at, content, summary_text, content_hash), dlq (dead‑letter queue), digests, pending_publications, а также технические таблицы прогресса backfill.
+- src/database.py — слой доступа к БД с dual-backend: при наличии DATABASE_URL используется PostgreSQL через SQLAlchemy, иначе SQLite (локально/pytest). Ключевые таблицы: articles (url, canonical_link, title, published_at, content, summary_text, content_hash), dlq (dead‑letter queue), digests, pending_publications, а также технические таблицы прогресса backfill. Схема для PG описана в src/db/schema.py.
   - Канонизация URL вынесена в src/url_utils.py и применяется при upsert/select (canonical_link — ключ дедупликации).
 
 - Суммаризация и дайджесты (LLM)
@@ -80,11 +80,12 @@ This file provides guidance to WARP (warp.dev) when working with code in this re
   - src/webapp/server.py (FastAPI) — просмотр БД, отчёты по дубликатам и DLQ, публичные эндпоинты /healthz и /metrics, SSE‑обновления для UI. Аутентификация: HTTP Basic по умолчанию; предусмотрена миграция на WebAuthn/Passkeys (см. doc/WEB_AUTH.md заметки и переменные WEB_AUTH_MODE, WEB_SESSION_SECRET, WEB_RP_ID и пр.).
 
 - Контейнеризация и сеть
-  - Dockerfile — Python 3.10‑slim; requirements.txt фиксирует версии ключевых библиотек.
+- Dockerfile — Python 3.12‑slim; requirements.txt фиксирует версии ключевых библиотек.
   - docker-compose.yml — сервисы: wg-client (WireGuard, пробрасывает метрики бота на хост 9090), telegram-bot (делит сетевой namespace с wg-client), web (FastAPI), redis (pub/sub и кэш), caddy (TLS‑терминация для web), cron (плановые бэкапы). Бот и веб получают .env через env_file. Путь БД примонтирован как ./database:/app/database.
 
 Ключевые переменные окружения (см. .env.example и src/config.py):
-- TIMEZONE (Europe/Moscow), METRICS_ENABLED/METRICS_PORT, LOG_LEVEL, BASE_AUTO_UPDATE*, BACKFILL_* (параллелизм/пейсинг), LLM_PRIMARY и ключи провайдеров, WEB_* параметры. Во время pytest загрузка .env не переопределяет переменные тестов.
+- DATABASE_URL (postgresql+psycopg://...) для включения PostgreSQL; без неё используется SQLite (локально/тесты)
+- TIMEZONE (Europe/Moscow), METRICS_ENABLED/METRICS_PORT, LOG_LEVEL, BASE_AUTO_UPDATE*, BACKFILL_* (параллелизм/пейсинг), LLM_PRIMARY и ключи провайдеров, WEB_* параметры. Во время pytest всегда используется SQLite.
 
 
 ## 3) Особые для этого репозитория правила/документы

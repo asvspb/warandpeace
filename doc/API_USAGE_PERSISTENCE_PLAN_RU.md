@@ -202,26 +202,21 @@ CREATE TABLE IF NOT EXISTS sessions (
 - Точность стоимости: тарификация моделей меняется — хранить версию тарифов в extra_json либо в отдельной таблице; при изменении — пересчитывать прошлое не обязательно.
 
 
-## 14) Чек-лист задач для исполнения (пошагово)
+## 14) Чек-лист задач для исполнения (остаток)
 
-1) database.py
-   - [+] ensure_api_usage_schema()
-   - [+] insert_api_usage_events(batch)
-   - [+] upsert_api_usage_daily(...)
-   - [+] recalc_api_usage_daily_for_range(...)
+Выполнено (архивировано):
+- database.py: ensure_api_usage_schema(), insert_api_usage_events(batch), upsert_api_usage_daily(...), recalc_api_usage_daily_for_range(...)
+
+Осталось:
 2) summarizer.py
    - Обернуть вызовы провайдеров хелпером record_api_event(...).
    - Считать токены/латентность/успех, оценивать cost_usd.
 3) metrics.py
    - Добавить session_* и daily_* метрики, чтение daily из БД.
-4) bot.py
-   - Генерация session_id, старт/стоп логика, периодический flush буфера.
 5) scripts/manage.py
    - Команды api-usage-show, api-usage-recalc, api-usage-today, api-usage-export-csv (опц.).
 6) webapp/server.py (опц.)
    - Эндпоинт/страница для просмотра агрегатов.
-7) Конфиг
-   - Новые переменные окружения в .env.example и парсинг в src/config.py.
 8) Тесты
    - Юнит/интеграционные тесты (pytest), команды в CI.
 

@@ -8,7 +8,7 @@ This repository hosts a Telegram bot and data-processing pipeline that tracks ne
   - `bot.py` – main entry-point; starts the Telegram bot and schedules background jobs.
   - `parser.py`, `async_parser.py` – scrape web pages, normalise dates, return metadata + full text.
   - `summarizer.py` – helpers to call external LLM providers and compose prompts.
-  - `database.py` – low-level persistence helpers (SQLite today, PostgreSQL planned).
+- `database.py` – low-level persistence helpers (dual-backend: PostgreSQL runtime via SQLAlchemy; SQLite for dev/pytest).
   - `config.py` – loads `.env` variables and centralises runtime configuration.
   - `healthcheck.py` – planned helper to verify selectors (not present in current repo).
 - `tests/` – pytest suite covering parsing, summarisation and DB helpers.
@@ -34,7 +34,7 @@ Key separation of concerns:
 - **CI**: run `pytest -q` inside Docker or GitHub Actions on every PR.
 
 #### 4. Code Style
-- **Language**: Python 3.11 + with full type hints for all public functions.
+- **Language**: Python 3.12 + with full type hints for all public functions.
 - **Async IO**: use `asyncio` for network-bound code; avoid blocking the event loop.
 - **Naming**: `snake_case` for variables & functions, `PascalCase` for classes, `UPPER_SNAKE` for constants.
 - **Logging**: standard `logging` module; never use `print` in production code.
@@ -88,7 +88,7 @@ docker compose up -d --build
 - LLM usage must respect token limits (equiv. GPT-4); chunk long texts when necessary.
 - When adding new bot commands, group logically and register them in `post_init`.
 - Keep DB migrations incremental; avoid destructive schema changes in production.
-- PostgreSQL migration plan is documented in `BEST_PRACTICES_RU.md` – keep both files consistent.
+- PostgreSQL is the production backend; schema is managed via SQLAlchemy (see `src/db/schema.py`).
 
 #### 9. Observability & Metrics
 - Enable Prometheus metrics server via env: `METRICS_ENABLED=true`, `METRICS_PORT=8000` (default). The bot exposes 8000 inside the container; by default metrics are published on the host via `wg-client` port mapping at `http://localhost:9090/metrics`.
@@ -115,10 +115,10 @@ docker compose up -d --build
 - Always canonicalise with `src/url_utils.canonicalize_url` before any DB upsert or duplicate check.
 - Rules: force https, lowercase host, strip fragments and tracking params, sort query, normalise path and ports.
 
-#### 13. Database & Migrations (SQLite now)
-- Wrap schema changes in transactions; create a file backup before complex migrations (see `backup_database_copy`).
-- Prefer additive changes; avoid destructive `DROP` except during controlled migrations with backups.
-- Maintain useful indices: `(published_at)`, `(backfill_status)`, `(content_hash)`.
+#### 13. Database & Migrations (PostgreSQL runtime)
+- Схема создаётся через SQLAlchemy (`scripts/manage.py db-init-sqlalchemy`). В продакшене используем PostgreSQL; локально/pytest — SQLite.
+- Предпочитать аддитивные изменения. Для PG использовать `ON CONFLICT` для идемпотентных upsert.
+- Полезные индексы: `(published_at)`, `(backfill_status)`, `(content_hash)`; для PG дополнительно FTS/pg_trgm по необходимости.
 
 #### 14. Duplicates & Near-duplicates
 - Compute and persist `content_hash` (SHA-256) for exact duplicate detection and reporting.

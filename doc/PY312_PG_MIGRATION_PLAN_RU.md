@@ -1,9 +1,21 @@
-# План миграции на Python 3.12 и PostgreSQL (с использованием SQLAlchemy)
+# Архив: План миграции на Python 3.12 и PostgreSQL (выполнено)
 
-Last updated: 2025-09-19
-Owner: @asv-spb
-Branch: py312-pg-migration
-Status: draft
+Статус: завершено в релизе v2.0.
+
+Что сделано по плану:
+- Python 3.12 — базовый runtime (Dockerfile)
+- PostgreSQL — основной backend; dual-backend через SQLAlchemy (SQLite/PG)
+- Инициализация схемы через SQLAlchemy (src/db/schema.py)
+- Скрипт миграции данных из SQLite в Postgres (tools/migrate_sqlite_to_postgres.py)
+- Обновлены .env.example, docker-compose.yml, requirements.txt
+- Smoke‑тесты и pytest — зелёные
+
+Актуальная документация:
+- DEPLOYMENT.md — запуск и переменные
+- WARP.md — архитектура и слои
+- doc/BEST_PRACTICES.md — практики и соглашения
+
+Исторические чек‑листы и черновики удалены для краткости. См. git log релиза v2.0.
 
 Цели
 - [ ] Перейти на Python 3.12 (docker-образ и локальная разработка)

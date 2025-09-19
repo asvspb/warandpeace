@@ -29,9 +29,20 @@ cd warandpeace
 cp .env.example .env
 ```
 
+Главное:
+- В продакшене используется PostgreSQL. Задайте DATABASE_URL вида:
+  postgresql+psycopg://wp:${POSTGRES_PASSWORD}@postgres:5432/warandpeace
+- Для локальной разработки и pytest — DATABASE_URL можно не задавать, будет использован SQLite по пути DB_SQLITE_PATH.
+
 Ключевые переменные окружения (фактически используемые кодом):
 
 ```ini
+# --- База данных ---
+# Для продакшена
+DATABASE_URL=postgresql+psycopg://wp:${POSTGRES_PASSWORD}@postgres:5432/warandpeace
+# Для локальной разработки/pytest (по умолчанию)
+DB_SQLITE_PATH=/app/database/articles.db
+
 # --- Telegram ---
 TELEGRAM_BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
 TELEGRAM_CHANNEL_ID=@your_channel_username   # или numeric -100...
@@ -85,7 +96,6 @@ JOB_MISFIRE_GRACE=60
 JOB_JITTER=3
 
 # --- Резервное копирование (локальный бэкенд) ---
-DB_SQLITE_PATH=/app/database/articles.db
 LOCAL_BACKUP_DIR=/var/backups/warandpeace
 BACKUP_TMP_DIR=/tmp/backup
 BACKUP_RETENTION_DAYS=7
@@ -116,6 +126,7 @@ mkdir -p database && sudo chown -R $(id -u):$(id -g) database
 ## 3. Запуск и управление
 
 Проект содержит несколько сервисов:
+- `postgres` — база данных PostgreSQL (основной runtime)
 - `wg-client` — WireGuard VPN-клиент, сетевой неймспейс которого использует бот
 - `telegram-bot` — основной бот
 - `web` — веб-интерфейс для просмотра БД (read-only)
@@ -125,6 +136,8 @@ mkdir -p database && sudo chown -R $(id -u):$(id -g) database
 
 ```bash
 docker compose up --build -d
+# Первичная инициализация схемы БД (создаст таблицы в PostgreSQL)
+docker compose exec web python3 scripts/manage.py db-init-sqlalchemy
 ```
 
 ### Проверка статуса
@@ -133,7 +146,7 @@ docker compose up --build -d
 docker compose ps
 ```
 
-Ожидаемо: `wg-client` — healthy (после рукопожатия), `warandpeace-bot` — Up, `web` — Up (если включен).
+Ожидаемо: `postgres` — healthy, `wg-client` — healthy (после рукопожатия), `warandpeace-bot` — Up, `web` — Up.
 
 ### Логи
 
@@ -203,7 +216,7 @@ docker compose run --rm telegram-bot \
 Заметки:
 - Команда идемпотентна: дубликаты не создаются (используется canonical_link)
 - Прогресс и ошибки видны в логах и DLQ (`dlq-show`)
-- Локальные несостыковки путей БД: ожидается `/app/database/articles.db` в контейнере
+- Для локального dev без DATABASE_URL используется SQLite по пути `DB_SQLITE_PATH` (по умолчанию `/app/database/articles.db`). В продакшене — всегда PostgreSQL.
 
 ## 8. Надежность сети: таймауты, ретраи, предохрани��ель
 
