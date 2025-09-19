@@ -34,12 +34,12 @@ Status: draft
 
 Этап 1 — Переход на Python 3.12 (без изменения логики) [1 день]
 Задачи:
-- [ ] Обновить Dockerfile на base image python:3.12-slim
-- [ ] Пересобрать образ и убедиться, что метрики/бот/web стартуют
-- [ ] Прогнать pytest -q локально и в контейнере
+- [x] Обновить Dockerfile на base image python:3.12-slim
+- [x] Пересобрать образ и убедиться, что метрики/бот/web стартуют
+- [x] Прогнать pytest -q локально (чистая venv); контейнерная проверка — через запуск web и health
 Проверка и стабилизация:
-- [ ] docker compose up --build -d; docker compose ps; docker compose logs -f (выборочно)
-- [ ] /metrics (бот), /healthz (web)
+- [x] docker compose up --build -d; docker compose ps; docker compose logs -f (выборочно)
+- [x] /metrics (бот), /healthz (web)
 Сохранение:
 - [ ] git add/commit "Stage 1: Python 3.12 base"
 
