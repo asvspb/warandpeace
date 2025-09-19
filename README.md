@@ -9,3 +9,7 @@
 - doc/PLANNING.md — агрегатор планов
 - doc/ROADMAP.md — направления на 1–2 квартала
 - doc/RELEASELOG.md — заметки о релизах
+
+Git hooks:
+- Включить версионируемые хуки: `git config core.hooksPath .githooks`
+- Pre-commit хук предупреждает, если код/инфраструктура менялись без обновления документации.

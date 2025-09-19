@@ -22,7 +22,10 @@
 
 ## Автоматизация
 - Скрипт генерации статуса: `python3 scripts/docs/generate_status.py`
-- (Опционально) Добавьте локальный git‑hook pre-commit, запускающий проверку наличия изменений в документации при правках в src/ или docker‑compose.yml.
+- Pre-commit hook (предупреждение):
+  - Включить версионируемые хуки один раз: `git config core.hooksPath .githooks`
+  - Хук `.githooks/pre-commit` предупредит, если изменены ключевые файлы (src/, Dockerfile, docker-compose.yml, requirements.txt и др.), а документация не была обновлена. Коммит не блокируется.
+  - Отключить временно: `export WARP_DOCS_HOOK_DISABLE=1`
 
 ## Правила
 - Документы пишутся на русском.

@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Minimal pre-commit warning hook
+# Warns if core code/infra files are staged but docs were not updated.
+# Does not block commit (exit 0). To disable: export WARP_DOCS_HOOK_DISABLE=1
+
+set -euo pipefail
+
+if [[ "${WARP_DOCS_HOOK_DISABLE:-}" == 1 ]]; then
+  exit 0
+fi
+
+# Collect staged files
+mapfile -t STAGED < <(git diff --cached --name-only)
+[[ ${#STAGED[@]} -eq 0 ]] && exit 0
+
+# Triggers: code/infra that typically require doc updates
+TRIGGER_RE='^(Dockerfile|docker-compose\.yml|requirements\.txt|\.env\.example|src/|scripts/|prompts/|doc/db/|src/db/|WARP\.md)$'
+# Docs considered as updated
+DOCS_RE='^(DEPLOYMENT\.md|WARP\.md|README\.md|doc/STATUS\.md|doc/PLANNING\.md|doc/ROADMAP\.md|doc/RELEASELOG\.md|doc/DOCS_GUIDE\.md|doc/[^/]+_PLAN_RU\.md)$'
+
+triggered=()
+doc_touched=false
+for f in "${STAGED[@]}"; do
+  if [[ "$f" =~ $TRIGGER_RE ]]; then
+    triggered+=("$f")
+  fi
+  if [[ "$f" =~ $DOCS_RE ]]; then
+    doc_touched=true
+  fi
+done
+
+if [[ ${#triggered[@]} -gt 0 && "$doc_touched" == false ]]; then
+  yellow="\033[33m"; reset="\033[0m"
+  echo -e "${yellow}docs-warning:${reset} Обнаружены изменения в ключевых файлах, но документы не обновлены." 1>&2
+  echo "  Триггеры:" 1>&2
+  for f in "${triggered[@]}"; do
+    echo "   - $f" 1>&2
+  done
+  echo "  Проверьте DEPLOYMENT.md / WARP.md / doc/PLANNING.md / doc/ROADMAP.md / doc/RELEASELOG.md и, при необходимости, doc/*_PLAN_RU.md." 1>&2
+  echo "  Для обновления статуса: python3 scripts/docs/generate_status.py" 1>&2
+  echo "(Это предупреждение не блокирует коммит. Чтобы отключить: export WARP_DOCS_HOOK_DISABLE=1)" 1>&2
+fi
+
+exit 0
