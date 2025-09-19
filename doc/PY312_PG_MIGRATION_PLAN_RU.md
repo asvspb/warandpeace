@@ -102,10 +102,10 @@ Status: draft
 - [x] Инициализация схемы в PG (через web-контейнер)
 - [x] Частичный перенос: articles (5000), sessions, session_stats*, backfill_progress, api_usage_daily (upsert)
 - [x] Верификация COUNT в PG (articles=5000, api_usage_daily≈7 уникальных строк, sessions=47, session_stats_daily=1)
-- [ ] Полный перенос статей (все rows), сверка количеств
+- [x] Полный перенос статей (158599 rows), сверка количеств — OK
 - [ ] pytest -q с PG (DATABASE_URL установлен) — после переключения рантайма (Этап 6)
 Сохранение:
-- [ ] git add/commit "Stage 5: Data migration script + partial transfer & checks"
+- [ ] git add/commit "Stage 5: Data migration script + full transfer & checks"
 
 Этап 6 — Переключение рантайма на Postgres [0.5–1 день]
 Задачи:
