@@ -583,53 +583,104 @@ def ensure_api_usage_schema(cursor: Optional[sqlite3.Cursor] = None) -> None:
 
 def _ensure_api_usage_schema_inner(cur: sqlite3.Cursor) -> None:
     # 1) Сырые события
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS api_usage_events (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          ts_utc TEXT NOT NULL,
-          provider TEXT NOT NULL,
-          model TEXT,
-          api_key_hash TEXT,
-          endpoint TEXT,
-          req_count INTEGER NOT NULL DEFAULT 1,
-          success INTEGER NOT NULL,
-          http_status INTEGER,
-          latency_ms INTEGER,
-          tokens_in INTEGER DEFAULT 0,
-          tokens_out INTEGER DEFAULT 0,
-          cost_usd REAL DEFAULT 0.0,
-          error_code TEXT,
-          extra_json TEXT
+    if _is_pg_backend():
+        # PostgreSQL-совместимая схема (без AUTOINCREMENT)
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS api_usage_events (
+              id BIGSERIAL PRIMARY KEY,
+              ts_utc TEXT NOT NULL,
+              provider TEXT NOT NULL,
+              model TEXT,
+              api_key_hash TEXT,
+              endpoint TEXT,
+              req_count INTEGER NOT NULL DEFAULT 1,
+              success INTEGER NOT NULL,
+              http_status INTEGER,
+              latency_ms INTEGER,
+              tokens_in INTEGER DEFAULT 0,
+              tokens_out INTEGER DEFAULT 0,
+              cost_usd DOUBLE PRECISION DEFAULT 0.0,
+              error_code TEXT,
+              extra_json TEXT
+            )
+            """
         )
-        """
-    )
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_api_usage_events_ts ON api_usage_events (ts_utc)")
-    cur.execute(
-        "CREATE INDEX IF NOT EXISTS idx_api_usage_events_provider_model ON api_usage_events (provider, model)"
-    )
-    cur.execute(
-        "CREATE INDEX IF NOT EXISTS idx_api_usage_events_api_key_hash ON api_usage_events (api_key_hash)"
-    )
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_api_usage_events_ts ON api_usage_events (ts_utc)")
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_api_usage_events_provider_model ON api_usage_events (provider, model)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_api_usage_events_api_key_hash ON api_usage_events (api_key_hash)"
+        )
+    else:
+        # SQLite-совместимая схема
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS api_usage_events (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              ts_utc TEXT NOT NULL,
+              provider TEXT NOT NULL,
+              model TEXT,
+              api_key_hash TEXT,
+              endpoint TEXT,
+              req_count INTEGER NOT NULL DEFAULT 1,
+              success INTEGER NOT NULL,
+              http_status INTEGER,
+              latency_ms INTEGER,
+              tokens_in INTEGER DEFAULT 0,
+              tokens_out INTEGER DEFAULT 0,
+              cost_usd REAL DEFAULT 0.0,
+              error_code TEXT,
+              extra_json TEXT
+            )
+            """
+        )
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_api_usage_events_ts ON api_usage_events (ts_utc)")
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_api_usage_events_provider_model ON api_usage_events (provider, model)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_api_usage_events_api_key_hash ON api_usage_events (api_key_hash)"
+        )
 
     # 2) Дневные агрегаты
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS api_usage_daily (
-          day_utc TEXT NOT NULL,
-          provider TEXT NOT NULL,
-          model TEXT,
-          api_key_hash TEXT,
-          req_count INTEGER NOT NULL DEFAULT 0,
-          success_count INTEGER NOT NULL DEFAULT 0,
-          tokens_in_total INTEGER NOT NULL DEFAULT 0,
-          tokens_out_total INTEGER NOT NULL DEFAULT 0,
-          cost_usd_total REAL NOT NULL DEFAULT 0.0,
-          latency_ms_sum INTEGER NOT NULL DEFAULT 0,
-          PRIMARY KEY (day_utc, provider, model, api_key_hash)
+    if _is_pg_backend():
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS api_usage_daily (
+              day_utc TEXT NOT NULL,
+              provider TEXT NOT NULL,
+              model TEXT,
+              api_key_hash TEXT,
+              req_count INTEGER NOT NULL DEFAULT 0,
+              success_count INTEGER NOT NULL DEFAULT 0,
+              tokens_in_total INTEGER NOT NULL DEFAULT 0,
+              tokens_out_total INTEGER NOT NULL DEFAULT 0,
+              cost_usd_total DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+              latency_ms_sum INTEGER NOT NULL DEFAULT 0,
+              PRIMARY KEY (day_utc, provider, model, api_key_hash)
+            )
+            """
         )
-        """
-    )
+    else:
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS api_usage_daily (
+              day_utc TEXT NOT NULL,
+              provider TEXT NOT NULL,
+              model TEXT,
+              api_key_hash TEXT,
+              req_count INTEGER NOT NULL DEFAULT 0,
+              success_count INTEGER NOT NULL DEFAULT 0,
+              tokens_in_total INTEGER NOT NULL DEFAULT 0,
+              tokens_out_total INTEGER NOT NULL DEFAULT 0,
+              cost_usd_total REAL NOT NULL DEFAULT 0.0,
+              latency_ms_sum INTEGER NOT NULL DEFAULT 0,
+              PRIMARY KEY (day_utc, provider, model, api_key_hash)
+            )
+            """
+        )
     cur.execute("CREATE INDEX IF NOT EXISTS idx_api_usage_daily_provider ON api_usage_daily (provider)")
 
     # 3) Сессии процесса бота (опционально)
@@ -655,13 +706,28 @@ def start_session(session_id: str, git_sha: Optional[str] = None, container_id: 
         cur = conn.cursor()
         ensure_api_usage_schema(cur)
         ts = datetime.now(timezone.utc).isoformat()
-        cur.execute(
-            """
-            INSERT OR REPLACE INTO sessions (session_id, started_at_utc, git_sha, container_id, notes)
-            VALUES (?, COALESCE((SELECT started_at_utc FROM sessions WHERE session_id = ?), ?), ?, ?, ?)
-            """,
-            (session_id, session_id, ts, git_sha, container_id, notes),
-        )
+        if _is_pg_backend():
+            # В PG обновляем только метаданные, стартовую метку не трогаем
+            cur.execute(
+                """
+                INSERT INTO sessions (session_id, started_at_utc, git_sha, container_id, notes)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT (session_id) DO UPDATE SET
+                  git_sha = EXCLUDED.git_sha,
+                  container_id = EXCLUDED.container_id,
+                  notes = EXCLUDED.notes
+                """,
+                (session_id, ts, git_sha, container_id, notes),
+            )
+        else:
+            # SQLite-совместимый вариант с сохранением started_at_utc
+            cur.execute(
+                """
+                INSERT OR REPLACE INTO sessions (session_id, started_at_utc, git_sha, container_id, notes)
+                VALUES (?, COALESCE((SELECT started_at_utc FROM sessions WHERE session_id = ?), ?), ?, ?, ?)
+                """,
+                (session_id, session_id, ts, git_sha, container_id, notes),
+            )
         conn.commit()
 
 
@@ -994,7 +1060,10 @@ def _ensure_session_stats_schema_inner(cur: sqlite3.Cursor) -> None:
         """
     )
     # Ensure single state row exists
-    cur.execute("INSERT OR IGNORE INTO session_stats_state (id) VALUES (1)")
+    if _is_pg_backend():
+        cur.execute("INSERT INTO session_stats_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING")
+    else:
+        cur.execute("INSERT OR IGNORE INTO session_stats_state (id) VALUES (1)")
 
 
 def get_session_stats_state() -> Dict[str, Any]:
