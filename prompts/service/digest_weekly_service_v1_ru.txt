@@ -1,0 +1,21 @@
+Сформируйте недельный служебный отчёт. Вывод — ТОЛЬКО JSON.
+Правила:
+- Устойчивые тренды (N≥3 дня подряд).
+- Дельты против прошлой недели, где возможно.
+- Вероятности на горизонте 14 дней.
+
+JSON:
+{
+  "window": {"start": string, "end": string},
+  "stable_trends": [{"topic": string, "direction": "up|down|stable", "days": number, "evidence": [string]}],
+  "early_warnings": [{"signal": string, "likelihood_14d": number, "lead_indicators": [string]}],
+  "regime_changes": [{"what_changed": string, "when": string, "impact": "low|medium|high"}],
+  "scenario_set": [
+    {"name": "base|bull|bear|tail", "probability": number, "drivers": [string]}
+  ],
+  "confidence_overall": number,
+  "notes": string
+}
+
+Вход:
+{"ARTICLES": {{ARTICLES_JSONL}}, "LAST_WEEK_SUMMARY": {{LW_SUMMARY_JSON_OR_NULL}}}

@@ -1,0 +1,22 @@
+Сформируйте суточный служебный отчёт WP Pulse. Вывод — ТОЛЬКО JSON.
+Требования к агрегации:
+- Группируйте по `domain` и `event_type`.
+- ТОП‑5 сигналов по росту риска и ТОП‑5 по снижению (delta>0 / delta<0).
+- Калиброванные вероятности на горизонте 72 часа.
+- Покажите изменения против вчерашнего отчёта, если `YESTERDAY_SUMMARY` передан.
+
+Структура JSON:
+{
+  "window": {"start": string, "end": string},
+  "coverage": {"articles_total": number, "sources": number},
+  "top_risk_ups": [{"signal": string, "domain": string, "delta": number, "evidence": [string]}],
+  "top_risk_downs": [{"signal": string, "domain": string, "delta": number, "evidence": [string]}],
+  "new_events": [{"event_type": string, "location": string|null, "count": number}],
+  "forecasts_72h": [{"outcome": string, "probability": number, "drivers": [string]}],
+  "alerts_proposed": [{"title": string, "severity": "low|medium|high", "justification": string}],
+  "confidence_overall": number,
+  "notes": string
+}
+
+Вход:
+{"ARTICLES": {{ARTICLES_JSONL}}, "YESTERDAY_SUMMARY": {{Y_SUMMARY_JSON_OR_NULL}}}

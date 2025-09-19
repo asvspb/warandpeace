@@ -1,0 +1,10 @@
+Верните ТОЛЬКО JSON:
+{
+  "top_topics": [string],
+  "risk_heatmap": [{"domain": string, "score": number}],
+  "most_probable_outcome_14d": {"name": string, "probability": number},
+  "confidence_overall": number
+}
+
+Вход:
+{{ARTICLES_JSONL}}

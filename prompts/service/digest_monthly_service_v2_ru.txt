@@ -1,0 +1,10 @@
+Верните ТОЛЬКО JSON:
+{
+  "risk_map": [{"risk": string, "domain": string, "score": number, "trend": "up|down|stable"}],
+  "key_events": [{"title": string, "date": string, "impact": "low|medium|high"}],
+  "probable_shifts_90d": [{"outcome": string, "probability": number}],
+  "confidence_overall": number
+}
+
+Вход:
+{{ARTICLES_JSONL}}

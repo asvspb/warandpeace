@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Вход{% endblock %}
+{% block content %}
+<h1>Вход администратора</h1>
+{% if auth_mode == 'webauthn' %}
+  <p>Войдите по ключу безопасности (Passkey). Браузер запросит подтверждение.</p>
+  <div id="login-status" class="muted"></div>
+  <button id="btn-login">Войти по ключу</button>
+  <script src="/static/login.js"></script>
+  <p class="muted" style="margin-top:12px;">Нет ключа? <a href="/register-key">Зарегистрировать</a></p>
+{% else %}
+  <p>Для входа используйте логин и пароль.</p>
+  <a class="btn" href="/basic-login">Перейти к форме входа</a>
+{% endif %}
+{% endblock %}

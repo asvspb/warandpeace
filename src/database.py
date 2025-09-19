@@ -5,7 +5,8 @@ import logging
 import os
 import shutil
 from datetime import datetime
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Sequence, Iterator
+import re
 
 # Support both package and module execution contexts
 try:  # When imported as part of the 'src' package (e.g., uvicorn src.webapp.server:app)
@@ -13,8 +14,167 @@ try:  # When imported as part of the 'src' package (e.g., uvicorn src.webapp.ser
 except Exception:  # When running scripts like 'python src/bot.py'
     import config  # type: ignore
 
+# SQLAlchemy dual-backend support
+try:
+    # package context
+    from .db.engine import create_engine_from_env, get_database_url  # type: ignore
+except Exception:
+    try:
+        from db.engine import create_engine_from_env, get_database_url  # type: ignore
+    except Exception:
+        create_engine_from_env = None  # type: ignore
+        def get_database_url() -> str:  # type: ignore
+            return ""
+
 DATABASE_NAME = config.DB_SQLITE_PATH
 logger = logging.getLogger()
+
+
+def _is_pg_backend() -> bool:
+    # Во время pytest всегда используем SQLite, даже если в .env задан DATABASE_URL
+    try:
+        if os.environ.get("PYTEST_CURRENT_TEST"):
+            return False
+        url = (get_database_url() or "").strip().lower()
+        return url.startswith("postgresql")
+    except Exception:
+        return False
+
+
+class _RowAdapter:
+    """Адаптер строки результата SQLAlchemy для совместимости со sqlite3.Row.
+
+    Поддерживает row['col'] и row[0], а также dict(row).
+    """
+    __slots__ = ("_keys", "_mapping", "_values")
+
+    def __init__(self, keys: Sequence[str], row: Any):  # type: ignore
+        # SQLAlchemy Row имеет ._mapping и .keys()
+        try:
+            self._mapping = row._mapping  # type: ignore
+            self._keys = list(keys)
+            self._values = [self._mapping.get(k) for k in self._keys]
+        except Exception:
+            # fallback на dict(row)
+            d = dict(row)
+            self._keys = list(d.keys())
+            self._values = [d[k] for k in self._keys]
+            class _M(dict):
+                def get(self, k, default=None):
+                    return dict.__getitem__(self, k)
+            self._mapping = _M(d)
+
+    def __getitem__(self, key):  # type: ignore
+        if isinstance(key, int):
+            return self._values[key]
+        return self._mapping[key]
+
+    def __iter__(self) -> Iterator[str]:
+        # Для dict(row)
+        return iter(self._keys)
+
+
+class _PgCursorAdapter:
+    def __init__(self, sa_conn):
+        from sqlalchemy import text as sa_text  # lazy import
+        self._conn = sa_conn
+        self._sa_text = sa_text
+        self._last_result = None
+        self.lastrowid: Optional[int] = None
+
+    @staticmethod
+    def _convert_qmarks(sql: str, params: Sequence[Any]) -> (str, Dict[str, Any]):  # type: ignore
+        # Заменяет ? на :p0, :p1 ... и формирует словарь параметров
+        idx = 0
+        def repl(_):
+            nonlocal idx
+            name = f"p{idx}"
+            idx += 1
+            return f":{name}"
+        new_sql = re.sub(r"\?", repl, sql)
+        bind = {f"p{i}": params[i] for i in range(len(params))}
+        return new_sql, bind
+
+    def execute(self, sql: str, params: Optional[Sequence[Any]] = None):  # type: ignore
+        self.lastrowid = None
+        if params is None:
+            params = []
+        new_sql, bind = self._convert_qmarks(sql, list(params))
+        self._last_result = self._conn.execute(self._sa_text(new_sql), bind)
+        # Спец-случай: нужно вернуть id вставленной статьи как lastrowid
+        try:
+            if sql.strip().lower().startswith("insert into articles"):
+                # canonical_link — второй параметр в обоих INSERT
+                if len(params) >= 2:
+                    canon = params[1]
+                    row = self._conn.execute(self._sa_text("SELECT id FROM articles WHERE canonical_link = :canon LIMIT 1"), {"canon": canon}).fetchone()
+                    if row is not None:
+                        self.lastrowid = int(row[0])
+        except Exception:
+            pass
+        return self
+
+    def executemany(self, sql: str, seq_of_params: Sequence[Sequence[Any]]):  # type: ignore
+        self.lastrowid = None
+        if not seq_of_params:
+            return self
+        # Преобразуем SQL один раз
+        new_sql, _ = self._convert_qmarks(sql, list(seq_of_params[0]))
+        rows = []
+        for params in seq_of_params:
+            _, bind = self._convert_qmarks(sql, list(params))
+            rows.append(bind)
+        self._last_result = self._conn.execute(self._sa_text(new_sql), rows)
+        return self
+
+    def fetchall(self):  # type: ignore
+        if self._last_result is None:
+            return []
+        keys = list(self._last_result.keys())
+        return [_RowAdapter(keys, r) for r in self._last_result.fetchall()]
+
+    def fetchone(self):  # type: ignore
+        if self._last_result is None:
+            return None
+        row = self._last_result.fetchone()
+        if row is None:
+            return None
+        keys = list(self._last_result.keys())
+        return _RowAdapter(keys, row)
+
+
+class _PgConnectionAdapter:
+    def __init__(self, sa_engine):
+        self._engine = sa_engine
+        self._conn = sa_engine
+        self._trans = None
+        try:
+            self._trans = self._conn.begin()
+        except Exception:
+            self._trans = None
+
+    def cursor(self):  # type: ignore
+        return _PgCursorAdapter(self._conn)
+
+    def commit(self):  # type: ignore
+        try:
+            if self._trans and self._trans.is_active:
+                self._trans.commit()
+                self._trans = self._conn.begin()
+        except Exception:
+            pass
+
+    def close(self):  # type: ignore
+        try:
+            if self._trans and self._trans.is_active:
+                self._trans.commit()
+        except Exception:
+            pass
+        try:
+            self._conn.close()
+        except Exception:
+            pass
+
 
 @contextmanager
 def get_db_connection():
@@ -22,24 +182,42 @@ def get_db_connection():
 
     Гарантирует существование директории БД и безопасно закрывает соединение.
     """
-    conn = None
-    try:
-        db_dir = os.path.dirname(DATABASE_NAME)
-        if db_dir and not os.path.exists(db_dir):
-            os.makedirs(db_dir, exist_ok=True)
-
-        conn = sqlite3.connect(DATABASE_NAME)
-        conn.row_factory = sqlite3.Row
-        yield conn
-    except sqlite3.Error as e:
-        logger.error(f"Database connection error: {e}")
-        raise
-    finally:
+    if _is_pg_backend() and create_engine_from_env is not None:
+        # Режим PostgreSQL через SQLAlchemy
+        sa_conn = None
         try:
-            if conn:
-                conn.close()
-        except Exception:
-            pass
+            sa_conn = create_engine_from_env().connect()
+            adapter = _PgConnectionAdapter(sa_conn)
+            yield adapter
+        except Exception as e:
+            logger.error(f"Database connection error (PG): {e}")
+            raise
+        finally:
+            try:
+                if adapter:  # type: ignore
+                    adapter.close()  # type: ignore
+            except Exception:
+                pass
+    else:
+        # Режим SQLite (оригинальная реализация)
+        conn = None
+        try:
+            db_dir = os.path.dirname(DATABASE_NAME)
+            if db_dir and not os.path.exists(db_dir):
+                os.makedirs(db_dir, exist_ok=True)
+
+            conn = sqlite3.connect(DATABASE_NAME)
+            conn.row_factory = sqlite3.Row
+            yield conn
+        except sqlite3.Error as e:
+            logger.error(f"Database connection error: {e}")
+            raise
+        finally:
+            try:
+                if conn:
+                    conn.close()
+            except Exception:
+                pass
 
 def init_db():
     """
@@ -47,6 +225,21 @@ def init_db():
     - Добавляет таблицу 'articles' со всеми необходимыми полями, включая 'backfill_status'.
     - Выполняет миграцию данных из старой схемы, если это необходимо.
     """
+    # В режиме PostgreSQL используем SQLAlchemy-схему и выходим
+    if _is_pg_backend() and create_engine_from_env is not None:
+        try:
+            try:
+                from .db.schema import create_all_schema  # type: ignore
+            except Exception:
+                from db.schema import create_all_schema  # type: ignore
+            engine = create_engine_from_env()
+            create_all_schema(engine)
+            logger.info("PG schema ensured via SQLAlchemy.")
+            return
+        except Exception as e:
+            logger.error(f"Не удалось создать схему PG через SQLAlchemy: {e}")
+            # Падаем дальше, чтобы не скрывать ошибку на этапе инициализации
+            raise
     with get_db_connection() as conn:
         cursor = conn.cursor()
 
@@ -193,7 +386,86 @@ def init_db():
         """)
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_pending_publications_created_at ON pending_publications (created_at)")
         
+        # 7. Таблица для WebAuthn-учётных данных администратора
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS webauthn_credential (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              user_id TEXT NOT NULL,
+              credential_id BLOB NOT NULL UNIQUE,
+              public_key BLOB NOT NULL,
+              sign_count INTEGER NOT NULL DEFAULT 0,
+              transports TEXT,
+              aaguid TEXT,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              last_used_at TIMESTAMP
+            )
+            """
+        )
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_webauthn_user ON webauthn_credential (user_id)")
+        
+        # --- API usage persistence schema (ensure) ---
+        try:
+            ensure_api_usage_schema(cursor)
+        except Exception as e:
+            logger.error(f"Не удалось инициализировать схему метрик API: {e}")
+
+        # --- Session stats daily persistence schema (ensure) ---
+        try:
+            ensure_session_stats_schema(cursor)
+        except Exception as e:
+            logger.error(f"Не удалось инициализировать схему session_stats: {e}")
+
         logger.info("Инициализация базы данных завершена.")
+
+        # 8. Таблица прогресса бэкфилла (для мониторинга и возобновления)
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS backfill_progress (
+                id INTEGER PRIMARY KEY CHECK(id = 1),
+                collect_running INTEGER DEFAULT 0,
+                collect_until TEXT,
+                collect_scanning INTEGER DEFAULT 0,
+                collect_scan_page INTEGER DEFAULT 0,
+                collect_last_page INTEGER DEFAULT 0,
+                collect_processed INTEGER DEFAULT 0,
+                collect_last_ts TEXT,
+                collect_goal_pages INTEGER,
+                collect_goal_total INTEGER,
+                sum_running INTEGER DEFAULT 0,
+                sum_until TEXT,
+                sum_processed INTEGER DEFAULT 0,
+                sum_last_article_id INTEGER,
+                sum_model TEXT,
+                sum_goal_total INTEGER,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        # Ensure single row exists
+        cursor.execute("INSERT OR IGNORE INTO backfill_progress (id) VALUES (1)")
+        # Backward-compatible: add missing columns if table existed earlier
+        try:
+            cursor.execute("ALTER TABLE backfill_progress ADD COLUMN sum_goal_total INTEGER")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE backfill_progress ADD COLUMN collect_scanning INTEGER DEFAULT 0")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE backfill_progress ADD COLUMN collect_scan_page INTEGER DEFAULT 0")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE backfill_progress ADD COLUMN collect_goal_pages INTEGER")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE backfill_progress ADD COLUMN collect_goal_total INTEGER")
+        except Exception:
+            pass
+        conn.commit()
 
 
 def get_articles_for_backfill(status: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -288,6 +560,560 @@ def is_article_posted(url: str) -> bool:
 
 def _sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+# -------------------- API USAGE PERSISTENCE --------------------
+
+def ensure_api_usage_schema(cursor: Optional[sqlite3.Cursor] = None) -> None:
+    """Создает таблицы и индексы для персистентной статистики API-использования.
+
+    Может принимать внешний курсор (для вызова из init_db), либо создаёт свой.
+    """
+    def _exec(cur: sqlite3.Cursor, sql: str, params: tuple = ()) -> None:
+        cur.execute(sql, params)
+
+    if cursor is None:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            _ensure_api_usage_schema_inner(cur)
+            conn.commit()
+        return
+    _ensure_api_usage_schema_inner(cursor)
+
+
+def _ensure_api_usage_schema_inner(cur: sqlite3.Cursor) -> None:
+    # 1) Сырые события
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS api_usage_events (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          ts_utc TEXT NOT NULL,
+          provider TEXT NOT NULL,
+          model TEXT,
+          api_key_hash TEXT,
+          endpoint TEXT,
+          req_count INTEGER NOT NULL DEFAULT 1,
+          success INTEGER NOT NULL,
+          http_status INTEGER,
+          latency_ms INTEGER,
+          tokens_in INTEGER DEFAULT 0,
+          tokens_out INTEGER DEFAULT 0,
+          cost_usd REAL DEFAULT 0.0,
+          error_code TEXT,
+          extra_json TEXT
+        )
+        """
+    )
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_api_usage_events_ts ON api_usage_events (ts_utc)")
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS idx_api_usage_events_provider_model ON api_usage_events (provider, model)"
+    )
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS idx_api_usage_events_api_key_hash ON api_usage_events (api_key_hash)"
+    )
+
+    # 2) Дневные агрегаты
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS api_usage_daily (
+          day_utc TEXT NOT NULL,
+          provider TEXT NOT NULL,
+          model TEXT,
+          api_key_hash TEXT,
+          req_count INTEGER NOT NULL DEFAULT 0,
+          success_count INTEGER NOT NULL DEFAULT 0,
+          tokens_in_total INTEGER NOT NULL DEFAULT 0,
+          tokens_out_total INTEGER NOT NULL DEFAULT 0,
+          cost_usd_total REAL NOT NULL DEFAULT 0.0,
+          latency_ms_sum INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY (day_utc, provider, model, api_key_hash)
+        )
+        """
+    )
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_api_usage_daily_provider ON api_usage_daily (provider)")
+
+    # 3) Сессии процесса бота (опционально)
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS sessions (
+          session_id TEXT PRIMARY KEY,
+          started_at_utc TEXT NOT NULL,
+          ended_at_utc TEXT,
+          git_sha TEXT,
+          container_id TEXT,
+          notes TEXT
+        )
+        """
+    )
+
+
+def start_session(session_id: str, git_sha: Optional[str] = None, container_id: Optional[str] = None, notes: Optional[str] = None) -> None:
+    """Регистрирует старт сессии процесса бота в БД."""
+    from datetime import datetime, timezone
+
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        ensure_api_usage_schema(cur)
+        ts = datetime.now(timezone.utc).isoformat()
+        cur.execute(
+            """
+            INSERT OR REPLACE INTO sessions (session_id, started_at_utc, git_sha, container_id, notes)
+            VALUES (?, COALESCE((SELECT started_at_utc FROM sessions WHERE session_id = ?), ?), ?, ?, ?)
+            """,
+            (session_id, session_id, ts, git_sha, container_id, notes),
+        )
+        conn.commit()
+
+
+def end_session(session_id: str) -> None:
+    """Отмечает завершение сессии."""
+    from datetime import datetime, timezone
+
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        ensure_api_usage_schema(cur)
+        ts = datetime.now(timezone.utc).isoformat()
+        cur.execute(
+            "UPDATE sessions SET ended_at_utc = ? WHERE session_id = ?",
+            (ts, session_id),
+        )
+        conn.commit()
+
+
+def upsert_api_usage_daily(
+    day_utc: str,
+    provider: str,
+    model: Optional[str],
+    api_key_hash: Optional[str],
+    deltas: Dict[str, Any],
+) -> None:
+    """Инкрементально обновляет дневной агрегат по ключу (day, provider, model, key)."""
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        ensure_api_usage_schema(cur)
+        cur.execute(
+            """
+            INSERT INTO api_usage_daily (
+              day_utc, provider, model, api_key_hash,
+              req_count, success_count, tokens_in_total, tokens_out_total,
+              cost_usd_total, latency_ms_sum
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(day_utc, provider, model, api_key_hash) DO UPDATE SET
+              req_count = req_count + excluded.req_count,
+              success_count = success_count + excluded.success_count,
+              tokens_in_total = tokens_in_total + excluded.tokens_in_total,
+              tokens_out_total = tokens_out_total + excluded.tokens_out_total,
+              cost_usd_total = cost_usd_total + excluded.cost_usd_total,
+              latency_ms_sum = latency_ms_sum + excluded.latency_ms_sum
+            """,
+            (
+                day_utc,
+                provider,
+                model,
+                api_key_hash,
+                int(deltas.get("req_count", 0) or 0),
+                int(deltas.get("success_count", 0) or 0),
+                int(deltas.get("tokens_in_total", 0) or 0),
+                int(deltas.get("tokens_out_total", 0) or 0),
+                float(deltas.get("cost_usd_total", 0.0) or 0.0),
+                int(deltas.get("latency_ms_sum", 0) or 0),
+            ),
+        )
+        conn.commit()
+
+
+def insert_api_usage_events(batch: List[Dict[str, Any]]) -> int:
+    """Вставляет батч событий в api_usage_events и инкрементит дневные агрегаты.
+
+    Возвращает число вставленных событий.
+    """
+    if not batch:
+        return 0
+    from datetime import datetime, timezone
+
+    def _to_day_utc(ts_utc: str) -> str:
+        # Ожидаем ISO 8601, берём первые 10 символов (YYYY-MM-DD)
+        if not ts_utc:
+            return datetime.now(timezone.utc).date().isoformat()
+        return (ts_utc[:10] if len(ts_utc) >= 10 else ts_utc)
+
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        ensure_api_usage_schema(cur)
+        cur.execute("BEGIN")
+
+        # 1) Bulk insert raw events
+        insert_sql = (
+            """
+            INSERT INTO api_usage_events (
+              ts_utc, provider, model, api_key_hash, endpoint, req_count, success, http_status,
+              latency_ms, tokens_in, tokens_out, cost_usd, error_code, extra_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """
+        )
+        rows = []
+        for e in batch:
+            rows.append(
+                (
+                    e.get("ts_utc"),
+                    e.get("provider"),
+                    e.get("model"),
+                    e.get("api_key_hash"),
+                    e.get("endpoint"),
+                    int(e.get("req_count", 1) or 1),
+                    1 if (e.get("success") in (True, 1, "1")) else 0,
+                    e.get("http_status"),
+                    e.get("latency_ms"),
+                    int(e.get("tokens_in", 0) or 0),
+                    int(e.get("tokens_out", 0) or 0),
+                    float(e.get("cost_usd", 0.0) or 0.0),
+                    e.get("error_code"),
+                    e.get("extra_json"),
+                )
+            )
+        cur.executemany(insert_sql, rows)
+
+        # 2) Aggregate deltas for daily upsert
+        agg: Dict[tuple, Dict[str, Any]] = {}
+        for e in batch:
+            day = _to_day_utc(e.get("ts_utc"))
+            key = (day, e.get("provider"), e.get("model"), e.get("api_key_hash"))
+            a = agg.setdefault(
+                key,
+                {
+                    "req_count": 0,
+                    "success_count": 0,
+                    "tokens_in_total": 0,
+                    "tokens_out_total": 0,
+                    "cost_usd_total": 0.0,
+                    "latency_ms_sum": 0,
+                },
+            )
+            a["req_count"] += int(e.get("req_count", 1) or 1)
+            a["success_count"] += 1 if (e.get("success") in (True, 1, "1")) else 0
+            a["tokens_in_total"] += int(e.get("tokens_in", 0) or 0)
+            a["tokens_out_total"] += int(e.get("tokens_out", 0) or 0)
+            a["cost_usd_total"] += float(e.get("cost_usd", 0.0) or 0.0)
+            a["latency_ms_sum"] += int(e.get("latency_ms", 0) or 0)
+
+        upsert_sql = (
+            """
+            INSERT INTO api_usage_daily (
+              day_utc, provider, model, api_key_hash,
+              req_count, success_count, tokens_in_total, tokens_out_total, cost_usd_total, latency_ms_sum
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(day_utc, provider, model, api_key_hash) DO UPDATE SET
+              req_count = req_count + excluded.req_count,
+              success_count = success_count + excluded.success_count,
+              tokens_in_total = tokens_in_total + excluded.tokens_in_total,
+              tokens_out_total = tokens_out_total + excluded.tokens_out_total,
+              cost_usd_total = cost_usd_total + excluded.cost_usd_total,
+              latency_ms_sum = latency_ms_sum + excluded.latency_ms_sum
+            """
+        )
+        up_rows = []
+        for (day, provider, model, api_key_hash), a in agg.items():
+            up_rows.append(
+                (
+                    day,
+                    provider,
+                    model,
+                    api_key_hash,
+                    int(a.get("req_count", 0) or 0),
+                    int(a.get("success_count", 0) or 0),
+                    int(a.get("tokens_in_total", 0) or 0),
+                    int(a.get("tokens_out_total", 0) or 0),
+                    float(a.get("cost_usd_total", 0.0) or 0.0),
+                    int(a.get("latency_ms_sum", 0) or 0),
+                )
+            )
+        if up_rows:
+            cur.executemany(upsert_sql, up_rows)
+
+        conn.commit()
+        return len(batch)
+
+
+def recalc_api_usage_daily_for_range(from_date: str, to_date: str) -> None:
+    """Идемпотентно пересчитывает агрегаты api_usage_daily за диапазон дат [from..to].
+
+    Формат дат: YYYY-MM-DD (UTC).
+    """
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        ensure_api_usage_schema(cur)
+        cur.execute("BEGIN")
+        # Удаляем существующие агрегаты за диапазон
+        cur.execute(
+            "DELETE FROM api_usage_daily WHERE day_utc BETWEEN ? AND ?",
+            (from_date, to_date),
+        )
+        # Считаем из сырья и вставляем
+        cur.execute(
+            """
+            SELECT substr(ts_utc, 1, 10) AS day_utc,
+                   provider,
+                   model,
+                   api_key_hash,
+                   SUM(req_count) AS req_count,
+                   SUM(CASE WHEN success IN (1, '1') THEN 1 ELSE 0 END) AS success_count,
+                   SUM(tokens_in) AS tokens_in_total,
+                   SUM(tokens_out) AS tokens_out_total,
+                   SUM(cost_usd) AS cost_usd_total,
+                   SUM(COALESCE(latency_ms, 0)) AS latency_ms_sum
+            FROM api_usage_events
+            WHERE substr(ts_utc, 1, 10) BETWEEN ? AND ?
+            GROUP BY day_utc, provider, model, api_key_hash
+            """,
+            (from_date, to_date),
+        )
+        rows = cur.fetchall()
+        insert_sql = (
+            """
+            INSERT INTO api_usage_daily (
+              day_utc, provider, model, api_key_hash,
+              req_count, success_count, tokens_in_total, tokens_out_total, cost_usd_total, latency_ms_sum
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """
+        )
+        cur.executemany(insert_sql, [tuple(r) for r in rows])
+        conn.commit()
+
+
+def get_api_usage_daily_for_day(day_utc: str, provider: Optional[str] = None, model: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Возвращает список агрегатов за указанный день с фильтрами."""
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        q = (
+            "SELECT provider, model, api_key_hash, req_count, success_count, tokens_in_total, tokens_out_total, cost_usd_total, latency_ms_sum "
+            "FROM api_usage_daily WHERE day_utc = ?"
+        )
+        params: List[Any] = [day_utc]
+        if provider:
+            q += " AND provider = ?"
+            params.append(provider)
+        if model:
+            q += " AND model = ?"
+            params.append(model)
+        q += " ORDER BY provider, model, COALESCE(api_key_hash, '')"
+        cur.execute(q, tuple(params))
+        return [dict(r) for r in cur.fetchall()]
+
+
+def get_api_usage_daily_range(
+    from_date: str,
+    to_date: str,
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Возвращает агрегаты по дням за диапазон дат."""
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        q = (
+            "SELECT day_utc, provider, model, api_key_hash, req_count, success_count, tokens_in_total, tokens_out_total, cost_usd_total, latency_ms_sum "
+            "FROM api_usage_daily WHERE day_utc BETWEEN ? AND ?"
+        )
+        params: List[Any] = [from_date, to_date]
+        if provider:
+            q += " AND provider = ?"
+            params.append(provider)
+        if model:
+            q += " AND model = ?"
+            params.append(model)
+        q += " ORDER BY day_utc, provider, model"
+        cur.execute(q, tuple(params))
+        return [dict(r) for r in cur.fetchall()]
+
+
+def prune_api_usage_old_events(ttl_days: int = 30) -> Dict[str, int]:
+    """Удаляет сырьё и агрегаты старше TTL. Возвращает счётчики удалённых строк.
+
+    Агрегаты удаляются только если есть соответствующее сырьё старше TTL или по дате day_utc < today-ttl.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    today = datetime.now(timezone.utc).date()
+    cutoff_day = (today - timedelta(days=max(0, int(ttl_days)))).isoformat()
+    removed_events = removed_daily = 0
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        ensure_api_usage_schema(cur)
+        cur.execute("BEGIN")
+        # Remove raw events older than cutoff
+        cur.execute("SELECT COUNT(*) FROM api_usage_events WHERE substr(ts_utc,1,10) < ?", (cutoff_day,))
+        row = cur.fetchone()
+        removed_events = int(row[0] or 0)
+        cur.execute("DELETE FROM api_usage_events WHERE substr(ts_utc,1,10) < ?", (cutoff_day,))
+        # Remove daily aggregates strictly older than cutoff
+        cur.execute("SELECT COUNT(*) FROM api_usage_daily WHERE day_utc < ?", (cutoff_day,))
+        row = cur.fetchone()
+        removed_daily = int(row[0] or 0)
+        cur.execute("DELETE FROM api_usage_daily WHERE day_utc < ?", (cutoff_day,))
+        conn.commit()
+    return {"events": removed_events, "daily": removed_daily}
+
+
+# -------------------- SESSION STATS (DAILY) PERSISTENCE --------------------
+
+def ensure_session_stats_schema(cursor: Optional[sqlite3.Cursor] = None) -> None:
+    """Создает таблицы для посуточной статистики UI и состояние курсора.
+
+    Таблицы:
+      - session_stats_daily(day_utc, http_requests_total, articles_processed_total, tokens_in_total, tokens_out_total, updated_at)
+      - session_stats_state(id=1, last_session_start REAL, last_http_counter INTEGER)
+    """
+    if cursor is None:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            _ensure_session_stats_schema_inner(cur)
+            conn.commit()
+        return
+    _ensure_session_stats_schema_inner(cursor)
+
+
+def _ensure_session_stats_schema_inner(cur: sqlite3.Cursor) -> None:
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS session_stats_daily (
+          day_utc TEXT PRIMARY KEY,
+          http_requests_total INTEGER NOT NULL DEFAULT 0,
+          articles_processed_total INTEGER NOT NULL DEFAULT 0,
+          tokens_in_total INTEGER NOT NULL DEFAULT 0,
+          tokens_out_total INTEGER NOT NULL DEFAULT 0,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS session_stats_state (
+          id INTEGER PRIMARY KEY CHECK(id = 1),
+          last_session_start REAL,
+          last_http_counter INTEGER NOT NULL DEFAULT 0
+        )
+        """
+    )
+    # Ensure single state row exists
+    cur.execute("INSERT OR IGNORE INTO session_stats_state (id) VALUES (1)")
+
+
+def get_session_stats_state() -> Dict[str, Any]:
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        ensure_session_stats_schema(cur)
+        cur.execute("SELECT last_session_start, last_http_counter FROM session_stats_state WHERE id=1")
+        row = cur.fetchone()
+        if not row:
+            return {"last_session_start": None, "last_http_counter": 0}
+        return {"last_session_start": row[0], "last_http_counter": int(row[1] or 0)}
+
+
+def update_session_stats_state(last_session_start: Optional[float], last_http_counter: int) -> None:
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        ensure_session_stats_schema(cur)
+        cur.execute(
+            "UPDATE session_stats_state SET last_session_start = ?, last_http_counter = ? WHERE id = 1",
+            (last_session_start, int(last_http_counter or 0)),
+        )
+        conn.commit()
+
+
+def upsert_session_stats_daily(
+    day_utc: str,
+    http_requests_total: int,
+    articles_processed_total: int,
+    tokens_in_total: int,
+    tokens_out_total: int,
+) -> None:
+    """Устанавливает агрегированные значения за день (идемпотентно)."""
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        ensure_session_stats_schema(cur)
+        cur.execute(
+            """
+            INSERT INTO session_stats_daily (
+              day_utc, http_requests_total, articles_processed_total, tokens_in_total, tokens_out_total
+            ) VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(day_utc) DO UPDATE SET
+              http_requests_total = excluded.http_requests_total,
+              articles_processed_total = excluded.articles_processed_total,
+              tokens_in_total = excluded.tokens_in_total,
+              tokens_out_total = excluded.tokens_out_total,
+              updated_at = CURRENT_TIMESTAMP
+            """,
+            (
+                day_utc,
+                int(http_requests_total or 0),
+                int(articles_processed_total or 0),
+                int(tokens_in_total or 0),
+                int(tokens_out_total or 0),
+            ),
+        )
+        conn.commit()
+
+
+def get_session_stats_daily_for_day(day_utc: str) -> Optional[Dict[str, Any]]:
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        ensure_session_stats_schema(cur)
+        cur.execute(
+            "SELECT day_utc, http_requests_total, articles_processed_total, tokens_in_total, tokens_out_total, updated_at FROM session_stats_daily WHERE day_utc = ?",
+            (day_utc,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        return {
+            "day_utc": row[0],
+            "http_requests_total": int(row[1] or 0),
+            "articles_processed_total": int(row[2] or 0),
+            "tokens_in_total": int(row[3] or 0),
+            "tokens_out_total": int(row[4] or 0),
+            "updated_at": row[5],
+        }
+
+
+def get_session_stats_daily_range(from_date: str, to_date: str) -> List[Dict[str, Any]]:
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        ensure_session_stats_schema(cur)
+        cur.execute(
+            """
+            SELECT day_utc, http_requests_total, articles_processed_total, tokens_in_total, tokens_out_total, updated_at
+            FROM session_stats_daily
+            WHERE day_utc BETWEEN ? AND ?
+            ORDER BY day_utc ASC
+            """,
+            (from_date, to_date),
+        )
+        rows = cur.fetchall()
+        return [
+            {
+                "day_utc": r[0],
+                "http_requests_total": int(r[1] or 0),
+                "articles_processed_total": int(r[2] or 0),
+                "tokens_in_total": int(r[3] or 0),
+                "tokens_out_total": int(r[4] or 0),
+                "updated_at": r[5],
+            }
+            for r in rows
+        ]
+
+
+def count_articles_for_day(day_utc: str) -> int:
+    """Возвращает число статей с датой публикации day_utc (UTC), по префиксу строки."""
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                "SELECT COUNT(*) FROM articles WHERE substr(published_at, 1, 10) = ?",
+                (day_utc,),
+            )
+            row = cur.fetchone()
+            return int(row[0] or 0) if row else 0
+        except Exception:
+            return 0
 
 
 def upsert_raw_article(url: str, title: str, published_at_iso: str, content: str) -> Optional[int]:

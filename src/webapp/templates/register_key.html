@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Регистрация ключа{% endblock %}
+{% block content %}
+<h1>Привязка ключа безопасности</h1>
+<p>Нажмите кнопку, чтобы зарегистрировать новый ключ (Passkey). Рекомендуется привязать минимум два ключа.</p>
+<div id="reg-status" class="muted"></div>
+<button id="btn-register">Привязать ключ</button>
+<script src="/static/register.js"></script>
+{% endblock %}

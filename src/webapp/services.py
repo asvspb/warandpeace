@@ -1,9 +1,16 @@
 
 import sqlite3
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from datetime import date, datetime, timedelta
 import calendar as py_calendar
 from src.database import get_db_connection, get_content_hash_groups, list_articles_by_content_hash, list_dlq_items
+from src.database import (
+    get_session_stats_daily_range,
+)
+from prometheus_client import REGISTRY  # type: ignore
+from prometheus_client.parser import text_string_to_metric_families  # type: ignore
+import os
+import time
 
 def get_articles(page: int = 1, page_size: int = 50, q: Optional[str] = None, 
                  start_date: Optional[str] = None, end_date: Optional[str] = None, has_content: int = 1) -> (List[Dict[str, Any]], int):
@@ -115,6 +122,24 @@ def _month_bounds(year: int, month: int) -> (str, str):
     return start_iso, end_iso
 
 
+def _prev_next_month(year: int, month: int) -> Tuple[Tuple[int, int], Tuple[int, int]]:
+    prev_y, prev_m = (year, month - 1)
+    next_y, next_m = (year, month + 1)
+    if prev_m == 0:
+        prev_m = 12
+        prev_y -= 1
+    if next_m == 13:
+        next_m = 1
+        next_y += 1
+    return (prev_y, prev_m), (next_y, next_m)
+
+
+_RU_MONTHS = {
+    1: "Январь", 2: "Февраль", 3: "Март", 4: "Апрель", 5: "Май", 6: "Июнь",
+    7: "Июль", 8: "Август", 9: "Сентябрь", 10: "Октябрь", 11: "Ноябрь", 12: "Декабрь",
+}
+
+
 def get_month_calendar_data(year: int, month: int) -> Dict[str, Any]:
     """Builds a calendar data model for the given month.
 
@@ -178,13 +203,17 @@ def get_month_calendar_data(year: int, month: int) -> Dict[str, Any]:
                     "all_summarized": all_summarized,
                 })
 
+            (py, pm), (ny, nm) = _prev_next_month(year, month)
             return {
                 "year": year,
                 "month": month,
+                "month_name": _RU_MONTHS.get(month, str(month)),
                 "weeks": weeks,
+                "prev": {"year": py, "month": pm},
+                "next": {"year": ny, "month": nm},
             }
-    except sqlite3.Error:
-        # Fallback for empty/missing DB
+    except Exception:
+        # Fallback for empty/missing DB or environment without write access
         today = date.today()
         cal = py_calendar.Calendar(firstweekday=0)
         weeks = []
@@ -214,3 +243,173 @@ def get_daily_articles(day_iso: str) -> List[Dict[str, Any]]:
             (day_iso,),
         )
         return [dict(row) for row in cursor.fetchall()]
+
+
+# --- Session Stats (Prometheus-based) ---
+
+def get_session_stats() -> Dict[str, Any]:
+    """Aggregates selected session metrics from Prometheus default REGISTRY.
+
+    Returns a dict with keys:
+    - external_http_requests: int
+    - articles_processed: int
+    - tokens_prompt: int
+    - tokens_completion: int
+    - session_start: ISO8601 or None
+    - uptime_seconds: int
+    """
+    stats: Dict[str, Any] = {
+        "external_http_requests": 0,
+        "articles_processed": 0,
+        "tokens_prompt": 0,
+        "tokens_completion": 0,
+        # dynamic per-key breakdown: list of {provider, key_id, prompt, completion}
+        "token_keys": [],
+        "session_start": None,
+        "uptime_seconds": 0,
+    }
+
+    try:
+        def _iter_metrics():
+            """Yield metric families either from remote scrape or local REGISTRY."""
+            scrape_url = os.getenv("METRICS_SCRAPE_URL")
+            if not scrape_url:
+                port = os.getenv("METRICS_PORT", "8000").strip()
+                # Assume bot exposes Prometheus on this port (start_metrics_server)
+                scrape_url = f"http://127.0.0.1:{port}/"
+            # Try remote scrape first
+            try:
+                import requests  # lazy import to avoid test env issues
+                resp = requests.get(scrape_url.rstrip("/") + "/metrics", timeout=1.5)
+                if resp.ok and resp.text:
+                    for fam in text_string_to_metric_families(resp.text):
+                        yield fam
+                    return
+            except Exception:
+                # Fallback to local registry
+                pass
+            for fam in REGISTRY.collect():
+                yield fam
+
+        # Temporary aggregation for per-key
+        per_key: Dict[tuple[str, str], Dict[str, int]] = {}
+        families: Dict[str, Any] = {}
+        import math
+        def _safe_int(v: Any) -> int:
+            try:
+                f = float(v)
+                if not math.isfinite(f):
+                    return 0
+                return int(f)
+            except Exception:
+                return 0
+
+        for metric in _iter_metrics():
+            name = getattr(metric, "name", "")
+            families[name] = metric
+            if name == "external_http_requests":
+                # Sum over all label combinations
+                stats["external_http_requests"] = int(sum(_safe_int(sample.value) for sample in metric.samples))
+            elif name == "session_articles_processed":
+                stats["articles_processed"] = int(sum(_safe_int(sample.value) for sample in metric.samples))
+            elif name == "tokens_consumed_prompt":
+                stats["tokens_prompt"] = int(sum(_safe_int(sample.value) for sample in metric.samples))
+            elif name == "tokens_consumed_completion":
+                stats["tokens_completion"] = int(sum(_safe_int(sample.value) for sample in metric.samples))
+            # per-key aggregation handled after the loop
+            elif name == "session_start_time_seconds":
+                samples = list(metric.samples)
+                if samples:
+                    session_start = float(samples[-1].value)
+                    # Match bot logs date format: "%d-%m.%y - [%H:%M]"
+                    dt_local = datetime.fromtimestamp(session_start)
+                    stats["session_start"] = dt_local.strftime("%d-%m.%y - [%H:%M]")
+                    stats["uptime_seconds"] = int(max(0, time.time() - session_start))
+
+        # Second pass: per-key metrics including request counts
+        if families.get("tokens_consumed_prompt_by_key"):
+            for sample in families["tokens_consumed_prompt_by_key"].samples:
+                labels = getattr(sample, "labels", {}) or {}
+                provider = labels.get("provider") or ""
+                key_id = labels.get("key_id") or ""
+                k = (provider, key_id)
+                if provider and key_id:
+                    bucket = per_key.setdefault(k, {"prompt": 0, "completion": 0, "requests": 0})
+                    bucket["prompt"] += _safe_int(sample.value)
+        if families.get("tokens_consumed_completion_by_key"):
+            for sample in families["tokens_consumed_completion_by_key"].samples:
+                labels = getattr(sample, "labels", {}) or {}
+                provider = labels.get("provider") or ""
+                key_id = labels.get("key_id") or ""
+                k = (provider, key_id)
+                if provider and key_id:
+                    bucket = per_key.setdefault(k, {"prompt": 0, "completion": 0, "requests": 0})
+                    bucket["completion"] += _safe_int(sample.value)
+        # llm_requests_by_key_total counter is optional
+        fam_req = families.get("llm_requests_by_key_total") or families.get("llm_requests_by_key")
+        if fam_req:
+            for sample in fam_req.samples:
+                labels = getattr(sample, "labels", {}) or {}
+                provider = labels.get("provider") or ""
+                key_id = labels.get("key_id") or ""
+                k = (provider, key_id)
+                if provider and key_id:
+                    bucket = per_key.setdefault(k, {"prompt": 0, "completion": 0, "requests": 0})
+                    bucket["requests"] += _safe_int(sample.value)
+
+        # Flatten per-key aggregation into a list and sort
+        token_keys = []
+        for (provider, key_id), vals in per_key.items():
+            token_keys.append({
+                "provider": provider,
+                "key_id": key_id,
+                "prompt": int(vals.get("prompt", 0)),
+                "completion": int(vals.get("completion", 0)),
+                "requests": int(vals.get("requests", 0)),
+            })
+        token_keys.sort(key=lambda x: (x["provider"], x["key_id"]))
+        stats["token_keys"] = token_keys
+    except Exception:
+        # Be conservative; return what we have
+        pass
+
+    return stats
+
+
+# --- Session Stats History (DB-based) ---
+
+def get_session_stats_history(days: int = 14) -> Dict[str, Any]:
+    """Returns per-day history for the last N days from SQLite persistence.
+
+    Shape:
+      {
+        "days": [
+          {"day": "YYYY-MM-DD", "http": int, "articles": int, "tokens_in": int, "tokens_out": int},
+          ... (ordered ascending by day)
+        ]
+      }
+    """
+    try:
+        from datetime import datetime, timedelta, timezone
+        today = datetime.now(timezone.utc).date()
+        from_date = (today - timedelta(days=max(0, int(days) - 1))).isoformat()
+        to_date = today.isoformat()
+        rows = get_session_stats_daily_range(from_date, to_date)
+        by_day = {r["day_utc"]: r for r in rows}
+        ordered: List[Dict[str, Any]] = []
+        d = datetime.fromisoformat(from_date).date()
+        end = datetime.fromisoformat(to_date).date()
+        while d <= end:
+            iso = d.isoformat()
+            r = by_day.get(iso, {})
+            ordered.append({
+                "day": iso,
+                "http": int(r.get("http_requests_total", 0) or 0),
+                "articles": int(r.get("articles_processed_total", 0) or 0),
+                "tokens_in": int(r.get("tokens_in_total", 0) or 0),
+                "tokens_out": int(r.get("tokens_out_total", 0) or 0),
+            })
+            d = d + timedelta(days=1)
+        return {"days": ordered}
+    except Exception:
+        return {"days": []}

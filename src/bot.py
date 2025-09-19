@@ -18,9 +18,25 @@ from config import (
     TELEGRAM_ADMIN_ID,
     NEWS_URL,
     APP_TZ,
+    SERVICE_PROMPTS_ENABLED,
+    SERVICE_TG_ENABLED,
+    SERVICE_TG_CHANNEL_ID,
 )
+from config import (
+    API_USAGE_PERSISTENCE_ENABLED,
+    API_USAGE_FLUSH_INTERVAL_SEC,
+    API_USAGE_EVENTS_TTL_DAYS,
+)
+from config import SESSION_STATS_ENABLED
 from time_utils import now_msk, to_utc, utc_to_local
-from metrics import start_metrics_server, JOB_DURATION, ARTICLES_POSTED, ERRORS_TOTAL, update_last_article_age
+from metrics import (
+    start_metrics_server,
+    JOB_DURATION,
+    ARTICLES_POSTED,
+    ERRORS_TOTAL,
+    update_last_article_age,
+    SESSION_ARTICLES_PROCESSED,
+)
 from database import (
     init_db,
     add_article,
@@ -37,8 +53,20 @@ from database import (
     increment_attempt_count,
 )
 from parser import get_articles_from_page, get_article_text
-from summarizer import summarize_text_local, summarize_with_mistral, create_digest, create_annual_digest
+from summarizer import (
+    summarize_text_local,
+    create_digest,
+    create_annual_digest,
+    summarize_with_mistral,
+    generate_service_summary,
+)
 from notifications import notify_admin
+try:
+    # Optional SSE broadcast for web UI updates
+    from src.webapp.server import _sse_broadcast  # type: ignore
+except Exception:  # pragma: no cover
+    def _sse_broadcast(_obj):
+        return None
 
 # Настройка логирования (тихий режим для сторонних библиотек и управляемый уровень для приложения)
 log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -99,6 +127,19 @@ logger = logging.getLogger(__name__)
 # Импортируем предохранитель после настройки логирования,
 # чтобы первое сообщение тоже было в новом формате
 from connectivity import circuit_breaker, log_network_context  # noqa: E402
+# --- API usage persistence (optional) ---
+try:
+    from api_usage import flush_api_events_to_db, init_session, close_session
+except Exception:  # pragma: no cover
+    def flush_api_events_to_db():
+        return 0
+    def init_session(session_id=None, git_sha=None, container_id=None):
+        return None
+    def close_session():
+        return None
+
+import atexit
+import uuid
 
 # --- Утилиты с ретраями и Circuit Breaker ---
 
@@ -233,6 +274,10 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
 
                 summary = await asyncio.to_thread(summarize_text_local, full_text)
                 if not summary:
+                    logger.warning(f"Резюме от Gemini не получено, пробую Mistral: {article_data['link']}")
+                    summary = await asyncio.to_thread(summarize_with_mistral, full_text)
+
+                if not summary:
                     logger.error(f"Не удалось сгенерировать резюме: {article_data['link']}")
                     continue
 
@@ -251,7 +296,66 @@ async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
                     summary,
                 )
                 posted_count += 1
+                try:
+                    SESSION_ARTICLES_PROCESSED.inc()
+                except Exception:
+                    pass
+                try:
+                    _sse_broadcast({"type": "article_published"})
+                except Exception:
+                    pass
                 await asyncio.sleep(10)  # Пауза
+
+                # 4.1 Теневой служебный прогноз в отдельный канал (если включено)
+                try:
+                    if SERVICE_PROMPTS_ENABLED and SERVICE_TG_ENABLED and SERVICE_TG_CHANNEL_ID:
+                        # Сформируем минимальный JSON статьи (id, url, title)
+                        article_json = {
+                            "source_id": article_data.get("link"),
+                            "url": article_data.get("link"),
+                            "title": article_data.get("title"),
+                            "published_at": published_at_utc_iso,
+                            "summary": summary,
+                        }
+                        import json as _json
+                        raw = await asyncio.to_thread(generate_service_summary, _json.dumps(article_json, ensure_ascii=False))
+                        if raw:
+                            # Попробуем извлечь краткий формат для TG
+                            try:
+                                data = _json.loads(raw)
+                                headline = data.get("normalized_title") or data.get("summary", {}).get("title") or article_data.get("title")
+                                conf = data.get("confidence") or data.get("calibration", {}).get("confidence_overall")
+                                forecast = data.get("forecast") or []
+                                top = None
+                                if isinstance(forecast, list) and forecast:
+                                    top = sorted(
+                                        [f for f in forecast if isinstance(f, dict) and isinstance(f.get("probability"), (int, float))],
+                                        key=lambda x: x.get("probability", 0), reverse=True
+                                    )[:2]
+                                # Сформируем краткое сообщение
+                                lines = [f"<b>Служебный прогноз</b>", headline]
+                                if top:
+                                    for sc in top:
+                                        lines.append(f"• {sc.get('outcome')}: {sc.get('probability'):.2f} @ {sc.get('horizon_hours','?')}ч")
+                                if conf is not None:
+                                    lines.append(f"уверенность: {float(conf):.2f}")
+                                lines.append(f"src: {article_data.get('link')}")
+                                text = "\n".join(lines)
+                            except Exception:
+                                # Если не парсится, отправим сырой JSON в кодовом блоке
+                                text = f"<b>Служебный прогноз (raw)</b>\n<code>{raw[:3500]}</code>"
+
+                            try:
+                                await send_message_with_retry(
+                                    bot=context.bot,
+                                    chat_id=SERVICE_TG_CHANNEL_ID,
+                                    text=text,
+                                    parse_mode=ParseMode.HTML,
+                                )
+                            except Exception as e:
+                                logger.warning(f"Не удалось отправить служебный прогноз в TG: {e}")
+                except Exception:
+                    logger.exception("Сбой при формировании/отправке служебного прогноза")
 
             except CircuitBreakerOpenError:
                 logger.warning(f"Отправка статьи '{article_data['title']}' отложена (Circuit Breaker OPEN).")
@@ -391,6 +495,14 @@ async def flush_pending_publications(context: ContextTypes.DEFAULT_TYPE):
             await asyncio.to_thread(delete_sent_publication, article["id"])
             logger.info(f"Отложенная статья '{article['title']}' успешно опубликована.")
             ARTICLES_POSTED.inc()
+            try:
+                SESSION_ARTICLES_PROCESSED.inc()
+            except Exception:
+                pass
+            try:
+                _sse_broadcast({"type": "article_published"})
+            except Exception:
+                pass
             await asyncio.sleep(10) # Пауза
 
         except Exception as e:
@@ -452,6 +564,248 @@ async def post_init(application: Application):
         job_kwargs=job_kwargs,
     )
     logger.info("Фоновая задача для отправки отложенных публикаций запущена.")
+
+    # Периодический flush in-memory событий API в БД
+    if API_USAGE_PERSISTENCE_ENABLED:
+        async def _flush_api_usage(_context: ContextTypes.DEFAULT_TYPE):
+            try:
+                await asyncio.to_thread(flush_api_events_to_db)
+            except Exception:
+                pass
+
+        application.job_queue.run_repeating(
+            _flush_api_usage,
+            interval=max(5, int(API_USAGE_FLUSH_INTERVAL_SEC)),
+            first=API_USAGE_FLUSH_INTERVAL_SEC,
+            name="FlushApiUsageEvents",
+            job_kwargs={
+                "misfire_grace_time": int(os.getenv("JOB_MISFIRE_GRACE", "60")),
+                "coalesce": True,
+                "max_instances": 1,
+                "jitter": 0,
+            },
+        )
+        logger.info("Фоновая задача сброса метрик API запущена (интервал=%ss)", API_USAGE_FLUSH_INTERVAL_SEC)
+
+    # Периодическое сохранение session stats в БД (если включено)
+    if SESSION_STATS_ENABLED:
+        async def _persist_session_stats(_context: ContextTypes.DEFAULT_TYPE):
+            try:
+                from src.session_stats_persist import persist_session_stats_once  # type: ignore
+                await asyncio.to_thread(persist_session_stats_once)
+            except Exception:
+                pass
+        application.job_queue.run_repeating(
+            _persist_session_stats,
+            interval=int(os.getenv("SESSION_STATS_FLUSH_INTERVAL_SEC", "60") or 60),
+            first=10,
+            name="PersistSessionStatsDaily",
+            job_kwargs=job_kwargs,
+        )
+        logger.info("Фоновая задача сохранения session stats включена")
+
+    # Периодический лог прогресса бэкфилла (если веб-автообновление активно)
+    async def log_backfill_progress(context: ContextTypes.DEFAULT_TYPE):
+        try:
+            # 1) HTTP-попытка к веб-сервису с автообнаружением базового URL
+            def _default_gateway_ip() -> str | None:
+                try:
+                    with open("/proc/net/route", "r") as f:
+                        for line in f.readlines():
+                            parts = line.strip().split()  # Iface Dest Gateway Flags RefCnt Use Metric Mask MTU Window IRTT
+                            if len(parts) >= 3 and parts[1] == "00000000":
+                                gw_hex = parts[2]
+                                # Hex little-endian
+                                gw = ".".join(str(int(gw_hex[i:i+2], 16)) for i in (6, 4, 2, 0))
+                                return gw
+                except Exception:
+                    return None
+                return None
+
+            port = os.getenv("WEB_PORT", "8080").strip()
+            env_base = os.getenv("BACKFILL_STATUS_URL")
+            candidates = []
+            if env_base:
+                candidates.append(env_base)
+            # Hints from env
+            host = os.getenv("WEB_HOST")
+            if host:
+                candidates.append(f"http://{host}:{port}")
+            # Common docker-compose names and local fallbacks
+            for host_hint in ("web", "warandpeace-web", "localhost", "127.0.0.1", "host.docker.internal"):
+                candidates.append(f"http://{host_hint}:{port}")
+            gw = _default_gateway_ip()
+            if gw:
+                candidates.append(f"http://{gw}:{port}")
+
+            c_run = c_page = c_proc = None
+            c_ts = None
+            s_run = s_proc = None
+            upd = None
+            try:
+                headers = {}
+                api_key = os.getenv("BACKFILL_API_KEY")
+                if api_key:
+                    headers["X-API-Key"] = api_key.strip()
+                resp = None
+                ok = False
+                # Cache a working base to speed up next polls
+                cached = getattr(log_backfill_progress, "_base_ok", None)
+                if cached:
+                    candidates = [cached] + [c for c in candidates if c != cached]
+                for base in candidates:
+                    base = (base or "").strip()
+                    if not base:
+                        continue
+                    url_api = base.rstrip("/") + "/api/backfill/status"
+                    url_public = base.rstrip("/") + "/backfill/status-public"
+                    url_admin = base.rstrip("/") + "/admin/backfill/status"
+                    for url in (url_api, url_public, url_admin):
+                        try:
+                            resp = await asyncio.to_thread(requests.get, url, timeout=3.0, headers=headers)
+                            if resp.ok:
+                                ok = True
+                                log_backfill_progress._base_ok = base  # type: ignore[attr-defined]
+                                break
+                        except Exception:
+                            continue
+                    if ok:
+                        break
+                if ok and resp is not None:
+                    j = resp.json()
+                    c_run = bool(j.get("collect_running"))
+                    c_page = int(j.get("collect_last_page") or 0)
+                    c_proc = int(j.get("collect_processed") or 0)
+                    c_ts = j.get("collect_last_ts")
+                    s_run = bool(j.get("sum_running"))
+                    s_proc = int(j.get("sum_processed") or 0)
+                    upd = None
+            except Exception:
+                # 2) Фолбэк на прямое чтение БД, если общий том подключен
+                try:
+                    from src.database import get_db_connection
+                    def _read_progress():
+                        with get_db_connection() as conn:
+                            cur = conn.cursor()
+                            cur.execute(
+                                "SELECT collect_running, collect_last_page, collect_processed, collect_last_ts, "
+                                "sum_running, sum_processed, updated_at FROM backfill_progress WHERE id=1"
+                            )
+                            return cur.fetchone()
+                    row = await asyncio.to_thread(_read_progress)
+                    if row:
+                        c_run, c_page, c_proc, c_ts, s_run, s_proc, upd = row
+                except Exception:
+                    pass
+
+            if c_run is not None:
+                # Короткие сообщения о старте/окончании
+                if bool(c_run) and not hasattr(log_backfill_progress, "_collect_was_running"):
+                    logger.info("Процесс обновления начался")
+                if (not bool(c_run)) and getattr(log_backfill_progress, "_collect_was_running", False):
+                    logger.info("Процесс обновления завершен")
+                if bool(s_run) and not hasattr(log_backfill_progress, "_sum_was_running"):
+                    logger.info("Процесс суммаризации начался")
+                if (not bool(s_run)) and getattr(log_backfill_progress, "_sum_was_running", False):
+                    logger.info("Процесс суммаризации завершен")
+                # Обновляем флаги прошлых состояний
+                setattr(log_backfill_progress, "_collect_was_running", bool(c_run))
+                setattr(log_backfill_progress, "_sum_was_running", bool(s_run))
+                # Прогресс‑бар обновления по точной цели (collect_goal_total)
+                try:
+                    pct = None
+                    try:
+                        j = resp.json()
+                        if isinstance(j, dict):
+                            pct = j.get("collect_progress_pct")
+                            # Если идёт предварительное сканирование — не показываем бар, логируем статус
+                            if bool(j.get("collect_scanning")):
+                                scan_page = j.get("collect_scan_page")
+                                goal_pages = j.get("collect_goal_pages")
+                                logger.info("[COLLECT] Сканирование периода: страница %s/%s", int(scan_page or 0), int(goal_pages or 0))
+                                pct = None
+                            else:
+                                # Сканирование уже выполнено — сообщаем один раз перед началом обновления (с датами)
+                                if getattr(log_backfill_progress, "_scan_reported", None) is None:
+                                    period = j.get("collect_period")
+                                    if period:
+                                        logger.info("Сканирование периода уже выполнено (%s)", period)
+                                    else:
+                                        from_date = j.get("collect_until")
+                                        try:
+                                            # Try to convert ISO to DD.MM.YYYY
+                                            from datetime import datetime as _dt
+                                            if isinstance(from_date, str):
+                                                dt = _dt.fromisoformat(from_date.replace("Z","+00:00"))
+                                                from_date = dt.strftime("%d.%m.%Y")
+                                        except Exception:
+                                            pass
+                                        logger.info("Сканирование периода уже выполнено (%s-?)", from_date or "?")
+                                    setattr(log_backfill_progress, "_scan_reported", True)
+                    except Exception:
+                        pct = None
+                    if bool(c_run) and isinstance(pct, int):
+                        bars = max(0, min(20, int((pct/100)*20)))
+                        bar = "█"*bars + "─"*(20-bars)
+                        logger.info("[COLLECT] [%s] %s%% (page=%s,total=%s)", bar, pct, int(c_page or 0), int(c_proc or 0))
+                except Exception:
+                    pass
+
+                # Прогресс‑бар суммаризации только когда суммаризация запущена
+                if bool(s_run):
+                    try:
+                        goal = None
+                        # Попробуем достать через API
+                        try:
+                            j = resp.json()
+                            if isinstance(j, dict):
+                                goal = j.get("sum_goal_total")
+                        except Exception:
+                            goal = None
+                        if goal is None:
+                            # Фолбэк к простому счетчику без процента
+                            logger.info("[SUM] Прогресс: %s обработано", s_proc if s_proc is not None else 0)
+                        else:
+                            pct = 0
+                            try:
+                                pct = int(round(100.0 * (s_proc or 0) / max(1, int(goal))))
+                            except Exception:
+                                pct = 0
+                            bars = max(0, min(20, int((pct/100)*20)))
+                            bar = "█"*bars + "─"*(20-bars)
+                            logger.info("[SUM] [%s] %s%% (%s/%s)", bar, pct, int(s_proc or 0), int(goal))
+                    except Exception:
+                        pass
+        except Exception:
+            # silent fail to avoid impacting bot
+            pass
+
+    # Reduce log frequency to 15 minutes by default (override via env)
+    log_interval = int(os.getenv("BACKFILL_LOG_INTERVAL_SEC", "900"))
+    application.job_queue.run_repeating(
+        log_backfill_progress,
+        interval=log_interval,
+        first=min(15, log_interval),
+        name="LogBackfillProgress",
+        job_kwargs=job_kwargs,
+    )
+
+    # Периодическая очистка старых событий по TTL
+    if API_USAGE_PERSISTENCE_ENABLED:
+        async def _prune_api_usage(_context: ContextTypes.DEFAULT_TYPE):
+            try:
+                from src.database import prune_api_usage_old_events
+                await asyncio.to_thread(prune_api_usage_old_events, API_USAGE_EVENTS_TTL_DAYS)
+            except Exception:
+                pass
+        # Раз в сутки
+        application.job_queue.run_repeating(
+            _prune_api_usage,
+            interval=24*60*60,
+            first=60,
+            name="PruneApiUsageTTL",
+            job_kwargs=job_kwargs,
+        )
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Отправляет приветственное сообщение."""
@@ -560,6 +914,7 @@ async def daily_digest_command(update: Update, context: ContextTypes.DEFAULT_TYP
     await send_message_with_retry(bot=context.bot, chat_id=user_id, text="Начинаю подготовку дайджеста за вчерашний день...")
 
     try:
+        logger.info("[DAILY_DIGEST] Старт формирования суточного дайджеста по запросу пользователя id=%s", user_id)
         now = now_msk(APP_TZ)
         yesterday = now - timedelta(days=1)
         start_date = yesterday.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -576,13 +931,16 @@ async def daily_digest_command(update: Update, context: ContextTypes.DEFAULT_TYP
 
         if not summaries:
             await send_message_with_retry(bot=context.bot, chat_id=user_id, text=f"За {yesterday.strftime('%d.%m.%Y')} не найдено статей для создания дайджеста.")
+            logger.info("[DAILY_DIGEST] Нет статей для суточного дайджеста (%s)", yesterday.strftime('%Y-%m-%d'))
             return
 
         period_name = f"вчера, {yesterday.strftime('%d %B %Y')}"
+        logger.info("[DAILY_DIGEST] Начало генерации дайджеста: period='%s', summaries=%d", period_name, len(summaries))
         digest_content = await asyncio.to_thread(create_digest, summaries, period_name)
 
         if not digest_content:
             await send_message_with_retry(bot=context.bot, chat_id=user_id, text="Не удалось создать аналитическую сводку.")
+            logger.warning("[DAILY_DIGEST] Генерация дайджеста не вернула контент")
             return
 
         await asyncio.to_thread(add_digest, f"daily_{yesterday.strftime('%Y-%m-%d')}", digest_content)
@@ -592,6 +950,7 @@ async def daily_digest_command(update: Update, context: ContextTypes.DEFAULT_TYP
             text=f"**Аналитический дайджест за {period_name}:**\n\n{digest_content}",
             parse_mode=ParseMode.MARKDOWN
         )
+        logger.info("[DAILY_DIGEST] Готово: дайджест отправлен, длина=%d символов", len(digest_content or ''))
     except Exception as e:
         logger.error(f"Ошибка при создании суточного дайджеста: {e}", exc_info=True)
         await send_message_with_retry(bot=context.bot, chat_id=user_id, text=f"Произошла ошибка при создании сводки: {e}")
@@ -603,6 +962,7 @@ async def weekly_digest_command(update: Update, context: ContextTypes.DEFAULT_TY
     await send_message_with_retry(bot=context.bot, chat_id=user_id, text="Начинаю подготовку дайджеста за прошлую неделю...")
 
     try:
+        logger.info("[WEEKLY_DIGEST] Старт формирования недельного дайджеста по запросу пользователя id=%s", user_id)
         now = now_msk(APP_TZ)
         last_sunday = now - timedelta(days=now.isoweekday())
         end_of_last_week = last_sunday.replace(hour=23, minute=59, second=59, microsecond=999999)
@@ -619,13 +979,16 @@ async def weekly_digest_command(update: Update, context: ContextTypes.DEFAULT_TY
 
         if not summaries:
             await send_message_with_retry(bot=context.bot, chat_id=user_id, text="За прошлую неделю не найдено статей для создания дайджеста.")
+            logger.info("[WEEKLY_DIGEST] Нет статей для недельного дайджеста (%s - %s)", start_of_last_week.strftime('%Y-%m-%d'), end_of_last_week.strftime('%Y-%m-%d'))
             return
 
         period_name = f"прошлую неделю ({start_of_last_week.strftime('%d.%m')} - {end_of_last_week.strftime('%d.%m.%Y')})"
+        logger.info("[WEEKLY_DIGEST] Начало генерации дайджеста: period='%s', summaries=%d", period_name, len(summaries))
         digest_content = await asyncio.to_thread(create_digest, summaries, period_name)
 
         if not digest_content:
             await send_message_with_retry(bot=context.bot, chat_id=user_id, text="Не удалось создать аналитическую сводку.")
+            logger.warning("[WEEKLY_DIGEST] Генерация дайджеста не вернула контент")
             return
 
         await asyncio.to_thread(add_digest, f"weekly_{start_of_last_week.strftime('%Y-%m-%d')}", digest_content)
@@ -635,6 +998,7 @@ async def weekly_digest_command(update: Update, context: ContextTypes.DEFAULT_TY
             text=f"**Аналитический дайджест за {period_name}:**\n\n{digest_content}",
             parse_mode=ParseMode.MARKDOWN
         )
+        logger.info("[WEEKLY_DIGEST] Готово: дайджест отправлен, длина=%d символов", len(digest_content or ''))
     except Exception as e:
         logger.error(f"Ошибка при создании недельного дайджеста: {e}", exc_info=True)
         await send_message_with_retry(bot=context.bot, chat_id=user_id, text=f"Произошла ошибка при создании сводки: {e}")
@@ -726,6 +1090,22 @@ def main():
     except Exception:
         pass
     start_metrics_server()
+    # Устанавливаем время начала сессии
+    try:
+        from metrics import SESSION_START_TIME_SECONDS
+        import time
+        SESSION_START_TIME_SECONDS.set(time.time())
+    except Exception:
+        pass
+    # Инициализация логической сессии и graceful shutdown
+    if API_USAGE_PERSISTENCE_ENABLED:
+        try:
+            session_id = str(uuid.uuid4())
+            init_session(session_id=session_id)
+            atexit.register(lambda: (flush_api_events_to_db(), close_session()))
+        except Exception:
+            pass
+
     # Тюнинг HTTP-клиента Telegram для устойчивости к сетевым сбоям
     request = HTTPXRequest(
         read_timeout=float(os.getenv("TG_READ_TIMEOUT", "60")),

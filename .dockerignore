@@ -23,3 +23,8 @@ pip-cache/
 temp/
 developer_log.md
 GEMINI.md
+
+# Docker/Compose volumes
+pgdata/
+backups/
+database/*.bak-*

@@ -1,0 +1,26 @@
+Суммируйте новость для предиктивного анализа. Верните ТОЛЬКО JSON.
+Правила:
+- Сумма вероятностей в `forecast` ≤ 1.0; не более 4 исходов.
+- Не добавляйте фактов, отсутствующих во входе.
+- Пустые массивы допустимы. При отсутствии данных — `unknown: true`.
+- Все строки ≤ 280 символов. Гео — англ. экзонимы.
+
+JSON:
+{
+  "unknown": boolean,
+  "summary": {"title": string, "abstract": string},
+  "features": {
+    "topics": [string],
+    "entities": [{"name": string, "type": "person|org|location"}],
+    "timeline_hint": [string]
+  },
+  "prediction": {
+    "horizon_hours": 72,
+    "scenarios": [{"name": string, "probability": number, "signals": [string], "confidence": number}]
+  },
+  "calibration": {"confidence_overall": number, "assumptions": [string]},
+  "evidence": [{"source_id": string|null, "url": string|null}]
+}
+
+Вход:
+{{ARTICLE_JSON}}

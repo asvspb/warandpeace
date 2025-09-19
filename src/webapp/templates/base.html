@@ -14,6 +14,18 @@
             <a href="/articles">Статьи</a>
             <a href="/duplicates">Дубликаты</a>
             <a href="/dlq">DLQ</a>
+            <a href="/stats">Статистика</a>
+            {% if request.session.get('admin') %}
+            <a href="/webauthn/credentials" style="margin-left:16px">Ключи</a>
+            <a href="/logout" style="margin-left:8px">Выход</a>
+            {% else %}
+            {% if auth_mode == 'webauthn' %}
+            <a href="/login" style="margin-left:16px">Войти</a>
+            <a href="/register-key" style="margin-left:8px">Регистрация ключа</a>
+            {% else %}
+            <a href="/basic-login" style="margin-left:16px">Вход</a>
+            {% endif %}
+            {% endif %}
         </div>
     </nav>
     <main class="container">
@@ -23,5 +35,6 @@
     <footer class="container" style="text-align: center; color: var(--muted); margin-top: 40px;">
         <p>&copy; 2025. War & Peace News Bot.</p>
     </footer>
+    <script src="/static/stats.js"></script>
 </body>
 </html>

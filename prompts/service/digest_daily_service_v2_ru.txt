@@ -1,0 +1,14 @@
+Суточный дайджест для дежурной смены. Выводите ТОЛЬКО JSON:
+{
+  "window": {"start": string, "end": string},
+  "watchlist": [
+    {"item": string, "why_now": string, "next_check_in_hours": number, "expected_signal": string,
+     "fail_fast_criteria": string, "probability": number}
+  ],
+  "escalation_map": [{"region": string, "risk_level": "low|medium|high", "delta": number}],
+  "noise_reduction": {"deduplicated_clusters": number, "removed_duplicates": number},
+  "confidence_overall": number
+}
+
+Вход:
+{{ARTICLES_JSONL}}

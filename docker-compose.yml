@@ -1,6 +1,10 @@
-version: '3.8'
-
 services:
+  redis:
+    image: redis:7-alpine
+    container_name: wp-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
   wg-client:
     image: linuxserver/wireguard:latest
     container_name: wg-client
@@ -32,6 +36,25 @@ services:
       retries: 3
     # Optional watchdog sidecar (disabled by default). Uncomment 'watchdog' service below.
 
+  postgres:
+    image: postgres:16-alpine
+    container_name: wp-postgres
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-warandpeace}
+      - POSTGRES_USER=${POSTGRES_USER:-wp}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - TZ=${TZ:-Europe/Moscow}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
   telegram-bot:
     build: .
     container_name: warandpeace-bot
@@ -43,12 +66,19 @@ services:
       - TZ=${TZ:-Europe/Moscow}
       - METRICS_ENABLED=${METRICS_ENABLED:-true}
       - METRICS_PORT=${METRICS_PORT:-8000}
+      - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
+      # Autodiscovery of web status endpoint (bot tries multiple, but this helps)
+      - BACKFILL_STATUS_URL=${BACKFILL_STATUS_URL:-http://web:8080}
+      - BACKFILL_API_KEY=${WEB_API_KEY}
+      - DATABASE_URL=${DATABASE_URL}
     volumes:
       - ./database:/app/database
       - ./backups:/var/backups/warandpeace
     restart: unless-stopped
     depends_on: # Примечание: в Compose v3 это не ждет healthcheck, только запускает контейнеры в нужном порядке.
       - wg-client
+      - redis
+      - postgres
 
   watchdog:
     image: docker:cli
@@ -65,21 +95,29 @@ services:
       - WG_UNHEALTHY_THRESHOLD=${WG_UNHEALTHY_THRESHOLD:-7}
       - WG_DISABLE_MINUTES=${WG_DISABLE_MINUTES:-15}
     restart: unless-stopped
-    entrypoint: ["/bin/sh","-lc","wg_watchdog.sh"]
-
+    entrypoint: ["/bin/sh", "-lc", "wg_watchdog.sh"]
 
   web:
     build: .
-    command: uvicorn src.webapp.server:app --host 0.0.0.0 --port ${WEB_PORT:-8080}
+    command: uvicorn src.webapp.server:app --host 0.0.0.0 --port 8080
     env_file: .env
     environment:
       - TZ=${TZ:-Europe/Moscow}
       - WEB_ENABLED=true
-      - WEB_PORT=${WEB_PORT:-8080}
-      - WEB_BASIC_AUTH_USER=${WEB_BASIC_AUTH_USER}
-      - WEB_BASIC_AUTH_PASSWORD=${WEB_BASIC_AUTH_PASSWORD}
+      - WEB_PORT=8080
+      # Point web dashboard to bot's Prometheus endpoint
+      # The bot shares network namespace with wg-client, exposing metrics on port 8000 there
+      - METRICS_SCRAPE_URL=${METRICS_SCRAPE_URL:-http://wg-client:8000}
+      - WEB_AUTH_MODE=${WEB_AUTH_MODE:-basic}
+      - WEB_RP_ID=${WEB_RP_ID}
+      - WEB_RP_NAME=${WEB_RP_NAME}
+      - WEB_SESSION_SECRET=${WEB_SESSION_SECRET}
+      - WEB_API_ENABLED=${WEB_API_ENABLED:-true}
+      - WEB_API_KEY=${WEB_API_KEY}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - DATABASE_URL=${DATABASE_URL}
     volumes:
-      - ./database:/app/database:ro
+      - ./database:/app/database
     ports:
       - "${WEB_PORT:-8080}:8080"
     restart: unless-stopped
@@ -88,17 +126,36 @@ services:
       interval: 30s
       timeout: 3s
       retries: 3
+    depends_on:
+      - postgres
+
+  # caddy:
+  #   image: caddy:2-alpine
+  #   container_name: wp-caddy
+  #   restart: unless-stopped
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   environment:
+  #     - CADDY_DOMAIN=${CADDY_DOMAIN}
+  #     - CADDY_EMAIL=${CADDY_EMAIL}
+  #   volumes:
+  #     - ./Caddyfile:/etc/caddy/Caddyfile:ro
+  #   depends_on:
+  #     - web
+  #     - redis
 
   cron:
     build: .
     # Команда `cron -f` запускает cron в foreground-режиме, что необходимо для Docker.
-    # `&& tail -f /var/log/cron.log` позволяет видеть логи крона через `docker-compose logs`.
+    # Перенаправляем логи cron в stdout для просмотра через `docker-compose logs`.
     command: >
       bash -c "
-        echo '${BACKUP_CRON:-0 3 * * *} python3 /app/tools/backup.py --component db --backend local >> /var/log/cron.log 2>&1' > /etc/cron.d/backup-cron &&
+        echo '${BACKUP_CRON:-0 3 * * *} python3 /app/tools/backup.py --component db --backend local 2>&1' > /etc/cron.d/backup-cron &&
+        echo '' >> /etc/cron.d/backup-cron &&
         chmod 0644 /etc/cron.d/backup-cron &&
-        touch /var/log/cron.log &&
-        cron -f & tail -f /var/log/cron.log
+        crontab /etc/cron.d/backup-cron &&
+        cron -f -L 15
       "
     env_file:
       - .env

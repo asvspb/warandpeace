@@ -1,0 +1,10 @@
+Верните ТОЛЬКО JSON:
+{
+  "headline": string,
+  "three_things": [string],
+  "most_important_risk": {"name": string, "probability": number, "horizon_days": number},
+  "confidence_overall": number
+}
+
+Вход:
+{{ARTICLES_JSONL}}

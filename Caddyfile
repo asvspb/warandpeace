@@ -1,0 +1,17 @@
+{
+	email {$CADDY_EMAIL}
+}
+
+{$CADDY_DOMAIN} {
+	encode gzip
+	log
+	# Force HTTPS, automatic TLS by Caddy
+	reverse_proxy web:8080 {
+		header_up Host {host}
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-For {remote}
+	}
+	@metrics path /metrics
+	# Optionally protect metrics by IP, example:
+	# remote_ip 10.0.0.0/8 192.168.0.0/16
+}
