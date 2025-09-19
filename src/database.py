@@ -5,7 +5,8 @@ import logging
 import os
 import shutil
 from datetime import datetime
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Sequence, Iterator
+import re
 
 # Support both package and module execution contexts
 try:  # When imported as part of the 'src' package (e.g., uvicorn src.webapp.server:app)
@@ -13,8 +14,167 @@ try:  # When imported as part of the 'src' package (e.g., uvicorn src.webapp.ser
 except Exception:  # When running scripts like 'python src/bot.py'
     import config  # type: ignore
 
+# SQLAlchemy dual-backend support
+try:
+    # package context
+    from .db.engine import create_engine_from_env, get_database_url  # type: ignore
+except Exception:
+    try:
+        from db.engine import create_engine_from_env, get_database_url  # type: ignore
+    except Exception:
+        create_engine_from_env = None  # type: ignore
+        def get_database_url() -> str:  # type: ignore
+            return ""
+
 DATABASE_NAME = config.DB_SQLITE_PATH
 logger = logging.getLogger()
+
+
+def _is_pg_backend() -> bool:
+    # Во время pytest всегда используем SQLite, даже если в .env задан DATABASE_URL
+    try:
+        if os.environ.get("PYTEST_CURRENT_TEST"):
+            return False
+        url = (get_database_url() or "").strip().lower()
+        return url.startswith("postgresql")
+    except Exception:
+        return False
+
+
+class _RowAdapter:
+    """Адаптер строки результата SQLAlchemy для совместимости со sqlite3.Row.
+
+    Поддерживает row['col'] и row[0], а также dict(row).
+    """
+    __slots__ = ("_keys", "_mapping", "_values")
+
+    def __init__(self, keys: Sequence[str], row: Any):  # type: ignore
+        # SQLAlchemy Row имеет ._mapping и .keys()
+        try:
+            self._mapping = row._mapping  # type: ignore
+            self._keys = list(keys)
+            self._values = [self._mapping.get(k) for k in self._keys]
+        except Exception:
+            # fallback на dict(row)
+            d = dict(row)
+            self._keys = list(d.keys())
+            self._values = [d[k] for k in self._keys]
+            class _M(dict):
+                def get(self, k, default=None):
+                    return dict.__getitem__(self, k)
+            self._mapping = _M(d)
+
+    def __getitem__(self, key):  # type: ignore
+        if isinstance(key, int):
+            return self._values[key]
+        return self._mapping[key]
+
+    def __iter__(self) -> Iterator[str]:
+        # Для dict(row)
+        return iter(self._keys)
+
+
+class _PgCursorAdapter:
+    def __init__(self, sa_conn):
+        from sqlalchemy import text as sa_text  # lazy import
+        self._conn = sa_conn
+        self._sa_text = sa_text
+        self._last_result = None
+        self.lastrowid: Optional[int] = None
+
+    @staticmethod
+    def _convert_qmarks(sql: str, params: Sequence[Any]) -> (str, Dict[str, Any]):  # type: ignore
+        # Заменяет ? на :p0, :p1 ... и формирует словарь параметров
+        idx = 0
+        def repl(_):
+            nonlocal idx
+            name = f"p{idx}"
+            idx += 1
+            return f":{name}"
+        new_sql = re.sub(r"\?", repl, sql)
+        bind = {f"p{i}": params[i] for i in range(len(params))}
+        return new_sql, bind
+
+    def execute(self, sql: str, params: Optional[Sequence[Any]] = None):  # type: ignore
+        self.lastrowid = None
+        if params is None:
+            params = []
+        new_sql, bind = self._convert_qmarks(sql, list(params))
+        self._last_result = self._conn.execute(self._sa_text(new_sql), bind)
+        # Спец-случай: нужно вернуть id вставленной статьи как lastrowid
+        try:
+            if sql.strip().lower().startswith("insert into articles"):
+                # canonical_link — второй параметр в обоих INSERT
+                if len(params) >= 2:
+                    canon = params[1]
+                    row = self._conn.execute(self._sa_text("SELECT id FROM articles WHERE canonical_link = :canon LIMIT 1"), {"canon": canon}).fetchone()
+                    if row is not None:
+                        self.lastrowid = int(row[0])
+        except Exception:
+            pass
+        return self
+
+    def executemany(self, sql: str, seq_of_params: Sequence[Sequence[Any]]):  # type: ignore
+        self.lastrowid = None
+        if not seq_of_params:
+            return self
+        # Преобразуем SQL один раз
+        new_sql, _ = self._convert_qmarks(sql, list(seq_of_params[0]))
+        rows = []
+        for params in seq_of_params:
+            _, bind = self._convert_qmarks(sql, list(params))
+            rows.append(bind)
+        self._last_result = self._conn.execute(self._sa_text(new_sql), rows)
+        return self
+
+    def fetchall(self):  # type: ignore
+        if self._last_result is None:
+            return []
+        keys = list(self._last_result.keys())
+        return [_RowAdapter(keys, r) for r in self._last_result.fetchall()]
+
+    def fetchone(self):  # type: ignore
+        if self._last_result is None:
+            return None
+        row = self._last_result.fetchone()
+        if row is None:
+            return None
+        keys = list(self._last_result.keys())
+        return _RowAdapter(keys, row)
+
+
+class _PgConnectionAdapter:
+    def __init__(self, sa_engine):
+        self._engine = sa_engine
+        self._conn = sa_engine
+        self._trans = None
+        try:
+            self._trans = self._conn.begin()
+        except Exception:
+            self._trans = None
+
+    def cursor(self):  # type: ignore
+        return _PgCursorAdapter(self._conn)
+
+    def commit(self):  # type: ignore
+        try:
+            if self._trans and self._trans.is_active:
+                self._trans.commit()
+                self._trans = self._conn.begin()
+        except Exception:
+            pass
+
+    def close(self):  # type: ignore
+        try:
+            if self._trans and self._trans.is_active:
+                self._trans.commit()
+        except Exception:
+            pass
+        try:
+            self._conn.close()
+        except Exception:
+            pass
+
 
 @contextmanager
 def get_db_connection():
@@ -22,24 +182,42 @@ def get_db_connection():
 
     Гарантирует существование директории БД и безопасно закрывает соединение.
     """
-    conn = None
-    try:
-        db_dir = os.path.dirname(DATABASE_NAME)
-        if db_dir and not os.path.exists(db_dir):
-            os.makedirs(db_dir, exist_ok=True)
-
-        conn = sqlite3.connect(DATABASE_NAME)
-        conn.row_factory = sqlite3.Row
-        yield conn
-    except sqlite3.Error as e:
-        logger.error(f"Database connection error: {e}")
-        raise
-    finally:
+    if _is_pg_backend() and create_engine_from_env is not None:
+        # Режим PostgreSQL через SQLAlchemy
+        sa_conn = None
         try:
-            if conn:
-                conn.close()
-        except Exception:
-            pass
+            sa_conn = create_engine_from_env().connect()
+            adapter = _PgConnectionAdapter(sa_conn)
+            yield adapter
+        except Exception as e:
+            logger.error(f"Database connection error (PG): {e}")
+            raise
+        finally:
+            try:
+                if adapter:  # type: ignore
+                    adapter.close()  # type: ignore
+            except Exception:
+                pass
+    else:
+        # Режим SQLite (оригинальная реализация)
+        conn = None
+        try:
+            db_dir = os.path.dirname(DATABASE_NAME)
+            if db_dir and not os.path.exists(db_dir):
+                os.makedirs(db_dir, exist_ok=True)
+
+            conn = sqlite3.connect(DATABASE_NAME)
+            conn.row_factory = sqlite3.Row
+            yield conn
+        except sqlite3.Error as e:
+            logger.error(f"Database connection error: {e}")
+            raise
+        finally:
+            try:
+                if conn:
+                    conn.close()
+            except Exception:
+                pass
 
 def init_db():
     """
@@ -47,6 +225,21 @@ def init_db():
     - Добавляет таблицу 'articles' со всеми необходимыми полями, включая 'backfill_status'.
     - Выполняет миграцию данных из старой схемы, если это необходимо.
     """
+    # В режиме PostgreSQL используем SQLAlchemy-схему и выходим
+    if _is_pg_backend() and create_engine_from_env is not None:
+        try:
+            try:
+                from .db.schema import create_all_schema  # type: ignore
+            except Exception:
+                from db.schema import create_all_schema  # type: ignore
+            engine = create_engine_from_env()
+            create_all_schema(engine)
+            logger.info("PG schema ensured via SQLAlchemy.")
+            return
+        except Exception as e:
+            logger.error(f"Не удалось создать схему PG через SQLAlchemy: {e}")
+            # Падаем дальше, чтобы не скрывать ошибку на этапе инициализации
+            raise
     with get_db_connection() as conn:
         cursor = conn.cursor()
 

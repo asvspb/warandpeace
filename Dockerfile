@@ -1,5 +1,5 @@
 # 1. Базовый образ с нужной версией Python
-FROM python:3.10-slim
+FROM python:3.12-slim
 
 # 2. Установка системных зависимостей (curl для healthcheck, tzdata для часовых поясов)
 RUN apt-get update && apt-get install -y curl tzdata age postgresql-client sqlite3 cron && rm -rf /var/lib/apt/lists/*
@@ -21,4 +21,4 @@ EXPOSE 8000
 
 # 7. Команда, которая будет выполняться при запуске контейнера
 CMD ["python", "src/bot.py"]
-LABEL last_build="2025-08-14 00:00:00"
+LABEL last_build="2025-09-19 00:00:00"

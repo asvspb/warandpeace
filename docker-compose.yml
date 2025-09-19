@@ -36,6 +36,25 @@ services:
       retries: 3
     # Optional watchdog sidecar (disabled by default). Uncomment 'watchdog' service below.
 
+  postgres:
+    image: postgres:16-alpine
+    container_name: wp-postgres
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-warandpeace}
+      - POSTGRES_USER=${POSTGRES_USER:-wp}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - TZ=${TZ:-Europe/Moscow}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
   telegram-bot:
     build: .
     container_name: warandpeace-bot
@@ -51,6 +70,7 @@ services:
       # Autodiscovery of web status endpoint (bot tries multiple, but this helps)
       - BACKFILL_STATUS_URL=${BACKFILL_STATUS_URL:-http://web:8080}
       - BACKFILL_API_KEY=${WEB_API_KEY}
+      - DATABASE_URL=${DATABASE_URL}
     volumes:
       - ./database:/app/database
       - ./backups:/var/backups/warandpeace
@@ -58,6 +78,7 @@ services:
     depends_on: # Примечание: в Compose v3 это не ждет healthcheck, только запускает контейнеры в нужном порядке.
       - wg-client
       - redis
+      - postgres
 
   watchdog:
     image: docker:cli
@@ -94,6 +115,7 @@ services:
       - WEB_API_ENABLED=${WEB_API_ENABLED:-true}
       - WEB_API_KEY=${WEB_API_KEY}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - DATABASE_URL=${DATABASE_URL}
     volumes:
       - ./database:/app/database
     ports:
@@ -104,6 +126,8 @@ services:
       interval: 30s
       timeout: 3s
       retries: 3
+    depends_on:
+      - postgres
 
   # caddy:
   #   image: caddy:2-alpine

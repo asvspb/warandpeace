@@ -119,7 +119,16 @@ def _echo_with_dlq_tail(prefix: str) -> None:
         click.echo(prefix)
 
 
-@cli.command()
+@cli.command('db-init-sqlalchemy')
+def db_init_sqlalchemy():
+    """Создаёт схему БД через SQLAlchemy (SQLite/PG в зависимости от DATABASE_URL)."""
+    from src.db.engine import create_engine_from_env
+    from src.db.schema import create_all_schema
+    engine = create_engine_from_env()
+    create_all_schema(engine)
+    click.echo("Схема БД создана через SQLAlchemy.")
+
+@cli.command('backfill')
 @click.option('--force', is_flag=True, help='Запустить без интерактивного подтверждения.')
 def backfill(force):
     """

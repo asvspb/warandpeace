@@ -177,6 +177,7 @@ Thumbs.db
 !.env.example
 
 # Local databases and backups
+# SQLite files and backups
 database/*.db
 database/*.db-*
 database/*.db.*
@@ -186,6 +187,9 @@ database/*-journal
 database/*.bak-*
 test_articles.db
 *.db.bak-*
+
+# Docker local volumes (non-versioned data)
+pgdata/
 
 # Logs and temp files
 logs/
