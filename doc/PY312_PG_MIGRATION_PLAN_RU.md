@@ -99,10 +99,13 @@ Status: draft
 - [x] Добавить проверки количества строк (summary в конце)
 Проверка и стабилизация:
 - [x] Dry-run на небольшом срезе (LIMIT) с SQLite→SQLite (валидация логики)
-- [ ] Полный перенос, сверка количеств по таблицам (после настройки PG пароля)
-- [ ] pytest -q с PG (DATABASE_URL установлен)
+- [x] Инициализация схемы в PG (через web-контейнер)
+- [x] Частичный перенос: articles (5000), sessions, session_stats*, backfill_progress, api_usage_daily (upsert)
+- [x] Верификация COUNT в PG (articles=5000, api_usage_daily≈7 уникальных строк, sessions=47, session_stats_daily=1)
+- [ ] Полный перенос статей (все rows), сверка количеств
+- [ ] pytest -q с PG (DATABASE_URL установлен) — после переключения рантайма (Этап 6)
 Сохранение:
-- [ ] git add/commit "Stage 5: Data migration script + validated counts"
+- [ ] git add/commit "Stage 5: Data migration script + partial transfer & checks"
 
 Этап 6 — Переключение рантайма на Postgres [0.5–1 день]
 Задачи:

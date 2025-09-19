@@ -57,7 +57,7 @@ UPSERT_RULES_PG: Dict[str, str] = {
     ),
     "api_usage_daily": (
         "INSERT INTO api_usage_daily (day_utc, provider, model, api_key_hash, req_count, success_count, tokens_in_total, tokens_out_total, cost_usd_total, latency_ms_sum)\n"
-        "VALUES (:day_utc, :provider, :model, :api_key_hash, COALESCE(:req_count,0), COALESCE(:success_count,0), COALESCE(:tokens_in_total,0), COALESCE(:tokens_out_total,0), COALESCE(:cost_usd_total,0.0), COALESCE(:latency_ms_sum,0))\n"
+        "VALUES (:day_utc, :provider, COALESCE(:model, ''), COALESCE(:api_key_hash, ''), COALESCE(:req_count,0), COALESCE(:success_count,0), COALESCE(:tokens_in_total,0), COALESCE(:tokens_out_total,0), COALESCE(:cost_usd_total,0.0), COALESCE(:latency_ms_sum,0))\n"
         "ON CONFLICT (day_utc, provider, model, api_key_hash) DO UPDATE SET\n"
         "  req_count = api_usage_daily.req_count + EXCLUDED.req_count,\n"
         "  success_count = api_usage_daily.success_count + EXCLUDED.success_count,\n"
