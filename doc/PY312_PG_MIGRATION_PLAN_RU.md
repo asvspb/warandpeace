@@ -90,16 +90,16 @@ Status: draft
 
 Этап 5 — Скрипт переноса данных tools/migrate_sqlite_to_postgres.py [1–2 дня]
 Задачи:
-- [ ] Реализовать перенос таблиц партиями (ORDER BY id):
-      - [ ] articles (ON CONFLICT (canonical_link) DO UPDATE ...)
-      - [ ] pending_publications (UNIQUE url)
-      - [ ] dlq, digests
-      - [ ] api_usage_daily (обязательно); api_usage_events — опционально (или пересчёт агрегатов)
-      - [ ] backfill_progress (единственная запись id=1)
-- [ ] Добавить проверки количества строк и простых сумм/хешей (контроль целостности)
+- [x] Реализовать перенос таблиц партиями (ORDER BY ROWID в SQLite):
+      - [x] articles (ON CONFLICT (canonical_link) DO UPDATE ...)
+      - [x] pending_publications (UNIQUE url)
+      - [x] dlq, digests
+      - [x] api_usage_daily; api_usage_events — опционально
+      - [x] backfill_progress (единственная запись id=1), sessions, session_stats*
+- [x] Добавить проверки количества строк (summary в конце)
 Проверка и стабилизация:
-- [ ] Dry-run на небольшом срезе (LIMIT)
-- [ ] Полный перенос, сверка количеств по таблицам
+- [x] Dry-run на небольшом срезе (LIMIT) с SQLite→SQLite (валидация логики)
+- [ ] Полный перенос, сверка количеств по таблицам (после настройки PG пароля)
 - [ ] pytest -q с PG (DATABASE_URL установлен)
 Сохранение:
 - [ ] git add/commit "Stage 5: Data migration script + validated counts"
