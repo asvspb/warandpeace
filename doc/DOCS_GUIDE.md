@@ -22,10 +22,12 @@
 
 ## Автоматизация
 - Скрипт генерации статуса: `python3 scripts/docs/generate_status.py`
-- Pre-commit hook (предупреждение):
+- Pre-commit hook (блокирующий по умолчанию):
   - Включить версионируемые хуки один раз: `git config core.hooksPath .githooks`
-  - Хук `.githooks/pre-commit` предупредит, если изменены ключевые файлы (src/, Dockerfile, docker-compose.yml, requirements.txt и др.), а документация не была обновлена. Коммит не блокируется.
-  - Отключить временно: `export WARP_DOCS_HOOK_DISABLE=1`
+  - Хук `.githooks/pre-commit` при изменениях в ключевых файлах:
+    - Автоматически генерирует `doc/STATUS.md` и добавляет его в коммит.
+    - Если ни один документ не был обновлён — БЛОКИРУЕТ коммит с подсказками.
+  - Временное отключение (на свой риск): `export WARP_DOCS_HOOK_DISABLE=1` или `git commit --no-verify`
 
 ## Правила
 - Документы пишутся на русском.

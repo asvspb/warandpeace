@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# Minimal pre-commit warning hook
-# Warns if core code/infra files are staged but docs were not updated.
-# Does not block commit (exit 0). To disable: export WARP_DOCS_HOOK_DISABLE=1
+# Pre-commit hook: требует актуализации документации при изменении ключевых файлов.
+# Поведение:
+#  - Если изменены код/инфраструктура, хук попытается автоматически сгенерировать doc/STATUS.md
+#    (python3 scripts/docs/generate_status.py) и добавить его в коммит.
+#  - Если после этого ни один документ не изменён, коммит БЛОКИРУЕТСЯ (exit 1) с подсказками.
+# Отключение на свой страх и риск: export WARP_DOCS_HOOK_DISABLE=1 (или git commit --no-verify)
 
 set -euo pipefail
 
@@ -9,13 +12,13 @@ if [[ "${WARP_DOCS_HOOK_DISABLE:-}" == 1 ]]; then
   exit 0
 fi
 
-# Collect staged files
+# Собираем список проиндексированных файлов
 mapfile -t STAGED < <(git diff --cached --name-only)
 [[ ${#STAGED[@]} -eq 0 ]] && exit 0
 
-# Triggers: code/infra that typically require doc updates
+# Триггеры: изменения, которые обычно требуют обновления docs
 TRIGGER_RE='^(Dockerfile|docker-compose\.yml|requirements\.txt|\.env\.example|src/|scripts/|prompts/|doc/db/|src/db/|WARP\.md)$'
-# Docs considered as updated
+# Документы, которые считаются «обновлением документации»
 DOCS_RE='^(DEPLOYMENT\.md|WARP\.md|README\.md|doc/STATUS\.md|doc/PLANNING\.md|doc/ROADMAP\.md|doc/RELEASELOG\.md|doc/DOCS_GUIDE\.md|doc/[^/]+_PLAN_RU\.md)$'
 
 triggered=()
@@ -29,16 +32,32 @@ for f in "${STAGED[@]}"; do
   fi
 done
 
-if [[ ${#triggered[@]} -gt 0 && "$doc_touched" == false ]]; then
-  yellow="\033[33m"; reset="\033[0m"
-  echo -e "${yellow}docs-warning:${reset} Обнаружены изменения в ключевых файлах, но документы не обновлены." 1>&2
-  echo "  Триггеры:" 1>&2
-  for f in "${triggered[@]}"; do
-    echo "   - $f" 1>&2
-  done
-  echo "  Проверьте DEPLOYMENT.md / WARP.md / doc/PLANNING.md / doc/ROADMAP.md / doc/RELEASELOG.md и, при необходимости, doc/*_PLAN_RU.md." 1>&2
-  echo "  Для обновления статуса: python3 scripts/docs/generate_status.py" 1>&2
-  echo "(Это предупреждение не блокирует коммит. Чтобы отключить: export WARP_DOCS_HOOK_DISABLE=1)" 1>&2
+if [[ ${#triggered[@]} -gt 0 ]]; then
+  # Пытаемся автоматически сгенерировать STATUS
+  if command -v python3 >/dev/null 2>&1 && [[ -f scripts/docs/generate_status.py ]]; then
+    if python3 scripts/docs/generate_status.py >/dev/null 2>&1; then
+      git add doc/STATUS.md || true
+      # если STATUS изменился, это уже считается обновлением docs
+      if ! git diff --cached --quiet -- doc/STATUS.md; then
+        doc_touched=true
+      fi
+    fi
+  fi
+
+  if [[ "$doc_touched" == false ]]; then
+    red="\033[31m"; reset="\033[0m"; bold="\033[1m"
+    echo -e "${red}${bold}docs-error:${reset} Изменены ключевые файлы, но документация не обновлена." 1>&2
+    echo "  Триггеры:" 1>&2
+    for f in "${triggered[@]}"; do
+      echo "   - $f" 1>&2
+    done
+    echo "  Обновите хотя бы один из документов:" 1>&2
+    echo "   - DEPLOYMENT.md / WARP.md / README.md" 1>&2
+    echo "   - doc/PLANNING.md / doc/ROADMAP.md / doc/RELEASELOG.md / doc/*_PLAN_RU.md" 1>&2
+    echo "  Подсказка: doc/STATUS.md можно сгенерировать: python3 scripts/docs/generate_status.py (хук делает это автоматически)." 1>&2
+    echo "  Временное отключение (на свой риск): export WARP_DOCS_HOOK_DISABLE=1 или git commit --no-verify" 1>&2
+    exit 1
+  fi
 fi
 
 exit 0
