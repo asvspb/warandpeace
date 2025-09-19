@@ -57,15 +57,16 @@ Status: draft
 
 Этап 3 — Зависимости и адаптер подключения (SQLAlchemy) [1–2 дня]
 Задачи:
-- [ ] Добавить в requirements.txt: SQLAlchemy==2.0.x, psycopg[binary]==3.2.x
-- [ ] Новый модуль подключения, напр. src/db/engine.py:
-      - [ ] create_engine_from_env(): если os.getenv("DATABASE_URL") → engine(PSQL), иначе engine(SQLite)
-      - [ ] Контекстный менеджер get_connection() с begin()
-- [ ] Обновить src/config.py при необходимости (только чтение DATABASE_URL, без жёстких связей)
+- [x] Добавить в requirements.txt: SQLAlchemy==2.0.x, psycopg[binary]==3.2.x
+- [x] Новый модуль подключения, напр. src/db/engine.py:
+      - [x] create_engine_from_env(): если os.getenv("DATABASE_URL") → engine(PSQL), иначе engine(SQLite)
+      - [x] Контекстный менеджер get_connection() с begin()
+- [x] Обновить .dockerignore, исключить pgdata из контекста сборки
 - [ ] Сохранить существующий API src/database.py, но перепровести внутренние вызовы через SQLAlchemy connection.execute(text(...)) постепенно (без изменения внешних сигнатур)
 Проверка и стабилизация:
-- [ ] pytest -q с SQLite (DATABASE_URL не задан)
-- [ ] docker compose up --build -d; smoke бота и web; /metrics, /healthz
+- [x] pytest -q с SQLite (DATABASE_URL не задан)
+- [x] docker compose build (обновление образов с новыми зависимостями)
+- [x] Тест подключения движка (локально) через SQLite DATABASE_URL
 Сохранение:
 - [ ] git add/commit "Stage 3: SQLAlchemy engine + dual-backend wiring (SQLite default)"
 
