@@ -90,9 +90,9 @@ class _BackfillState:
                     # days_done: number of distinct calendar days in DB between lower_utc_date and today (UTC)
                     cur.execute(
                         """
-                        SELECT COUNT(DISTINCT date(published_at))
+                        SELECT COUNT(DISTINCT CAST(published_at AS DATE))
                         FROM articles
-                        WHERE date(published_at) BETWEEN ? AND date('now')
+                        WHERE CAST(published_at AS DATE) BETWEEN CAST(? AS DATE) AND CURRENT_DATE
                         """,
                         (lower_utc_date,),
                     )
@@ -102,7 +102,7 @@ class _BackfillState:
                     # days_total: inclusive number of days from lower_utc_date to today
                     cur.execute(
                         """
-                        SELECT CAST((julianday(date('now')) - julianday(?)) AS INTEGER) + 1
+                        SELECT (CURRENT_DATE - CAST(? AS DATE))::int + 1
                         """,
                         (lower_utc_date,),
                     )

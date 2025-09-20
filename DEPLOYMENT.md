@@ -29,9 +29,19 @@ cd warandpeace
 cp .env.example .env
 ```
 
+Главное:
+- Используется PostgreSQL (и в продакшене, и локально). Задайте DATABASE_URL вида:
+  postgresql+psycopg://wp:${POSTGRES_PASSWORD}@postgres:5432/warandpeace
+  (или используйте набор POSTGRES_HOST/PORT/USER/PASSWORD/DB)
+
 Ключевые переменные окружения (фактически используемые кодом):
 
 ```ini
+# --- База данных ---
+# PostgreSQL (везде)
+DATABASE_URL=postgresql+psycopg://wp:${POSTGRES_PASSWORD}@postgres:5432/warandpeace
+# Либо задайте POSTGRES_HOST/PORT/USER/PASSWORD/DB
+
 # --- Telegram ---
 TELEGRAM_BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
 TELEGRAM_CHANNEL_ID=@your_channel_username   # или numeric -100...
@@ -85,7 +95,6 @@ JOB_MISFIRE_GRACE=60
 JOB_JITTER=3
 
 # --- Резервное копирование (локальный бэкенд) ---
-DB_SQLITE_PATH=/app/database/articles.db
 LOCAL_BACKUP_DIR=/var/backups/warandpeace
 BACKUP_TMP_DIR=/tmp/backup
 BACKUP_RETENTION_DAYS=7
@@ -105,17 +114,11 @@ WEB_API_ENABLED=false
 
 Примечание о метриках: по умолчанию сервер метрик в контейнере бота слушает порт 8000, а на хосте метрики доступны по `http://<host>:9090/metrics` (см. docker-compose.yml, проброс порта из `wg-client`). Не з��давайте METRICS_PORT без необходимости, иначе возможна рассинхронизация значений порта между контейнером и пробросом.
 
-### Шаг 3: Права для каталога базы данных
-
-Во избежание проблем с правами создайте каталог и назначьте владельца текущего пользователя:
-
-```bash
-mkdir -p database && sudo chown -R $(id -u):$(id -g) database
-```
 
 ## 3. Запуск и управление
 
 Проект содержит несколько сервисов:
+- `postgres` — база данных PostgreSQL (основной runtime)
 - `wg-client` — WireGuard VPN-клиент, сетевой неймспейс которого использует бот
 - `telegram-bot` — основной бот
 - `web` — веб-интерфейс для просмотра БД (read-only)
@@ -125,6 +128,8 @@ mkdir -p database && sudo chown -R $(id -u):$(id -g) database
 
 ```bash
 docker compose up --build -d
+# Первичная инициализация схемы БД (создаст таблицы в PostgreSQL)
+docker compose exec web python3 scripts/manage.py db-init-sqlalchemy
 ```
 
 ### Проверка статуса
@@ -133,7 +138,7 @@ docker compose up --build -d
 docker compose ps
 ```
 
-Ожидаемо: `wg-client` — healthy (после рукопожатия), `warandpeace-bot` — Up, `web` — Up (если включен).
+Ожидаемо: `postgres` — healthy, `wg-client` — healthy (после рукопожатия), `warandpeace-bot` — Up, `web` — Up.
 
 ### Логи
 
@@ -160,10 +165,6 @@ docker compose up --build -d
 
 ## 5. Устранение неполадок
 
-- permission denied к `database/articles.db` — проверьте владельца каталога `database` на хосте:
-  ```bash
-  sudo chown -R $(id -u):$(id -g) database
-  ```
 - Бот перезапускается — проверьте логи `docker compose logs -f telegram-bot` и корректность `.env`
 - Нет публикаций в канал — проверьте `TELEGRAM_CHANNEL_ID` и права бота в канале
 - Метрики недоступны — проверьте, что `wg-client` запущен, и обращайтесь к `http://<host>:9090/metrics`
@@ -203,7 +204,6 @@ docker compose run --rm telegram-bot \
 Заметки:
 - Команда идемпотентна: дубликаты не создаются (используется canonical_link)
 - Прогресс и ошибки видны в логах и DLQ (`dlq-show`)
-- Локальные несостыковки путей БД: ожидается `/app/database/articles.db` в контейнере
 
 ## 8. Надежность сети: таймауты, ретраи, предохрани��ель
 
@@ -286,17 +286,23 @@ docker compose up --build -d web caddy
 
 - Ежедневные бэкапы выполняет сервис `cron` согласно `BACKUP_CRON`. Поддерживается локальный бэкенд (`LOCAL_BACKUP_DIR`).
 - Шифрование age: для резервного копирования `.env` — обязательно (`AGE_PUBLIC_KEYS`), для БД — опционально (в `tools/backup.py --encrypt auto|on|off`).
-- Восстановление SQLite из локального бэкапа:
+- Восстановление PostgreSQL из локального бэкапа:
 
 ```bash
-# Сухой прогон
+# Посмотреть содержимое последнего дампа
+./scripts/restore_now.sh --list
+
+# Сухой прогон (проверка файла/ключа, без изменений в БД)
 ./scripts/restore_now.sh --dry-run
 
-# Реальное восстановление
-./scripts/restore_now.sh
+# Реальное восстановление в текущую БД
+./scripts/restore_now.sh --latest
+
+# Опасно: дропнуть БД и восстановить с нуля
+./scripts/restore_now.sh --latest --drop-existing
 ```
 
-Скрипт корректно обрабатывает checksum, расшифровку `.age` и integrity_check.
+Примечание: для зашифрованных бэкапов `.dump.age` требуется `AGE_SECRET_KEY` в окружении.
 
 ---
 

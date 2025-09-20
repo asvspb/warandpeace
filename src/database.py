@@ -1,9 +1,7 @@
-import sqlite3
 import hashlib
 from contextlib import contextmanager
 import logging
 import os
-import shutil
 from datetime import datetime
 from typing import Optional, Dict, Any, List, Sequence, Iterator
 import re
@@ -14,31 +12,13 @@ try:  # When imported as part of the 'src' package (e.g., uvicorn src.webapp.ser
 except Exception:  # When running scripts like 'python src/bot.py'
     import config  # type: ignore
 
-# SQLAlchemy dual-backend support
+# SQLAlchemy Postgres support
 try:
-    # package context
-    from .db.engine import create_engine_from_env, get_database_url  # type: ignore
+    from .db.engine import create_engine_from_env  # type: ignore
 except Exception:
-    try:
-        from db.engine import create_engine_from_env, get_database_url  # type: ignore
-    except Exception:
-        create_engine_from_env = None  # type: ignore
-        def get_database_url() -> str:  # type: ignore
-            return ""
+    from db.engine import create_engine_from_env  # type: ignore
 
-DATABASE_NAME = config.DB_SQLITE_PATH
 logger = logging.getLogger()
-
-
-def _is_pg_backend() -> bool:
-    # Во время pytest всегда используем SQLite, даже если в .env задан DATABASE_URL
-    try:
-        if os.environ.get("PYTEST_CURRENT_TEST"):
-            return False
-        url = (get_database_url() or "").strip().lower()
-        return url.startswith("postgresql")
-    except Exception:
-        return False
 
 
 class _RowAdapter:
@@ -69,9 +49,13 @@ class _RowAdapter:
             return self._values[key]
         return self._mapping[key]
 
-    def __iter__(self) -> Iterator[str]:
-        # Для dict(row)
-        return iter(self._keys)
+    def items(self):  # type: ignore
+        for k in self._keys:
+            yield (k, self._mapping.get(k))
+
+    def __iter__(self) -> Iterator[Any]:  # type: ignore
+        # Позволяет dict(row) корректно собирать словарь
+        return iter(self.items())
 
 
 class _PgCursorAdapter:
@@ -97,15 +81,21 @@ class _PgCursorAdapter:
 
     def execute(self, sql: str, params: Optional[Sequence[Any]] = None):  # type: ignore
         self.lastrowid = None
+        # Accept either positional (list/tuple) or named (dict) parameters
         if params is None:
-            params = []
-        new_sql, bind = self._convert_qmarks(sql, list(params))
+            bind = {}
+            new_sql = sql
+        elif isinstance(params, dict):
+            bind = params  # pass through named binds like :limit, :offset
+            new_sql = sql
+        else:
+            new_sql, bind = self._convert_qmarks(sql, list(params))
         self._last_result = self._conn.execute(self._sa_text(new_sql), bind)
         # Спец-случай: нужно вернуть id вставленной статьи как lastrowid
         try:
             if sql.strip().lower().startswith("insert into articles"):
                 # canonical_link — второй параметр в обоих INSERT
-                if len(params) >= 2:
+                if not isinstance(params, dict) and params is not None and len(params) >= 2:
                     canon = params[1]
                     row = self._conn.execute(self._sa_text("SELECT id FROM articles WHERE canonical_link = :canon LIMIT 1"), {"canon": canon}).fetchone()
                     if row is not None:
@@ -118,12 +108,17 @@ class _PgCursorAdapter:
         self.lastrowid = None
         if not seq_of_params:
             return self
-        # Преобразуем SQL один раз
-        new_sql, _ = self._convert_qmarks(sql, list(seq_of_params[0]))
-        rows = []
-        for params in seq_of_params:
-            _, bind = self._convert_qmarks(sql, list(params))
-            rows.append(bind)
+        first = seq_of_params[0]
+        if isinstance(first, dict):
+            new_sql = sql
+            rows = list(seq_of_params)  # already list of dicts
+        else:
+            # Преобразуем SQL один раз
+            new_sql, _ = self._convert_qmarks(sql, list(first))
+            rows = []
+            for params in seq_of_params:
+                _, bind = self._convert_qmarks(sql, list(params))
+                rows.append(bind)
         self._last_result = self._conn.execute(self._sa_text(new_sql), rows)
         return self
 
@@ -178,294 +173,38 @@ class _PgConnectionAdapter:
 
 @contextmanager
 def get_db_connection():
-    """Контекстный менеджер для соединения с БД.
-
-    Гарантирует существование директории БД и безопасно закрывает соединение.
-    """
-    if _is_pg_backend() and create_engine_from_env is not None:
-        # Режим PostgreSQL через SQLAlchemy
-        sa_conn = None
+    """Контекстный менеджер для соединения с БД (PostgreSQL only)."""
+    sa_conn = None
+    try:
+        sa_conn = create_engine_from_env().connect()
+        adapter = _PgConnectionAdapter(sa_conn)
+        yield adapter
+    except Exception as e:
+        logger.error(f"Database connection error (PG): {e}")
+        raise
+    finally:
         try:
-            sa_conn = create_engine_from_env().connect()
-            adapter = _PgConnectionAdapter(sa_conn)
-            yield adapter
-        except Exception as e:
-            logger.error(f"Database connection error (PG): {e}")
-            raise
-        finally:
-            try:
-                if adapter:  # type: ignore
-                    adapter.close()  # type: ignore
-            except Exception:
-                pass
-    else:
-        # Режим SQLite (оригинальная реализация)
-        conn = None
-        try:
-            db_dir = os.path.dirname(DATABASE_NAME)
-            if db_dir and not os.path.exists(db_dir):
-                os.makedirs(db_dir, exist_ok=True)
-
-            conn = sqlite3.connect(DATABASE_NAME)
-            conn.row_factory = sqlite3.Row
-            yield conn
-        except sqlite3.Error as e:
-            logger.error(f"Database connection error: {e}")
-            raise
-        finally:
-            try:
-                if conn:
-                    conn.close()
-            except Exception:
-                pass
+            if adapter:  # type: ignore
+                adapter.close()  # type: ignore
+        except Exception:
+            pass
 
 def init_db():
     """
-    Инициализирует или обновляет схему базы данных.
-    - Добавляет таблицу 'articles' со всеми необходимыми полями, включая 'backfill_status'.
-    - Выполняет миграцию данных из старой схемы, если это необходимо.
+    Инициализирует или обновляет схему базы данных (PostgreSQL-only).
     """
-    # В режиме PostgreSQL используем SQLAlchemy-схему и выходим
-    if _is_pg_backend() and create_engine_from_env is not None:
+    try:
         try:
-            try:
-                from .db.schema import create_all_schema  # type: ignore
-            except Exception:
-                from db.schema import create_all_schema  # type: ignore
-            engine = create_engine_from_env()
-            create_all_schema(engine)
-            logger.info("PG schema ensured via SQLAlchemy.")
-            return
-        except Exception as e:
-            logger.error(f"Не удалось создать схему PG через SQLAlchemy: {e}")
-            # Падаем дальше, чтобы не скрывать ошибку на этапе инициализации
-            raise
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-
-        # 1. Проверяем текущие колонки
-        cursor.execute("PRAGMA table_info(articles)")
-        columns = [column['name'] for column in cursor.fetchall()]
-
-        # 2. Если таблицы нет или схема старая — создаём новую схему с каноническими полями
-        need_recreate = not columns or any(col not in columns for col in [
-            'url', 'title', 'published_at', 'summary_text', 'created_at', 'backfill_status'
-        ])
-
-        if need_recreate:
-            logger.info("Миграция схемы 'articles' до новой версии (canonical_link, content, индексы)...")
-
-            # Пытаемся сделать резервную копию файла БД перед сложной миграцией
-            try:
-                _ = backup_database_copy()
-            except Exception:
-                pass
-
-            # Транзакция для миграции
-            cursor.execute("BEGIN")
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS articles_new (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    url TEXT NOT NULL,
-                    canonical_link TEXT NOT NULL UNIQUE,
-                    title TEXT NOT NULL,
-                    published_at TIMESTAMP NOT NULL,
-                    content TEXT,
-                    content_hash TEXT,
-                    summary_text TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    backfill_status TEXT CHECK(backfill_status IN ('success', 'failed', 'skipped'))
-                )
-                """
-            )
-
-            # Перенос совместимых данных из старой таблицы, если она была
-            if columns:
-                try:
-                    cursor.execute(
-                        """
-                        INSERT OR IGNORE INTO articles_new (id, url, canonical_link, title, published_at, summary_text, created_at, updated_at, backfill_status)
-                        SELECT id, url, url, title, published_at, summary_text, created_at, CURRENT_TIMESTAMP, backfill_status FROM articles
-                        """
-                    )
-                    cursor.execute("DROP TABLE articles")
-                except sqlite3.OperationalError:
-                    logger.info("Старая таблица 'articles' отсутствует, создаём с нуля")
-            cursor.execute("ALTER TABLE articles_new RENAME TO articles")
-            conn.commit()
-        else:
-            # Лёгкая миграция: добавляем недостающие колонки для старой схемы
-            missing_columns = set([
-                'canonical_link', 'content', 'content_hash', 'updated_at'
-            ]) - set(columns)
-
-            if missing_columns:
-                # Резервная копия перед изменением структуры
-                try:
-                    _ = backup_database_copy()
-                except Exception:
-                    pass
-
-                cursor.execute("BEGIN")
-
-                if 'canonical_link' in missing_columns:
-                    cursor.execute("ALTER TABLE articles ADD COLUMN canonical_link TEXT")
-                    # Заполняем canonical_link из url для уже существующих записей
-                    try:
-                        cursor.execute(
-                            "UPDATE articles SET canonical_link = url WHERE canonical_link IS NULL OR TRIM(canonical_link) = ''"
-                        )
-                    except sqlite3.OperationalError:
-                        pass
-
-                if 'content' in missing_columns:
-                    cursor.execute("ALTER TABLE articles ADD COLUMN content TEXT")
-
-                if 'content_hash' in missing_columns:
-                    cursor.execute("ALTER TABLE articles ADD COLUMN content_hash TEXT")
-
-                if 'updated_at' in missing_columns:
-                    # В SQLite нельзя добавлять колонку с неконстантным DEFAULT через ALTER TABLE
-                    cursor.execute("ALTER TABLE articles ADD COLUMN updated_at TIMESTAMP")
-                    try:
-                        cursor.execute("UPDATE articles SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL")
-                    except sqlite3.OperationalError:
-                        pass
-                conn.commit()
-
-        # 3. Индексы
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_articles_published_at ON articles (published_at)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_articles_backfill_status ON articles (backfill_status)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_articles_content_hash ON articles (content_hash)")
-
-        # 4. Создаем таблицу DLQ (если нет)
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS dlq (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                entity_type TEXT NOT NULL,
-                entity_ref TEXT NOT NULL,
-                error_code TEXT,
-                error_payload TEXT,
-                attempts INTEGER DEFAULT 1,
-                first_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-
-        cursor.execute(
-            "CREATE INDEX IF NOT EXISTS idx_dlq_entity ON dlq (entity_type, entity_ref)"
-        )
-
-        # 5. Создаем таблицу для дайджестов (без изменений)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS digests (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                period TEXT NOT NULL,
-                content TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        # 6. Создаем таблицу для отложенных публикаций
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS pending_publications (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                url TEXT NOT NULL UNIQUE,
-                title TEXT NOT NULL,
-                published_at TIMESTAMP NOT NULL,
-                summary_text TEXT NOT NULL,
-                attempts INTEGER DEFAULT 0,
-                last_error TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_pending_publications_created_at ON pending_publications (created_at)")
-        
-        # 7. Таблица для WebAuthn-учётных данных администратора
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS webauthn_credential (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              user_id TEXT NOT NULL,
-              credential_id BLOB NOT NULL UNIQUE,
-              public_key BLOB NOT NULL,
-              sign_count INTEGER NOT NULL DEFAULT 0,
-              transports TEXT,
-              aaguid TEXT,
-              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-              last_used_at TIMESTAMP
-            )
-            """
-        )
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_webauthn_user ON webauthn_credential (user_id)")
-        
-        # --- API usage persistence schema (ensure) ---
-        try:
-            ensure_api_usage_schema(cursor)
-        except Exception as e:
-            logger.error(f"Не удалось инициализировать схему метрик API: {e}")
-
-        # --- Session stats daily persistence schema (ensure) ---
-        try:
-            ensure_session_stats_schema(cursor)
-        except Exception as e:
-            logger.error(f"Не удалось инициализировать схему session_stats: {e}")
-
-        logger.info("Инициализация базы данных завершена.")
-
-        # 8. Таблица прогресса бэкфилла (для мониторинга и возобновления)
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS backfill_progress (
-                id INTEGER PRIMARY KEY CHECK(id = 1),
-                collect_running INTEGER DEFAULT 0,
-                collect_until TEXT,
-                collect_scanning INTEGER DEFAULT 0,
-                collect_scan_page INTEGER DEFAULT 0,
-                collect_last_page INTEGER DEFAULT 0,
-                collect_processed INTEGER DEFAULT 0,
-                collect_last_ts TEXT,
-                collect_goal_pages INTEGER,
-                collect_goal_total INTEGER,
-                sum_running INTEGER DEFAULT 0,
-                sum_until TEXT,
-                sum_processed INTEGER DEFAULT 0,
-                sum_last_article_id INTEGER,
-                sum_model TEXT,
-                sum_goal_total INTEGER,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-        # Ensure single row exists
-        cursor.execute("INSERT OR IGNORE INTO backfill_progress (id) VALUES (1)")
-        # Backward-compatible: add missing columns if table existed earlier
-        try:
-            cursor.execute("ALTER TABLE backfill_progress ADD COLUMN sum_goal_total INTEGER")
+            from .db.schema import create_all_schema  # type: ignore
         except Exception:
-            pass
-        try:
-            cursor.execute("ALTER TABLE backfill_progress ADD COLUMN collect_scanning INTEGER DEFAULT 0")
-        except Exception:
-            pass
-        try:
-            cursor.execute("ALTER TABLE backfill_progress ADD COLUMN collect_scan_page INTEGER DEFAULT 0")
-        except Exception:
-            pass
-        try:
-            cursor.execute("ALTER TABLE backfill_progress ADD COLUMN collect_goal_pages INTEGER")
-        except Exception:
-            pass
-        try:
-            cursor.execute("ALTER TABLE backfill_progress ADD COLUMN collect_goal_total INTEGER")
-        except Exception:
-            pass
-        conn.commit()
+            from db.schema import create_all_schema  # type: ignore
+        engine = create_engine_from_env()
+        create_all_schema(engine)
+        logger.info("PG schema ensured via SQLAlchemy.")
+        return
+    except Exception as e:
+        logger.error(f"Не удалось создать схему PG через SQLAlchemy: {e}")
+        raise
 
 
 def get_articles_for_backfill(status: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -531,16 +270,22 @@ def add_article(url: str, title: str, published_at_iso: str, summary: str) -> Op
                     return u
 
             canonical_link = canonicalize_url(url)
+            # В PG используем UPSERT с возвратом id для нового ряда
             cursor.execute(
-                "INSERT INTO articles (url, canonical_link, title, published_at, summary_text) VALUES (?, ?, ?, ?, ?)",
-                (url, canonical_link, title, published_at_iso, summary)
+                """
+                INSERT INTO articles (url, canonical_link, title, published_at, summary_text)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT (canonical_link) DO NOTHING
+                RETURNING id
+                """,
+                (url, canonical_link, title, published_at_iso, summary),
             )
+            row = cursor.fetchone()
+            if not row:
+                return None
             conn.commit()
-            return cursor.lastrowid
-        except sqlite3.IntegrityError:
-            # Это не ошибка, а ожидаемое поведение, если статья уже есть
-            return None
-        except sqlite3.Error as e:
+            return int(row[0])
+        except Exception as e:
             logger.error(f"Ошибка при добавлении статьи {url}: {e}")
             return None
 
@@ -564,12 +309,12 @@ def _sha256(text: str) -> str:
 
 # -------------------- API USAGE PERSISTENCE --------------------
 
-def ensure_api_usage_schema(cursor: Optional[sqlite3.Cursor] = None) -> None:
+def ensure_api_usage_schema(cursor: Optional[Any] = None) -> None:
     """Создает таблицы и индексы для персистентной статистики API-использования.
 
     Может принимать внешний курсор (для вызова из init_db), либо создаёт свой.
     """
-    def _exec(cur: sqlite3.Cursor, sql: str, params: tuple = ()) -> None:
+    def _exec(cur, sql: str, params: tuple = ()) -> None:
         cur.execute(sql, params)
 
     if cursor is None:
@@ -581,12 +326,12 @@ def ensure_api_usage_schema(cursor: Optional[sqlite3.Cursor] = None) -> None:
     _ensure_api_usage_schema_inner(cursor)
 
 
-def _ensure_api_usage_schema_inner(cur: sqlite3.Cursor) -> None:
-    # 1) Сырые события
+def _ensure_api_usage_schema_inner(cur) -> None:
+    # 1) Сырые события (PostgreSQL)
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS api_usage_events (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          id BIGSERIAL PRIMARY KEY,
           ts_utc TEXT NOT NULL,
           provider TEXT NOT NULL,
           model TEXT,
@@ -598,7 +343,7 @@ def _ensure_api_usage_schema_inner(cur: sqlite3.Cursor) -> None:
           latency_ms INTEGER,
           tokens_in INTEGER DEFAULT 0,
           tokens_out INTEGER DEFAULT 0,
-          cost_usd REAL DEFAULT 0.0,
+          cost_usd DOUBLE PRECISION DEFAULT 0.0,
           error_code TEXT,
           extra_json TEXT
         )
@@ -612,7 +357,7 @@ def _ensure_api_usage_schema_inner(cur: sqlite3.Cursor) -> None:
         "CREATE INDEX IF NOT EXISTS idx_api_usage_events_api_key_hash ON api_usage_events (api_key_hash)"
     )
 
-    # 2) Дневные агрегаты
+    # 2) Дневные агрегаты (PostgreSQL)
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS api_usage_daily (
@@ -624,7 +369,7 @@ def _ensure_api_usage_schema_inner(cur: sqlite3.Cursor) -> None:
           success_count INTEGER NOT NULL DEFAULT 0,
           tokens_in_total INTEGER NOT NULL DEFAULT 0,
           tokens_out_total INTEGER NOT NULL DEFAULT 0,
-          cost_usd_total REAL NOT NULL DEFAULT 0.0,
+          cost_usd_total DOUBLE PRECISION NOT NULL DEFAULT 0.0,
           latency_ms_sum INTEGER NOT NULL DEFAULT 0,
           PRIMARY KEY (day_utc, provider, model, api_key_hash)
         )
@@ -655,12 +400,17 @@ def start_session(session_id: str, git_sha: Optional[str] = None, container_id: 
         cur = conn.cursor()
         ensure_api_usage_schema(cur)
         ts = datetime.now(timezone.utc).isoformat()
+        # В PG обновляем только метаданные, стартовую метку не трогаем
         cur.execute(
             """
-            INSERT OR REPLACE INTO sessions (session_id, started_at_utc, git_sha, container_id, notes)
-            VALUES (?, COALESCE((SELECT started_at_utc FROM sessions WHERE session_id = ?), ?), ?, ?, ?)
+            INSERT INTO sessions (session_id, started_at_utc, git_sha, container_id, notes)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT (session_id) DO UPDATE SET
+              git_sha = EXCLUDED.git_sha,
+              container_id = EXCLUDED.container_id,
+              notes = EXCLUDED.notes
             """,
-            (session_id, session_id, ts, git_sha, container_id, notes),
+            (session_id, ts, git_sha, container_id, notes),
         )
         conn.commit()
 
@@ -955,7 +705,7 @@ def prune_api_usage_old_events(ttl_days: int = 30) -> Dict[str, int]:
 
 # -------------------- SESSION STATS (DAILY) PERSISTENCE --------------------
 
-def ensure_session_stats_schema(cursor: Optional[sqlite3.Cursor] = None) -> None:
+def ensure_session_stats_schema(cursor: Optional[Any] = None) -> None:
     """Создает таблицы для посуточной статистики UI и состояние курсора.
 
     Таблицы:
@@ -971,7 +721,7 @@ def ensure_session_stats_schema(cursor: Optional[sqlite3.Cursor] = None) -> None
     _ensure_session_stats_schema_inner(cursor)
 
 
-def _ensure_session_stats_schema_inner(cur: sqlite3.Cursor) -> None:
+def _ensure_session_stats_schema_inner(cur) -> None:
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS session_stats_daily (
@@ -993,8 +743,8 @@ def _ensure_session_stats_schema_inner(cur: sqlite3.Cursor) -> None:
         )
         """
     )
-    # Ensure single state row exists
-    cur.execute("INSERT OR IGNORE INTO session_stats_state (id) VALUES (1)")
+    # Ensure single state row exists (PostgreSQL)
+    cur.execute("INSERT INTO session_stats_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING")
 
 
 def get_session_stats_state() -> Dict[str, Any]:
@@ -1102,12 +852,12 @@ def get_session_stats_daily_range(from_date: str, to_date: str) -> List[Dict[str
 
 
 def count_articles_for_day(day_utc: str) -> int:
-    """Возвращает число статей с датой публикации day_utc (UTC), по префиксу строки."""
+    """Возвращает число статей с датой публикации day_utc (UTC)."""
     with get_db_connection() as conn:
         cur = conn.cursor()
         try:
             cur.execute(
-                "SELECT COUNT(*) FROM articles WHERE substr(published_at, 1, 10) = ?",
+                "SELECT COUNT(*) FROM articles WHERE published_at::date = ?",
                 (day_utc,),
             )
             row = cur.fetchone()
@@ -1162,7 +912,7 @@ def upsert_raw_article(url: str, title: str, published_at_iso: str, content: str
 
             conn.commit()
             return article_id
-        except sqlite3.Error as e:
+        except Exception as e:
             logger.error(f"Ошибка upsert_raw_article для {url}: {e}")
             return None
 
@@ -1184,24 +934,6 @@ def list_articles_without_summary_in_range(start_iso: str, end_iso: str) -> List
         return [dict(row) for row in rows]
 
 
-def backup_database_copy() -> Optional[str]:
-    """Делает файловую резервную копию SQLite-BD рядом с исходником.
-
-    Возвращает путь к бэкапу или None, если файла БД ещё нет.
-    Не выбрасывает исключения наружу — логирует и возвращает None.
-    """
-    try:
-        if not os.path.exists(DATABASE_NAME):
-            return None
-        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
-        backup_path = f"{DATABASE_NAME}.bak-{timestamp}"
-        os.makedirs(os.path.dirname(backup_path) or ".", exist_ok=True)
-        shutil.copy2(DATABASE_NAME, backup_path)
-        logger.info(f"Создан бэкап БД: {backup_path}")
-        return backup_path
-    except Exception as e:
-        logger.warning(f"Не удалось создать бэкап БД: {e}")
-        return None
 
 
 def set_article_summary(article_id: int, summary_text: str) -> None:
@@ -1359,8 +1091,12 @@ def get_digests_for_period(days: int) -> List[str]:
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT content FROM digests WHERE created_at >= datetime('now', '-' || ? || ' days') ORDER BY created_at DESC",
-            (days,)
+            """
+            SELECT content FROM digests
+            WHERE created_at >= NOW() - (:p0::int) * INTERVAL '1 day'
+            ORDER BY created_at DESC
+            """,
+            (days,),
         )
         return [item['content'] for item in cursor.fetchall()]
 
@@ -1416,10 +1152,10 @@ def list_recent_articles(days: int = 7, limit: int = 200) -> List[Dict[str, Any]
             """
             SELECT id, title, canonical_link, content, published_at
             FROM articles
-            WHERE published_at >= datetime('now', '-' || ? || ' days')
+            WHERE published_at >= NOW() - (:p0::int) * INTERVAL '1 day'
               AND content IS NOT NULL AND TRIM(content) <> ''
             ORDER BY published_at DESC
-            LIMIT ?
+            LIMIT :p1
             """,
             (days, limit),
         )
@@ -1456,10 +1192,12 @@ def enqueue_publication(url: str, title: str, published_at: str, summary_text: s
             )
             conn.commit()
             logger.info(f"Статья '{title}' добавлена в очередь на публикацию.")
-        except sqlite3.IntegrityError:
-            logger.warning(f"Статья '{title}' уже находится в очереди на публикацию.")
-        except sqlite3.Error as e:
-            logger.error(f"Ошибка при добавлении статьи '{title}' в очередь: {e}")
+        except Exception as e:
+            msg = str(e).lower()
+            if "unique" in msg or "duplicate" in msg:
+                logger.warning(f"Статья '{title}' уже находится в очереди на публикацию.")
+            else:
+                logger.error(f"Ошибка при добавлении статьи '{title}' в очередь: {e}")
 
 def dequeue_batch(limit: int = 5) -> List[Dict[str, Any]]:
     """Извлекает из очереди старейшие записи для отправки."""

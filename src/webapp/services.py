@@ -1,5 +1,4 @@
 
-import sqlite3
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import date, datetime, timedelta
 import calendar as py_calendar
@@ -85,7 +84,7 @@ def get_dashboard_stats() -> Dict[str, Any]:
             stats['dlq_count'] = cursor.fetchone()[0]
 
             return stats
-    except sqlite3.Error:
+    except Exception:
         # Graceful fallback when tables/database are not available
         return {'total_articles': 0, 'last_published_date': 'N/A', 'dlq_count': 0}
 
@@ -156,18 +155,18 @@ def get_month_calendar_data(year: int, month: int) -> Dict[str, Any]:
 
             start_iso, end_iso = _month_bounds(year, month)
 
-            # Aggregate counts per calendar day within the month
-            cursor.execute(
+            # Aggregate counts per calendar day within the month (PostgreSQL)
+            sql = (
                 """
-                SELECT date(published_at) AS d,
+                SELECT CAST(published_at AS DATE) AS d,
                        COUNT(*) AS total,
                        SUM(CASE WHEN summary_text IS NOT NULL AND TRIM(summary_text) <> '' THEN 1 ELSE 0 END) AS summarized
                 FROM articles
                 WHERE published_at BETWEEN ? AND ?
-                GROUP BY date(published_at)
-                """,
-                (start_iso, end_iso),
+                GROUP BY CAST(published_at AS DATE)
+                """
             )
+            cursor.execute(sql, (start_iso, end_iso))
             rows = cursor.fetchall()
             per_day: Dict[str, Dict[str, int]] = {
                 row[0]: {"total": int(row[1] or 0), "summarized": int(row[2] or 0)} for row in rows
@@ -233,15 +232,15 @@ def get_daily_articles(day_iso: str) -> List[Dict[str, Any]]:
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute(
+        sql = (
             """
             SELECT id, title, url, canonical_link, published_at, summary_text
             FROM articles
-            WHERE date(published_at) = ?
+            WHERE published_at::date = ?
             ORDER BY published_at DESC
-            """,
-            (day_iso,),
+            """
         )
+        cursor.execute(sql, (day_iso,))
         return [dict(row) for row in cursor.fetchall()]
 
 

@@ -11,7 +11,7 @@
 
 Контекст:
 - Сейчас метрики публикуются в Prometheus (in-memory, сбрасываются при рестарте) — этого недостаточно для долговременной аналитики.
-- В проекте уже используется SQLite (монтируется том ./database:/app/database), что удобно для персистентных агрегатов.
+- В проекте используется PostgreSQL (сервис в docker-compose), что удобно для персистентных агрегатов и запросов.
 - Часовой пояс: хранение в БД — UTC; вывод в UI — Europe/Moscow (см. конвенции в doc/GPT5.md и WARP.md).
 
 
@@ -39,13 +39,13 @@
 - «Статистика текущей сессии»: держим в памяти с момента старта; при экспорте в /metrics показываем обе линии: per-session (reset при рестарте) и per-day (из БД — не сбрасывается).
 
 
-## 4) Схема БД (SQLite)
+## 4) Схема БД (PostgreSQL)
 
 Таблица сырых событий (минимально необходимое; поля можно расширять при необходимости):
 
 ```sql
 CREATE TABLE IF NOT EXISTS api_usage_events (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id BIGSERIAL PRIMARY KEY,
   ts_utc TEXT NOT NULL,                -- ISO 8601 UTC (e.g. 2025-08-26T12:34:56.789Z)
   provider TEXT NOT NULL,              -- 'gemini' | 'mistral' | 'telegram' | 'http' | ...
   model TEXT,                          -- модель LLM, если применимо
@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS api_usage_events (
   latency_ms INTEGER,                  -- длительность запроса
   tokens_in INTEGER DEFAULT 0,
   tokens_out INTEGER DEFAULT 0,
-  cost_usd REAL DEFAULT 0.0,
+  cost_usd DOUBLE PRECISION DEFAULT 0.0,
   error_code TEXT,                     -- код ошибки/исключения (если был)
   extra_json TEXT                      -- опционально: доп. поля, JSON-строка
 );
@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS api_usage_daily (
   success_count INTEGER NOT NULL DEFAULT 0,
   tokens_in_total INTEGER NOT NULL DEFAULT 0,
   tokens_out_total INTEGER NOT NULL DEFAULT 0,
-  cost_usd_total REAL NOT NULL DEFAULT 0.0,
+  cost_usd_total DOUBLE PRECISION NOT NULL DEFAULT 0.0,
   latency_ms_sum INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (day_utc, provider, model, api_key_hash)
 );
@@ -170,8 +170,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 ## 10) Изменения в Docker/Compose
 
-- Хранилище уже примонтировано: ./database:/app/database — ничего добавлять не требуется.
-- Убедиться, что новые переменные окружения пробрасываются в сервисы telegram-bot и web (env_file: .env).
+- PostgreSQL уже присутствует как сервис в docker-compose. Убедиться, что переменные окружения пробрасываются в сервисы telegram-bot и web (env_file: .env).
 
 
 ## 11) Тест-план (pytest)
@@ -197,31 +196,26 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 ## 13) Риски и меры
 
-- Повреждение БД при аварийном завершении: использовать транзакции и периодический flush небольшими партиями. SQLite journal_mode=WAL (если приемлемо для окружения).
+- Повреждение БД при аварийном завершении: использовать транзакции и периодический flush небольшими партиями.
 - Рост объёма таблицы событий: периодически архивировать/очищать сырьё старше N дней после успешного пересчёта агрегатов (конфигурируемо, например, API_USAGE_EVENTS_TTL_DAYS=60).
 - Точность стоимости: тарификация моделей меняется — хранить версию тарифов в extra_json либо в отдельной таблице; при изменении — пересчитывать прошлое не обязательно.
 
 
-## 14) Чек-лист задач для исполнения (пошагово)
+## 14) Чек-лист задач для исполнения (остаток)
 
-1) database.py
-   - [+] ensure_api_usage_schema()
-   - [+] insert_api_usage_events(batch)
-   - [+] upsert_api_usage_daily(...)
-   - [+] recalc_api_usage_daily_for_range(...)
+Выполнено (архивировано):
+- database.py: ensure_api_usage_schema(), insert_api_usage_events(batch), upsert_api_usage_daily(...), recalc_api_usage_daily_for_range(...)
+
+Осталось:
 2) summarizer.py
    - Обернуть вызовы провайдеров хелпером record_api_event(...).
    - Считать токены/латентность/успех, оценивать cost_usd.
 3) metrics.py
    - Добавить session_* и daily_* метрики, чтение daily из БД.
-4) bot.py
-   - Генерация session_id, старт/стоп логика, периодический flush буфера.
 5) scripts/manage.py
    - Команды api-usage-show, api-usage-recalc, api-usage-today, api-usage-export-csv (опц.).
 6) webapp/server.py (опц.)
    - Эндпоинт/страница для просмотра агрегатов.
-7) Конфиг
-   - Новые переменные окружения в .env.example и парсинг в src/config.py.
 8) Тесты
    - Юнит/интеграционные тесты (pytest), команды в CI.
 
@@ -297,5 +291,5 @@ ON CONFLICT(day_utc, provider, model, api_key_hash) DO UPDATE SET
 
 
 ---
-Подготовлено как пошаговый план для быстрого исполнения другим ИИ с минимальным количеством уточнений. Все изменения держим в рамках существующей архитектуры, с хранением в SQLite и экспозицией метрик в Prometheus.
+Подготовлено как пошаговый план для быстрого исполнения другим ИИ с минимальным количеством уточнений. Все изменения держим в рамках существующей архитектуры, с хранением в PostgreSQL и экспозицией метрик в Prometheus.
 

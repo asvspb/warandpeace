@@ -198,6 +198,40 @@ async def get_chat_with_retry(bot, **kwargs):
     """Обертка для bot.get_chat с логикой Circuit Breaker и ретраями."""
     return await _execute_telegram_call(bot.get_chat, **kwargs)
 
+# --- Безопасная отправка длинных сообщений ---
+TG_MESSAGE_LIMIT = int(os.getenv("TG_MESSAGE_LIMIT", "4096"))
+
+def _split_text_safely(text: str, limit: int = TG_MESSAGE_LIMIT) -> list[str]:
+    """Делит текст на части не длиннее limit, стараясь резать по абзацам/строкам/словам.
+    Предназначено для Markdown/HTML: не вставляет дополнительные теги, просто разбивает текст.
+    """
+    if not text:
+        return [""]
+
+    chunks: list[str] = []
+    remaining = text
+    # Сначала пробуем по \n\n (абзацы), потом по \n, потом по пробелам, иначе жёсткий срез
+    while len(remaining) > limit:
+        candidate = remaining[:limit]
+        cut = -1
+        for sep in ("\n\n", "\n", " "):
+            idx = candidate.rfind(sep)
+            if idx > 0:
+                cut = idx + (2 if sep == "\n\n" else 1)
+                break
+        if cut == -1:
+            cut = limit
+        chunks.append(remaining[:cut].rstrip())
+        remaining = remaining[cut:]
+    if remaining:
+        chunks.append(remaining)
+    return chunks
+
+async def send_long_markdown(bot, chat_id: int | str, text: str):
+    """Отправляет длинный Markdown‑текст несколькими сообщениями, учитывая лимит Telegram."""
+    for part in _split_text_safely(text, TG_MESSAGE_LIMIT):
+        await send_message_with_retry(bot=bot, chat_id=chat_id, text=part, parse_mode=ParseMode.MARKDOWN)
+
 # --- Основная задача ---
 
 async def check_and_post_news(context: ContextTypes.DEFAULT_TYPE):
@@ -944,12 +978,8 @@ async def daily_digest_command(update: Update, context: ContextTypes.DEFAULT_TYP
             return
 
         await asyncio.to_thread(add_digest, f"daily_{yesterday.strftime('%Y-%m-%d')}", digest_content)
-        await send_message_with_retry(
-            bot=context.bot,
-            chat_id=user_id,
-            text=f"**Аналитический дайджест за {period_name}:**\n\n{digest_content}",
-            parse_mode=ParseMode.MARKDOWN
-        )
+        full_text = f"**Аналитический дайджест за {period_name}:**\n\n{digest_content}"
+        await send_long_markdown(context.bot, user_id, full_text)
         logger.info("[DAILY_DIGEST] Готово: дайджест отправлен, длина=%d символов", len(digest_content or ''))
     except Exception as e:
         logger.error(f"Ошибка при создании суточного дайджеста: {e}", exc_info=True)
@@ -992,12 +1022,8 @@ async def weekly_digest_command(update: Update, context: ContextTypes.DEFAULT_TY
             return
 
         await asyncio.to_thread(add_digest, f"weekly_{start_of_last_week.strftime('%Y-%m-%d')}", digest_content)
-        await send_message_with_retry(
-            bot=context.bot,
-            chat_id=user_id,
-            text=f"**Аналитический дайджест за {period_name}:**\n\n{digest_content}",
-            parse_mode=ParseMode.MARKDOWN
-        )
+        full_text = f"**Аналитический дайджест за {period_name}:**\n\n{digest_content}"
+        await send_long_markdown(context.bot, user_id, full_text)
         logger.info("[WEEKLY_DIGEST] Готово: дайджест отправлен, длина=%d символов", len(digest_content or ''))
     except Exception as e:
         logger.error(f"Ошибка при создании недельного дайджеста: {e}", exc_info=True)
@@ -1039,12 +1065,8 @@ async def monthly_digest_command(update: Update, context: ContextTypes.DEFAULT_T
             return
 
         await asyncio.to_thread(add_digest, f"monthly_{start_date.strftime('%Y-%m')}", digest_content)
-        await send_message_with_retry(
-            bot=context.bot,
-            chat_id=user_id,
-            text=f"**Аналитический дайджест за {period_name}:**\n\n{digest_content}",
-            parse_mode=ParseMode.MARKDOWN
-        )
+        full_text = f"**Аналитический дайджест за {period_name}:**\n\n{digest_content}"
+        await send_long_markdown(context.bot, user_id, full_text)
     except Exception as e:
         logger.error(f"Ошибка при создании месячного дайджеста: {e}", exc_info=True)
         await send_message_with_retry(bot=context.bot, chat_id=user_id, text=f"Произошла ошибка при создании сводки: {e}")
@@ -1068,12 +1090,8 @@ async def annual_digest_command(update: Update, context: ContextTypes.DEFAULT_TY
 
         year = datetime.now().year - 1
         await asyncio.to_thread(add_digest, f"annual_{year}", digest_content)
-        await send_message_with_retry(
-            bot=context.bot,
-            chat_id=user_id,
-            text=f"**Итоговая аналитическая сводка за {year} год:**\n\n{digest_content}",
-            parse_mode=ParseMode.MARKDOWN
-        )
+        full_text = f"**Итоговая аналитическая сводка за {year} год:**\n\n{digest_content}"
+        await send_long_markdown(context.bot, user_id, full_text)
     except Exception as e:
         logger.error(f"Ошибка при создании годового дайджеста: {e}", exc_info=True)
         await send_message_with_retry(bot=context.bot, chat_id=user_id, text=f"Произошла ошибка при создании сводки: {e}")
@@ -1181,3 +1199,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

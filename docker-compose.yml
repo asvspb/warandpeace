@@ -22,6 +22,9 @@ services:
       - PUID=1000
       - PGID=1000
       - TZ=Europe/Moscow
+      - PEERDNS=false
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
     ports:
       - "${METRICS_PORT:-9090}:8000" # Пробрасываем порт метрик бота
@@ -70,9 +73,8 @@ services:
       # Autodiscovery of web status endpoint (bot tries multiple, but this helps)
       - BACKFILL_STATUS_URL=${BACKFILL_STATUS_URL:-http://web:8080}
       - BACKFILL_API_KEY=${WEB_API_KEY}
-      - DATABASE_URL=${DATABASE_URL}
-    volumes:
-      - ./database:/app/database
+      # Подключение к Postgres по сервисному имени (Docker DNS 127.0.0.11 в wg-client)
+      - DATABASE_URL=postgresql+psycopg://wp:${POSTGRES_PASSWORD}@postgres:5432/warandpeace
       - ./backups:/var/backups/warandpeace
     restart: unless-stopped
     depends_on: # Примечание: в Compose v3 это не ждет healthcheck, только запускает контейнеры в нужном порядке.
@@ -115,9 +117,7 @@ services:
       - WEB_API_ENABLED=${WEB_API_ENABLED:-true}
       - WEB_API_KEY=${WEB_API_KEY}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
-      - DATABASE_URL=${DATABASE_URL}
-    volumes:
-      - ./database:/app/database
+      - DATABASE_URL=postgresql+psycopg://wp:${POSTGRES_PASSWORD}@postgres:5432/warandpeace
     ports:
       - "${WEB_PORT:-8080}:8080"
     restart: unless-stopped
@@ -162,6 +162,5 @@ services:
     environment:
       - TZ=${TZ:-Europe/Moscow}
     volumes:
-      - ./database:/app/database:ro
       - ./backups:/var/backups/warandpeace
     restart: unless-stopped

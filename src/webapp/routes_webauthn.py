@@ -159,8 +159,9 @@ async def register_verify(request: Request, attestation: Dict[str, Any]):
         cur = conn.cursor()
         cur.execute(
             """
-            INSERT OR IGNORE INTO webauthn_credential (user_id, credential_id, public_key, sign_count, transports, aaguid)
+            INSERT INTO webauthn_credential (user_id, credential_id, public_key, sign_count, transports, aaguid)
             VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT (credential_id) DO NOTHING
             """,
             (
                 "admin",

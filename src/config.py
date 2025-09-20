@@ -19,8 +19,13 @@ dotenv_path = os.path.join(project_root, '.env')
 # Загружаем переменные из найденного .env файла.
 # Примечание: во время pytest избегаем жёсткого override, чтобы тесты могли
 # управлять окружением через patch.dict без влияния локального .env.
+# В контейнерах отдаём приоритет уже установленным переменным окружения (Compose),
+# даже если они пустые: .env не должен их переопределять.
 _running_pytest = bool(os.environ.get("PYTEST_CURRENT_TEST"))
+_DB_URL_BEFORE = os.environ.get("DATABASE_URL")
 load_dotenv(dotenv_path=dotenv_path, override=(not _running_pytest))
+if _DB_URL_BEFORE is not None:
+    os.environ["DATABASE_URL"] = _DB_URL_BEFORE
 
 # --- Путь к БД ---
 DB_SQLITE_PATH = os.getenv("DB_SQLITE_PATH", "/app/database/articles.db")
