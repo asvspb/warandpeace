@@ -31,10 +31,7 @@ logger = logging.getLogger()
 
 
 def _is_pg_backend() -> bool:
-    # Во время pytest всегда используем SQLite, даже если в .env задан DATABASE_URL
     try:
-        if os.environ.get("PYTEST_CURRENT_TEST"):
-            return False
         url = (get_database_url() or "").strip().lower()
         return url.startswith("postgresql")
     except Exception:
@@ -531,16 +528,30 @@ def add_article(url: str, title: str, published_at_iso: str, summary: str) -> Op
                     return u
 
             canonical_link = canonicalize_url(url)
-            cursor.execute(
-                "INSERT INTO articles (url, canonical_link, title, published_at, summary_text) VALUES (?, ?, ?, ?, ?)",
-                (url, canonical_link, title, published_at_iso, summary)
-            )
-            conn.commit()
-            return cursor.lastrowid
-        except sqlite3.IntegrityError:
-            # Это не ошибка, а ожидаемое поведение, если статья уже есть
-            return None
-        except sqlite3.Error as e:
+            if _is_pg_backend():
+                # В PG используем UPSERT с возвратом id для нового ряда
+                cursor.execute(
+                    """
+                    INSERT INTO articles (url, canonical_link, title, published_at, summary_text)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT (canonical_link) DO NOTHING
+                    RETURNING id
+                    """,
+                    (url, canonical_link, title, published_at_iso, summary),
+                )
+                row = cursor.fetchone()
+                if not row:
+                    return None
+                conn.commit()
+                return int(row[0])
+            else:
+                cursor.execute(
+                    "INSERT INTO articles (url, canonical_link, title, published_at, summary_text) VALUES (?, ?, ?, ?, ?)",
+                    (url, canonical_link, title, published_at_iso, summary)
+                )
+                conn.commit()
+                return cursor.lastrowid
+        except Exception as e:
             logger.error(f"Ошибка при добавлении статьи {url}: {e}")
             return None
 
@@ -1171,14 +1182,20 @@ def get_session_stats_daily_range(from_date: str, to_date: str) -> List[Dict[str
 
 
 def count_articles_for_day(day_utc: str) -> int:
-    """Возвращает число статей с датой публикации day_utc (UTC), по префиксу строки."""
+    """Возвращает число статей с датой публикации day_utc (UTC)."""
     with get_db_connection() as conn:
         cur = conn.cursor()
         try:
-            cur.execute(
-                "SELECT COUNT(*) FROM articles WHERE substr(published_at, 1, 10) = ?",
-                (day_utc,),
-            )
+            if _is_pg_backend():
+                cur.execute(
+                    "SELECT COUNT(*) FROM articles WHERE published_at::date = ?",
+                    (day_utc,),
+                )
+            else:
+                cur.execute(
+                    "SELECT COUNT(*) FROM articles WHERE substr(published_at, 1, 10) = ?",
+                    (day_utc,),
+                )
             row = cur.fetchone()
             return int(row[0] or 0) if row else 0
         except Exception:
@@ -1427,10 +1444,20 @@ def get_digests_for_period(days: int) -> List[str]:
     """Извлекает дайджесты за последние `days` дней."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT content FROM digests WHERE created_at >= datetime('now', '-' || ? || ' days') ORDER BY created_at DESC",
-            (days,)
-        )
+        if _is_pg_backend():
+            cursor.execute(
+                """
+                SELECT content FROM digests
+                WHERE created_at >= NOW() - (:p0::int) * INTERVAL '1 day'
+                ORDER BY created_at DESC
+                """,
+                (days,),
+            )
+        else:
+            cursor.execute(
+                "SELECT content FROM digests WHERE created_at >= datetime('now', '-' || ? || ' days') ORDER BY created_at DESC",
+                (days,)
+            )
         return [item['content'] for item in cursor.fetchall()]
 
 def get_stats() -> Dict[str, Any]:
@@ -1481,17 +1508,30 @@ def list_recent_articles(days: int = 7, limit: int = 200) -> List[Dict[str, Any]
     """Возвращает последние статьи за N дней (для анализа почти-дубликатов)."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT id, title, canonical_link, content, published_at
-            FROM articles
-            WHERE published_at >= datetime('now', '-' || ? || ' days')
-              AND content IS NOT NULL AND TRIM(content) <> ''
-            ORDER BY published_at DESC
-            LIMIT ?
-            """,
-            (days, limit),
-        )
+        if _is_pg_backend():
+            cursor.execute(
+                """
+                SELECT id, title, canonical_link, content, published_at
+                FROM articles
+                WHERE published_at >= NOW() - (:p0::int) * INTERVAL '1 day'
+                  AND content IS NOT NULL AND TRIM(content) <> ''
+                ORDER BY published_at DESC
+                LIMIT :p1
+                """,
+                (days, limit),
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT id, title, canonical_link, content, published_at
+                FROM articles
+                WHERE published_at >= datetime('now', '-' || ? || ' days')
+                  AND content IS NOT NULL AND TRIM(content) <> ''
+                ORDER BY published_at DESC
+                LIMIT ?
+                """,
+                (days, limit),
+            )
         return [dict(row) for row in cursor.fetchall()]
 
 

@@ -14,36 +14,33 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine, Connection
 
 
-def _build_sqlite_url(sqlite_path: str) -> str:
-    # Use pysqlite driver; absolute path inside container is like /app/database/articles.db
-    # For SQLite, three slashes mean absolute path
-    return f"sqlite+pysqlite:///{sqlite_path.lstrip('/')}" if sqlite_path.startswith('/') else f"sqlite+pysqlite:///{sqlite_path}"
-
-
 def get_database_url() -> str:
-    """Return DATABASE_URL if set, otherwise build SQLite URL from config.DB_SQLITE_PATH.
+    """Return a Postgres DATABASE_URL, or construct it from POSTGRES_* env vars.
+
+    Strict Postgres mode: SQLite URLs are not supported.
 
     Examples:
     - postgresql+psycopg://wp:***@postgres:5432/warandpeace
-    - sqlite+pysqlite:////app/database/articles.db
     """
     url = os.getenv("DATABASE_URL", "").strip()
     if url:
         return url
-    return _build_sqlite_url(getattr(config, "DB_SQLITE_PATH", "/app/database/articles.db"))
+    # Try to construct from POSTGRES_* variables
+    user = os.getenv("POSTGRES_USER")
+    password = os.getenv("POSTGRES_PASSWORD")
+    host = os.getenv("POSTGRES_HOST", "localhost")
+    port = os.getenv("POSTGRES_PORT", "5432")
+    db = os.getenv("POSTGRES_DB")
+    if user and password and db:
+        return f"postgresql+psycopg://{user}:{password}@{host}:{port}/{db}"
+    raise RuntimeError(
+        "DATABASE_URL is not set. Provide DATABASE_URL or set POSTGRES_USER/POSTGRES_PASSWORD/POSTGRES_DB (optional: POSTGRES_HOST, POSTGRES_PORT)."
+    )
 
 
 def create_engine_from_env(echo: bool = False, pool_pre_ping: bool = True) -> Engine:
     url = get_database_url()
-    if url.startswith("sqlite+"):
-        return create_engine(
-            url,
-            echo=echo,
-            pool_pre_ping=False,  # not needed for SQLite
-            connect_args={"check_same_thread": False},
-            future=True,
-        )
-    # Postgres or others
+    # Strict Postgres: no SQLite branch
     return create_engine(url, echo=echo, pool_pre_ping=pool_pre_ping, future=True)
 
 

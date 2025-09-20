@@ -119,7 +119,7 @@ services:
       - WEB_API_ENABLED=${WEB_API_ENABLED:-true}
       - WEB_API_KEY=${WEB_API_KEY}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
-      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL=postgresql+psycopg://wp:${POSTGRES_PASSWORD}@postgres:5432/warandpeace
     volumes:
       - ./database:/app/database
     ports:
