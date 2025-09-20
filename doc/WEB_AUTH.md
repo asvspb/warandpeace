@@ -359,7 +359,7 @@ pip install fastapi uvicorn python-fido2
 
 ---
 
-## 18. Интеграция в текущий проект (FastAPI + SQLite, редактирование БД через веб)
+## 18. Интеграция в текущий проект (FastAPI + PostgreSQL, редактирование БД через веб)
 
 Контекст проекта: веб‑интерфейс на FastAPI (`src/webapp/server.py`) сейчас защищён HTTP Basic. Планируется редактирование БД из веб‑интерфейса, поэтому требуется более сильная аутентификация и дополнительные меры безопасности.
 
@@ -388,30 +388,30 @@ pip install fastapi uvicorn python-fido2
 - Эндпоинты WebAuthn (см. разделы 6 и 9):
   - POST `/webauthn/register/options`, `/webauthn/register/verify`.
   - POST `/webauthn/login/options`, `/webauthn/login/verify`.
-  - Хранить `challenge` в сессии на время операции; для нескольких админов — можно в SQLite с TTL.
+- Хранить `challenge` в сессии на время операции; для нескольких админов — можно в Redis или в БД с TTL.
 - CSRF‑защита:
   - Для всех state‑изменяющих форм/запросов `/admin/*` добавить CSRF‑токен (double‑submit cookie + заголовок, или собственная middleware).
 
-### 18.4. Схема БД (SQLite) — новые таблицы
+### 18.4. Схема БД (PostgreSQL) — новые таблицы
 - Таблица учётных данных WebAuthn (минималистичная):
 ```sql
 CREATE TABLE IF NOT EXISTS webauthn_credential (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id BIGSERIAL PRIMARY KEY,
   user_id TEXT NOT NULL,
-  credential_id BLOB NOT NULL UNIQUE,
-  public_key BLOB NOT NULL,
+  credential_id BYTEA NOT NULL UNIQUE,
+  public_key BYTEA NOT NULL,
   sign_count INTEGER NOT NULL DEFAULT 0,
   transports TEXT,
   aaguid TEXT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  last_used_at TIMESTAMP
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  last_used_at TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS idx_webauthn_user ON webauthn_credential (user_id);
 ```
 - Журнал аудита изменений:
 ```sql
 CREATE TABLE IF NOT EXISTS audit_log (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id BIGSERIAL PRIMARY KEY,
   actor TEXT NOT NULL,
   action TEXT NOT NULL,
   entity TEXT NOT NULL,
@@ -420,7 +420,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
   after_json TEXT,
   ip TEXT,
   user_agent TEXT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_log (entity, entity_id);
 ```
@@ -439,12 +439,10 @@ CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_log (entity, entity_id);
 - Защита от конфликтов:
   - Добавить/использовать столбец `updated_at` для оптимистической блокировки: при сохранении проверять, что `updated_at` не изменился; при конфликте — показать предупреждение и предложить_merge/повтор.
 
-### 18.6. Эксплуатационные меры для SQLite
-- Включить WAL и таймаут:
-  - `PRAGMA journal_mode=WAL;`
-  - `PRAGMA busy_timeout=3000;`
-- Все операции записи выполнять в эксплицитных транзакциях.
-- Перед деструктивными действиями (массовые удаления) — файловый бэкап (функция `backup_database_copy()` в проекте уже есть).
+### 18.6. Эксплуатационные меры для PostgreSQL
+- Все операции записи выполнять в явных транзакциях там, где нужно согласованное состояние.
+- Перед деструктивными действиями (массовые удаления) — делайте логический бэкап (pg_dump) и используйте `tools/backup.py`.
+- Следить за индексами и планами запросов (EXPLAIN ANALYZE) для интерфейсов редактирования.
 
 ### 18.7. Безопасность
 - Только HTTPS, корректный RP ID.
@@ -459,7 +457,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_log (entity, entity_id);
 2) Включить `SessionMiddleware` и режим `WEB_AUTH_MODE=basic` (гибрид) — админка пока работает по BasicAuth.
 3) Реализовать 4 эндпоинта WebAuthn и страницы/JS из раздела 7.
 4) Привязать минимум два ключа для администратора.
-5) Включить CSRF, аудит, WAL, таймауты.
+5) Включить CSRF, аудит.
 6) Переключить `WEB_AUTH_MODE=webauthn`, отключить BasicAuth.
 7) Пробные изменения в БД через админ‑формы; проверить `audit_log` и конфликты `updated_at`.
 
@@ -478,5 +476,5 @@ CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_log (entity, entity_id);
 ### 18.11. Риски и смягчения (проект)
 - Несовпадение RP ID ↔ origin: тщательно проверить конфиг RP и домен/поддомен.
 - Потеря всех ключей: иметь документированную break‑glass процедуру (выдача временной mTLS‑доступа или одноразового токена на ограниченное время).
-- Блокировки SQLite при одновременных записях: WAL + `busy_timeout`, короткие транзакции, идемпотентность операций.
+- Конкурентные записи: использовать короткие транзакции, разумные уровни изоляции и идемпотентность операций.
 

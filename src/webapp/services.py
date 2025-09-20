@@ -1,5 +1,4 @@
 
-import sqlite3
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import date, datetime, timedelta
 import calendar as py_calendar
@@ -7,7 +6,6 @@ from src.database import get_db_connection, get_content_hash_groups, list_articl
 from src.database import (
     get_session_stats_daily_range,
 )
-from src.database import _is_pg_backend
 from prometheus_client import REGISTRY  # type: ignore
 from prometheus_client.parser import text_string_to_metric_families  # type: ignore
 import os
@@ -86,7 +84,7 @@ def get_dashboard_stats() -> Dict[str, Any]:
             stats['dlq_count'] = cursor.fetchone()[0]
 
             return stats
-    except sqlite3.Error:
+    except Exception:
         # Graceful fallback when tables/database are not available
         return {'total_articles': 0, 'last_published_date': 'N/A', 'dlq_count': 0}
 
@@ -157,29 +155,17 @@ def get_month_calendar_data(year: int, month: int) -> Dict[str, Any]:
 
             start_iso, end_iso = _month_bounds(year, month)
 
-            # Aggregate counts per calendar day within the month
-            if _is_pg_backend():
-                sql = (
-                    """
-                    SELECT CAST(published_at AS DATE) AS d,
-                           COUNT(*) AS total,
-                           SUM(CASE WHEN summary_text IS NOT NULL AND TRIM(summary_text) <> '' THEN 1 ELSE 0 END) AS summarized
-                    FROM articles
-                    WHERE published_at BETWEEN ? AND ?
-                    GROUP BY CAST(published_at AS DATE)
-                    """
-                )
-            else:
-                sql = (
-                    """
-                    SELECT date(published_at) AS d,
-                           COUNT(*) AS total,
-                           SUM(CASE WHEN summary_text IS NOT NULL AND TRIM(summary_text) <> '' THEN 1 ELSE 0 END) AS summarized
-                    FROM articles
-                    WHERE published_at BETWEEN ? AND ?
-                    GROUP BY date(published_at)
-                    """
-                )
+            # Aggregate counts per calendar day within the month (PostgreSQL)
+            sql = (
+                """
+                SELECT CAST(published_at AS DATE) AS d,
+                       COUNT(*) AS total,
+                       SUM(CASE WHEN summary_text IS NOT NULL AND TRIM(summary_text) <> '' THEN 1 ELSE 0 END) AS summarized
+                FROM articles
+                WHERE published_at BETWEEN ? AND ?
+                GROUP BY CAST(published_at AS DATE)
+                """
+            )
             cursor.execute(sql, (start_iso, end_iso))
             rows = cursor.fetchall()
             per_day: Dict[str, Dict[str, int]] = {
@@ -246,24 +232,14 @@ def get_daily_articles(day_iso: str) -> List[Dict[str, Any]]:
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        if _is_pg_backend():
-            sql = (
-                """
-                SELECT id, title, url, canonical_link, published_at, summary_text
-                FROM articles
-                WHERE published_at::date = ?
-                ORDER BY published_at DESC
-                """
-            )
-        else:
-            sql = (
-                """
-                SELECT id, title, url, canonical_link, published_at, summary_text
-                FROM articles
-                WHERE date(published_at) = ?
-                ORDER BY published_at DESC
-                """
-            )
+        sql = (
+            """
+            SELECT id, title, url, canonical_link, published_at, summary_text
+            FROM articles
+            WHERE published_at::date = ?
+            ORDER BY published_at DESC
+            """
+        )
         cursor.execute(sql, (day_iso,))
         return [dict(row) for row in cursor.fetchall()]
 

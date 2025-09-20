@@ -10,11 +10,11 @@
 ### Быстрый онбординг при новом запуске (10–15 минут)
 1) Обзор репозитория (быстро):
 - Просмотреть корень и `src/`, `doc/`, `tests/`, `alembic/`, `scripts/`.
-- Отметить точки входа: `src/bot.py` (бот), `src/webapp/server.py` (FastAPI), `src/database.py` (SQLite), `src/metrics.py`.
+- Отметить точки входа: `src/bot.py` (бот), `src/webapp/server.py` (FastAPI), `src/database.py` (PostgreSQL), `src/metrics.py`.
 - Полезные файлы: `.env.example`, `requirements.txt`, `docker-compose.yml`, `DEPLOYMENT.md`.
 
 2) Сбор конфигурации и технологий:
-- Ядро: Python 3.12+, FastAPI + Uvicorn, python-telegram-bot (JobQueue), PostgreSQL (runtime) с dual-backend (SQLite для dev/pytest), Prometheus metrics.
+- Ядро: Python 3.12+, FastAPI + Uvicorn, python-telegram-bot (JobQueue), PostgreSQL (runtime), Prometheus metrics.
 - Время/таймзона: хранение UTC, прикладная `TIMEZONE` (обычно `Europe/Moscow`).
 
 3) Состояние рабочей ветки:
@@ -84,7 +84,7 @@
 
 ### Конвенции и кросс-секционные проверки для этого репо
 - Время/таймзона: хранение в UTC, пользовательский вывод в `Europe/Moscow`; границы периодов считать в MSK.
-- SQLite: индексы на поля фильтрации; миграции через утилиты и бэкап.
+- PostgreSQL: индексы на поля фильтрации; миграции через Alembic и бэкап pg_dump.
 - Бот: `python-telegram-bot` с JobQueue — таймауты/ретраи/CB настроены; не блокировать event loop долгими задачами.
 - Веб: FastAPI — базовая авторизация и security-заголовки включены; `/metrics` и `/healthz` публичные.
 - Метрики: Prometheus-клиент; не логировать чувствительные данные.

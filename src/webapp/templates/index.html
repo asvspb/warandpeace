@@ -16,8 +16,8 @@
             <div class="card">
                 <h4>Последняя публикация</h4>
                 {% set lp = stats.last_published_date %}
-                {% if lp and lp != 'N/A' %}
-                  {% set dt = lp.replace('Z','+00:00') %}
+{% if lp and lp != 'N/A' %}
+                  {% set dt = lp|replace('Z','+00:00') %}
                   {% set parts = dt.split('T') %}
                   {% set d = parts[0].split('-') %}
                   {% set y = d[0] %}

@@ -214,31 +214,12 @@ def create_all_schema(conn: Connection | Engine) -> None:
     engine: Engine = conn if isinstance(conn, Engine) else conn.engine  # type: ignore
     metadata.create_all(engine)
 
-    # Ensure singleton rows
+    # Ensure singleton rows (PostgreSQL-only)
     with (engine.connect() if isinstance(conn, Engine) else conn) as c:
-        # backfill_progress id=1
-        try:
-            c.execute(sql_text(
-                "INSERT INTO backfill_progress (id) VALUES (1) ON CONFLICT (id) DO NOTHING"
-            ))
-        except Exception:
-            # SQLite older variants may not support ON CONFLICT in this form; try fallback
-            try:
-                c.execute(sql_text(
-                    "INSERT OR IGNORE INTO backfill_progress (id) VALUES (1)"
-                ))
-            except Exception:
-                pass
-        # session_stats_state id=1
-        try:
-            c.execute(sql_text(
-                "INSERT INTO session_stats_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING"
-            ))
-        except Exception:
-            try:
-                c.execute(sql_text(
-                    "INSERT OR IGNORE INTO session_stats_state (id) VALUES (1)"
-                ))
-            except Exception:
-                pass
+        c.execute(sql_text(
+            "INSERT INTO backfill_progress (id) VALUES (1) ON CONFLICT (id) DO NOTHING"
+        ))
+        c.execute(sql_text(
+            "INSERT INTO session_stats_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING"
+        ))
         c.commit()

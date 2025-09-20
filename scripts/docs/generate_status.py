@@ -6,6 +6,7 @@ Generate doc/STATUS.md with current repo status:
 - Docker base image
 - Services from docker-compose.yml
 - DB runtime mode hint (PostgreSQL present, DATABASE_URL set/unset)
+- Explicit flag: project mode is PostgreSQL only
 - Top dependencies from requirements.txt
 
 Usage:
@@ -132,6 +133,7 @@ def main() -> None:
     md.append("## База данных")
     md.append(f"- Режим рантайма (по compose): {db_mode}")
     md.append(f"- DATABASE_URL в .env: {'установлена' if dburl else 'не установлена'} (значение не показывается)")
+    md.append(f"- Режим проекта: PostgreSQL only")
     md.append("")
     md.append("## Ключевые зависимости (requirements.txt)")
     if reqs:

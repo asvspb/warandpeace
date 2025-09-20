@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # tools/backup.py
 """
-Usage: backup.py --component db|env|media --engine sqlite|postgres --backend s3|yadisk|local [--encrypt auto|on|off]
+Usage: backup.py --component db|env|media --engine postgres --backend s3|yadisk|local [--encrypt auto|on|off]
 """
 import argparse
 import logging
@@ -10,7 +10,6 @@ import re
 import subprocess
 import tarfile
 import hashlib
-import sqlite3
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from dotenv import load_dotenv
@@ -212,101 +211,105 @@ def backup_env_local():
         shutil.rmtree(tmp_dir)
 
 
-def backup_sqlite_local(encrypt_policy):
-    """
-    Performs a local backup of the SQLite database.
-    """
-    # 1. Get configuration from environment variables
-    db_path = Path(get_env_var("DB_SQLITE_PATH"))
+
+def _get_pg_conn_params() -> dict:
+    # Prefer POSTGRES_* variables
+    host = os.getenv("POSTGRES_HOST", "postgres")
+    port = os.getenv("POSTGRES_PORT", "5432")
+    user = os.getenv("POSTGRES_USER")
+    password = os.getenv("POSTGRES_PASSWORD")
+    db = os.getenv("POSTGRES_DB")
+    if user and password and db:
+        return {"host": host, "port": port, "user": user, "password": password, "db": db}
+    # Fallback: try to parse DATABASE_URL
+    url = os.getenv("DATABASE_URL", "").strip()
+    if not url:
+        logging.error("DATABASE_URL or POSTGRES_* must be set for Postgres backup.")
+        exit(1)
+    try:
+        from urllib.parse import urlparse
+        u = urlparse(url)
+        # u.username/u.password may be None if not embedded; prefer POSTGRES_PASSWORD in env
+        return {
+            "host": u.hostname or host,
+            "port": str(u.port or 5432),
+            "user": u.username or user or "wp",
+            "password": os.getenv("POSTGRES_PASSWORD") or (u.password or ""),
+            "db": (u.path or "/").lstrip("/") or db or "warandpeace",
+        }
+    except Exception as e:
+        logging.error(f"Failed to parse DATABASE_URL: {e}")
+        exit(1)
+
+
+def backup_postgres_local(encrypt_policy: str):
+    params = _get_pg_conn_params()
     tmp_dir = Path(get_env_var("BACKUP_TMP_DIR", default="/tmp/backup"))
     local_backup_dir = Path(get_env_var("LOCAL_BACKUP_DIR"))
     age_public_keys_str = get_env_var("AGE_PUBLIC_KEYS", required=False)
 
-    # Ensure destination root exists and check free space before proceeding
-    local_backup_dir.mkdir(parents=True, exist_ok=True)
-    min_free_gb_str = get_env_var("LOCAL_MIN_FREE_GB", required=False, default="0")
-    check_free_space(local_backup_dir, min_free_gb_str)
-
-    if not db_path.exists():
-        logging.error(f"Database file not found at: {db_path}")
-        return
-
-    # 2. Prepare directories
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-    dest_dir = local_backup_dir / "db" / "sqlite"
+    # Ensure destination and space
+    dest_dir = local_backup_dir / "db" / "postgres"
     dest_dir.mkdir(parents=True, exist_ok=True)
+    min_free_gb_str = get_env_var("LOCAL_MIN_FREE_GB", required=False, default="0")
+    check_free_space(dest_dir, min_free_gb_str)
 
+    tmp_dir.mkdir(parents=True, exist_ok=True)
     try:
-        # 3. Generate timestamp and filenames
         timestamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
-        base_filename = f"warandpeace-db-sqlite-{timestamp}"
-        
-        tmp_db_snapshot_path = tmp_dir / "sqlite.db"
-        archive_path = tmp_dir / f"{base_filename}.tar.gz"
+        base_filename = f"warandpeace-db-postgres-{timestamp}"
+        dump_path = tmp_dir / f"{base_filename}.dump"
 
-        # 4. Create a consistent database snapshot
-        logging.info(f"Creating SQLite snapshot from {db_path} to {tmp_db_snapshot_path}")
-        if is_executable_available('sqlite3'):
-            # Pass the dot-command as a single argument without shell quotes
-            run_command(['sqlite3', str(db_path), f".backup {tmp_db_snapshot_path}"])
-        else:
-            # Fallback to Python API
-            logging.info("sqlite3 CLI not found. Using Python sqlite3 backup API.")
-            with sqlite3.connect(str(db_path)) as src_conn, sqlite3.connect(str(tmp_db_snapshot_path)) as dst_conn:
-                src_conn.backup(dst_conn)
+        # Run pg_dump in custom format (-F c)
+        env = os.environ.copy()
+        if params.get("password"):
+            env["PGPASSWORD"] = params["password"]
+        cmd = [
+            "pg_dump",
+            "-h", params["host"],
+            "-p", params["port"],
+            "-U", params["user"],
+            "-d", params["db"],
+            "-F", "c",
+            "-f", str(dump_path),
+        ]
+        run_command(cmd, env=env)
 
-        # 5. Create a tarball
-        logging.info(f"Creating tarball: {archive_path}")
-        with tarfile.open(archive_path, "w:gz") as tar:
-            tar.add(tmp_db_snapshot_path, arcname="sqlite.db")
-
-        # 6. Encryption
-        final_artifact_path = archive_path
+        # Optional encryption
+        final_artifact_path = dump_path
         should_encrypt = (encrypt_policy == 'on') or (encrypt_policy == 'auto' and age_public_keys_str)
-        
         if should_encrypt:
             if not age_public_keys_str:
                 raise ValueError("Encryption is enabled, but AGE_PUBLIC_KEYS is not set.")
-            
-            encrypted_archive_path = tmp_dir / f"{base_filename}.tar.gz.age"
-            logging.info(f"Encrypting archive to {encrypted_archive_path}")
-            
+            encrypted_path = tmp_dir / f"{base_filename}.dump.age"
+            logging.info(f"Encrypting archive to {encrypted_path}")
             recipients = [key.strip() for key in age_public_keys_str.split(',')]
             age_cmd = ['age', '--encrypt']
             for r in recipients:
                 age_cmd.extend(['-r', r])
-            age_cmd.extend(['-o', str(encrypted_archive_path), str(archive_path)])
-            
+            age_cmd.extend(['-o', str(encrypted_path), str(dump_path)])
             run_command(age_cmd)
-            final_artifact_path = encrypted_archive_path
+            final_artifact_path = encrypted_path
 
-        # 7. Calculate checksum of the final artifact
-        logging.info(f"Calculating SHA256 checksum for {final_artifact_path}")
+        # Checksum
         checksum = calculate_sha256(final_artifact_path)
         checksum_path = tmp_dir / f"{final_artifact_path.name}.sha256"
         with open(checksum_path, 'w') as f:
             f.write(f"{checksum}  {final_artifact_path.name}\n")
-        logging.info(f"Checksum: {checksum}")
-        
-        # 8. Move artifact and checksum to the final destination
+
+        # Move to destination
         final_path = dest_dir / final_artifact_path.name
         final_checksum_path = dest_dir / checksum_path.name
-        
-        logging.info(f"Moving {final_artifact_path.name} to {final_path}")
         shutil.move(final_artifact_path, final_path)
-        
-        logging.info(f"Moving {checksum_path.name} to {final_checksum_path}")
         shutil.move(checksum_path, final_checksum_path)
 
-        # 9. Update 'latest' symlink
-        latest_symlink_name = f"latest.tar.gz{'.age' if should_encrypt else ''}"
-        latest_symlink = dest_dir / latest_symlink_name
-        logging.info(f"Updating '{latest_symlink_name}' symlink to point to {final_path.name}")
+        # Latest symlink
+        latest_symlink = dest_dir / ("latest.dump.age" if final_path.suffix == ".age" else "latest.dump")
         if latest_symlink.exists() or latest_symlink.is_symlink():
             latest_symlink.unlink()
         latest_symlink.symlink_to(final_path.name)
 
-        # 10. Rotation
+        # Rotation
         retention_days_str = get_env_var("BACKUP_RETENTION_DAYS", required=False, default="0")
         try:
             retention_days = int(retention_days_str)
@@ -315,18 +318,17 @@ def backup_sqlite_local(encrypt_policy):
         except ValueError:
             logging.warning(f"Invalid BACKUP_RETENTION_DAYS value: '{retention_days_str}'. Skipping rotation.")
 
-        logging.info("Backup completed successfully.")
-
+        logging.info("Postgres backup completed successfully.")
     finally:
-        # 11. Cleanup
         logging.info(f"Cleaning up temporary directory: {tmp_dir}")
-        shutil.rmtree(tmp_dir)
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
 
 def main():
     load_dotenv()
     parser = argparse.ArgumentParser(description="Backup tool for WarAndPeace project.")
     parser.add_argument("--component", required=True, choices=["db", "env", "media"], help="Component to backup.")
-    parser.add_argument("--engine", default="sqlite", choices=["sqlite", "postgres"], help="Database engine.")
+    parser.add_argument("--engine", default="postgres", choices=["postgres"], help="Database engine.")
     parser.add_argument("--backend", required=True, choices=["s3", "yadisk", "local"], help="Storage backend.")
     parser.add_argument("--encrypt", default="auto", choices=["auto", "on", "off"], help="Encryption policy (ignored for 'env' component, which is always encrypted).")
     
@@ -335,8 +337,8 @@ def main():
     logging.info(f"Starting backup for component '{args.component}' using engine '{args.engine}' to backend '{args.backend}'.")
 
     if args.backend == 'local':
-        if args.component == 'db' and args.engine == 'sqlite':
-            backup_sqlite_local(args.encrypt)
+        if args.component == 'db' and args.engine == 'postgres':
+            backup_postgres_local(args.encrypt)
         elif args.component == 'env':
             backup_env_local()
         else:

@@ -5,13 +5,13 @@
 Что делает:
 - Загружает переменные из `.env` в корне репозитория (если файл есть)
 - Вызывает `tools/restore.py` с понятными значениями по умолчанию
-  (component=db, engine=sqlite, backend=local, at=latest)
+(db, engine=postgres, backend=local, --latest)
 
-Важные переменные окружения для восстановления (SQLite + local):
-- DB_SQLITE_PATH — путь к живой базе SQLite, которая будет заменена
+Важные переменные окружения для восстановления (PostgreSQL + local):
+- DATABASE_URL или POSTGRES_HOST/PORT/USER/PASSWORD/DB
 - LOCAL_BACKUP_DIR — корень каталога с бэкапами
 - BACKUP_TMP_DIR — временный каталог для распаковки (например, `/tmp/restore`)
-- AGE_SECRET_KEY — приватный ключ age (нужен, если архив `.age`)
+- AGE_SECRET_KEY — приватный ключ age (нужен, если архив `.dump.age`)
 
 Безопасная процедура:
 1) Сухой прогон (ничего не заменяется):
@@ -24,16 +24,16 @@
    docker compose up -d telegram-bot web
 
 Шифрование (age):
-- Если архив `latest` указывает на `.tar.gz.age`, нужен `AGE_SECRET_KEY`.
+- Если архив `latest` указывает на `.dump.age`, нужен `AGE_SECRET_KEY`.
   Пример экспорта из локального файла ключей:
     export AGE_SECRET_KEY="$(grep -m1 '^AGE-SECRET-KEY' ~/.config/age/keys.txt)"
 - Проверить, какой файл «latest»:
-    readlink -f backups/db/sqlite/latest.*
+    readlink -f backups/db/postgres/latest.*
 
 Частые ошибки и решения:
 - "Backup is encrypted, but AGE_SECRET_KEY is not set" — экспортируйте корректный приватный ключ
 - Ошибка расшифровки (`exit status 1`) — ключ не соответствует публичному ключу, которым зашифрован бэкап
-- "sqlite.db not found in the archive" — бэкап повреждён/неполон; попробуйте другой `--at`
+- Ошибки расшифровки или отсутствия файла дампа — проверьте путь и ключ `AGE_SECRET_KEY`, либо укажите конкретный `--backup-file`.
 """
 from __future__ import annotations
 import argparse
@@ -66,7 +66,7 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(description="Run project restore with sane defaults")
     parser.add_argument("--component", default="db", choices=["db", "env", "media"], help="Component to restore")
-    parser.add_argument("--engine", default="sqlite", choices=["sqlite", "postgres"], help="Database engine")
+    parser.add_argument("--engine", default="postgres", choices=["postgres"], help="Database engine")
     parser.add_argument("--backend", default="local", choices=["s3", "yadisk", "local"], help="Storage backend")
     parser.add_argument("--at", default="latest", help="Timestamp (YYYYMMDDTHHMMSSZ) or 'latest'")
     parser.add_argument("--dry-run", action="store_true", help="Do not replace live files")
@@ -99,7 +99,6 @@ def main(argv: list[str] | None = None) -> int:
         cmd.append("--dry-run")
 
     # Log effective env (without secrets)
-    db_sqlite_path = os.getenv("DB_SQLITE_PATH", "")
     local_backup_dir = os.getenv("LOCAL_BACKUP_DIR", "")
     backup_tmp_dir = os.getenv("BACKUP_TMP_DIR", "")
     age_key_set = bool(os.getenv("AGE_SECRET_KEY"))
@@ -108,7 +107,6 @@ def main(argv: list[str] | None = None) -> int:
         "Restore start: component=%s engine=%s backend=%s at=%s dry_run=%s",
         args.component, args.engine, args.backend, args.at, args.dry_run
     )
-    logging.info("Env: DB_SQLITE_PATH=%s", db_sqlite_path)
     logging.info("Env: LOCAL_BACKUP_DIR=%s", local_backup_dir)
     logging.info("Env: BACKUP_TMP_DIR=%s", backup_tmp_dir)
     logging.info("Env: AGE_SECRET_KEY set=%s", age_key_set)

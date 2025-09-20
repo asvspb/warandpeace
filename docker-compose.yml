@@ -75,8 +75,6 @@ services:
       - BACKFILL_API_KEY=${WEB_API_KEY}
       # Подключение к Postgres по сервисному имени (Docker DNS 127.0.0.11 в wg-client)
       - DATABASE_URL=postgresql+psycopg://wp:${POSTGRES_PASSWORD}@postgres:5432/warandpeace
-    volumes:
-      - ./database:/app/database
       - ./backups:/var/backups/warandpeace
     restart: unless-stopped
     depends_on: # Примечание: в Compose v3 это не ждет healthcheck, только запускает контейнеры в нужном порядке.
@@ -120,8 +118,6 @@ services:
       - WEB_API_KEY=${WEB_API_KEY}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - DATABASE_URL=postgresql+psycopg://wp:${POSTGRES_PASSWORD}@postgres:5432/warandpeace
-    volumes:
-      - ./database:/app/database
     ports:
       - "${WEB_PORT:-8080}:8080"
     restart: unless-stopped
@@ -166,6 +162,5 @@ services:
     environment:
       - TZ=${TZ:-Europe/Moscow}
     volumes:
-      - ./database:/app/database:ro
       - ./backups:/var/backups/warandpeace
     restart: unless-stopped

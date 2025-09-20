@@ -45,7 +45,7 @@ This file provides guidance to WARP (warp.dev) when working with code in this re
 
 - Бэкапы (локально):
   - Ежедневные бэкапы выполняет сервис cron (см. docker-compose.yml, env BACKUP_CRON)
-  - Разовый запуск утилиты: python3 tools/backup.py --component db --engine sqlite --backend local --encrypt auto
+  - Разовый запуск утилиты: python3 tools/backup.py --component db --engine postgres --backend local --encrypt auto
 
 Примечание: src/config.py автоматически подхватывает переменные из .env в корне проекта; во время pytest значения из .env не принудительно переопределяют окружение теста (override отключён).
 
@@ -59,7 +59,7 @@ This file provides guidance to WARP (warp.dev) when working with code in this re
   - src/async_parser.py — асинхронный сбор по датам из архива (httpx + tenacity). Универсальная функция fetch_articles_for_date объединяет ленту и архив, возвращая пары (title, link). Оба парсера учитывают кодировку Windows‑1251 и публикуют метрики внешних HTTP-вызовов.
 
 - Хранилище и модели данных
-- src/database.py — слой доступа к БД с dual-backend: при наличии DATABASE_URL используется PostgreSQL через SQLAlchemy, иначе SQLite (локально/pytest). Ключевые таблицы: articles (url, canonical_link, title, published_at, content, summary_text, content_hash), dlq (dead‑letter queue), digests, pending_publications, а также технические таблицы прогресса backfill. Схема для PG описана в src/db/schema.py.
+- src/database.py — слой доступа к БД (PostgreSQL через SQLAlchemy). Ключевые таблицы: articles (url, canonical_link, title, published_at, content, summary_text, content_hash), dlq (dead‑letter queue), digests, pending_publications, а также технические таблицы прогресса backfill. Схема для PG описана в src/db/schema.py.
   - Канонизация URL вынесена в src/url_utils.py и применяется при upsert/select (canonical_link — ключ дедупликации).
 
 - Суммаризация и дайджесты (LLM)
@@ -81,11 +81,11 @@ This file provides guidance to WARP (warp.dev) when working with code in this re
 
 - Контейнеризация и сеть
 - Dockerfile — Python 3.12‑slim; requirements.txt фиксирует версии ключевых библиотек.
-  - docker-compose.yml — сервисы: wg-client (WireGuard, пробрасывает метрики бота на хост 9090), telegram-bot (делит сетевой namespace с wg-client), web (FastAPI), redis (pub/sub и кэш), caddy (TLS‑терминация для web), cron (плановые бэкапы). Бот и веб получают .env через env_file. Путь БД примонтирован как ./database:/app/database.
+  - docker-compose.yml — сервисы: wg-client (WireGuard, пробрасывает метрики бота на хост 9090), telegram-bot (делит сетевой namespace с wg-client), web (FastAPI), redis (pub/sub и кэш), caddy (TLS‑терминация для web), cron (плановые бэкапы). Бот и веб получают .env через env_file.
 
 Ключевые переменные окружения (см. .env.example и src/config.py):
-- DATABASE_URL (postgresql+psycopg://...) для включения PostgreSQL; без неё используется SQLite (локально/тесты)
-- TIMEZONE (Europe/Moscow), METRICS_ENABLED/METRICS_PORT, LOG_LEVEL, BASE_AUTO_UPDATE*, BACKFILL_* (параллелизм/пейсинг), LLM_PRIMARY и ключи провайдеров, WEB_* параметры. Во время pytest всегда используется SQLite.
+- DATABASE_URL (postgresql+psycopg://...) для подключения PostgreSQL
+- TIMEZONE (Europe/Moscow), METRICS_ENABLED/METRICS_PORT, LOG_LEVEL, BASE_AUTO_UPDATE*, BACKFILL_* (параллелизм/пейсинг), LLM_PRIMARY и ключи провайдеров, WEB_* параметры. В pytest используется та же БД (PostgreSQL).
 
 
 ## 3) Особые для этого репозитория правила/документы

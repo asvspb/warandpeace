@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: wp
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: warandpeace
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U wp -d warandpeace" 
+          --health-interval=10s 
+          --health-timeout=5s 
+          --health-retries=10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install --no-cache-dir -r requirements.txt
+      - name: Wait for Postgres
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: wp
+          PGPASSWORD: postgres
+          PGDATABASE: warandpeace
+        run: |
+          python - <<'PY'
+          import time, sys
+          import psycopg
+          for i in range(60):
+              try:
+                  with psycopg.connect("host=localhost port=5432 user=wp password=postgres dbname=warandpeace", connect_timeout=2) as conn:
+                      with conn.cursor() as cur:
+                          cur.execute("SELECT 1")
+                          print("Postgres is ready")
+                          sys.exit(0)
+              except Exception as e:
+                  time.sleep(1)
+          print("Postgres not ready", file=sys.stderr)
+          sys.exit(1)
+          PY
+      - name: Validate env
+        env:
+          DATABASE_URL: postgresql+psycopg://wp:postgres@localhost:5432/warandpeace
+          SKIP_ENV_DB_CHECKS: "0"
+          WEB_SESSION_SECRET: ci-session-secret-please-change
+          REDIS_URL: redis://localhost:6379/0
+        run: python scripts/validate_env.py
+      - name: Alembic upgrade
+        env:
+          DATABASE_URL: postgresql+psycopg://wp:postgres@localhost:5432/warandpeace
+        run: alembic upgrade head
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql+psycopg://wp:postgres@localhost:5432/warandpeace
+          REDIS_URL: redis://localhost:6379/0
+        run: pytest -q

@@ -36,9 +36,9 @@
 - Логи и метрики: не писать PII/секреты, придерживаться существующих метрик; новые метрики — обоснованно.
 - Для времени использовать `zoneinfo`; хранить UTC; вычисления пользователю — в Europe/Moscow.
 
-### 3) Работа с БД (PostgreSQL runtime, SQLite для dev/pytest)
+### 3) Работа с БД (PostgreSQL)
 - Продакшен: PostgreSQL через SQLAlchemy (DATABASE_URL). Инициализацию схемы выполнять командой: `python3 scripts/manage.py db-init-sqlalchemy` (или через `docker compose exec web ...`).
-- Локально/pytest: без DATABASE_URL используется SQLite по `DB_SQLITE_PATH`.
+- Локально/pytest: используется PostgreSQL (см. DATABASE_URL или POSTGRES_* в .env).
 - Консистентность: уникальность по `canonical_link` (в PG — можно добавить функциональный индекс по lower()).
 - Индексы на поля фильтрации/сортировки. Для PG — рассматривайте FTS/pg_trgm при необходимости.
 

@@ -5,10 +5,10 @@
 Что делает:
 - Загружает переменные из `.env` в корне репозитория (если файл есть)
 - Вызывает `tools/backup.py` с понятными значениями по умолчанию
-  (component=db, engine=sqlite, backend=local, encrypt=auto)
+  (component=db, engine=postgres, backend=local, encrypt=auto)
 
-Важные переменные окружения для бэкапа (SQLite + local):
-- DB_SQLITE_PATH — путь к базе SQLite (например, `/app/database/articles.db`)
+Важные переменные окружения для бэкапа PostgreSQL (local):
+- DATABASE_URL — либо набор POSTGRES_HOST/PORT/USER/PASSWORD/DB
 - LOCAL_BACKUP_DIR — корень каталога бэкапов (например, `/var/backups/warandpeace`)
 - BACKUP_TMP_DIR — временный каталог для сборки бэкапа (например, `/tmp/backup`)
 - BACKUP_RETENTION_DAYS — ротация старых бэкапов (0 — отключить)
@@ -20,18 +20,18 @@
 - Для бэкапа компонента `env` шифрование всегда включено, `AGE_PUBLIC_KEYS` обязателен.
 
 Примеры:
-- Бэкап БД SQLite (локально, с auto-шифрованием):
+- Бэкап БД PostgreSQL локально (custom формат pg_dump):
     ./scripts/backup_now.py
 
 - Явно указать параметры:
-    ./scripts/backup_now.py --component db --engine sqlite --backend local --encrypt auto
+    ./scripts/backup_now.py --component db --engine postgres --backend local --encrypt auto
 
 - Бэкап `.env` (всегда шифруется, нужен AGE_PUBLIC_KEYS):
     ./scripts/backup_now.py --component env --backend local
 
 Где смотреть результат:
-- Файлы в `LOCAL_BACKUP_DIR/db/sqlite` или `LOCAL_BACKUP_DIR/env`
-- Симлинк `latest.tar.gz[.age]` указывает на последний успешный бэкап
+- Файлы в `LOCAL_BACKUP_DIR/db/postgres` и `LOCAL_BACKUP_DIR/env`
+- Симлинк `latest.dump[.age]` указывает на последний успешный бэкап
 
 Советы по устранению проблем:
 - "Path not found for free space check" — проверьте, что `LOCAL_BACKUP_DIR` существует и доступен
@@ -69,7 +69,7 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(description="Run project backup with sane defaults")
     parser.add_argument("--component", default="db", choices=["db", "env", "media"], help="Component to backup")
-    parser.add_argument("--engine", default="sqlite", choices=["sqlite", "postgres"], help="Database engine (for component=db)")
+    parser.add_argument("--engine", default="postgres", choices=["postgres"], help="Database engine (for component=db)")
     parser.add_argument("--backend", default="local", choices=["s3", "yadisk", "local"], help="Storage backend")
     parser.add_argument("--encrypt", default="auto", choices=["auto", "on", "off"], help="Encrypt policy (ignored for env)")
     parser.add_argument("--python", default=sys.executable, help="Python interpreter to use (default: current)")
@@ -102,6 +102,7 @@ def main(argv: list[str] | None = None) -> int:
         cmd += ["--encrypt", args.encrypt]
 
     # Log effective env of interest (without secrets)
+    # DB_SQLITE_PATH more not used in PG-only setup
     db_sqlite_path = os.getenv("DB_SQLITE_PATH", "")
     local_backup_dir = os.getenv("LOCAL_BACKUP_DIR", "")
     backup_tmp_dir = os.getenv("BACKUP_TMP_DIR", "")

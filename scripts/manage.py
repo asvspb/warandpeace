@@ -121,7 +121,7 @@ def _echo_with_dlq_tail(prefix: str) -> None:
 
 @cli.command('db-init-sqlalchemy')
 def db_init_sqlalchemy():
-    """Создаёт схему БД через SQLAlchemy (SQLite/PG в зависимости от DATABASE_URL)."""
+    """Создаёт схему БД через SQLAlchemy (PostgreSQL)."""
     from src.db.engine import create_engine_from_env
     from src.db.schema import create_all_schema
     engine = create_engine_from_env()

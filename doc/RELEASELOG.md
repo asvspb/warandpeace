@@ -2,7 +2,7 @@
 
 ## v2.0 (2025-09-19)
 - Python 3.12 — базовый runtime (Dockerfile)
-- PostgreSQL — основной backend; dual-backend через SQLAlchemy (SQLite/PG)
+- PostgreSQL — основной backend (SQLAlchemy)
 - Схема БД через SQLAlchemy (src/db/schema.py)
 - Скрипт миграции данных (tools/migrate_sqlite_to_postgres.py)
 - Обновлены .env.example, docker-compose.yml, requirements.txt

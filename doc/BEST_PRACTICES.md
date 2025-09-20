@@ -8,12 +8,11 @@ This repository hosts a Telegram bot and data-processing pipeline that tracks ne
   - `bot.py` – main entry-point; starts the Telegram bot and schedules background jobs.
   - `parser.py`, `async_parser.py` – scrape web pages, normalise dates, return metadata + full text.
   - `summarizer.py` – helpers to call external LLM providers and compose prompts.
-- `database.py` – low-level persistence helpers (dual-backend: PostgreSQL runtime via SQLAlchemy; SQLite for dev/pytest).
+- `database.py` – low-level persistence helpers (PostgreSQL via SQLAlchemy).
   - `config.py` – loads `.env` variables and centralises runtime configuration.
   - `healthcheck.py` – planned helper to verify selectors (not present in current repo).
 - `tests/` – pytest suite covering parsing, summarisation and DB helpers.
 - `scripts/` – one-off CLI tools (DB migrations, manual re-ingest, etc.).
-- `database/` – mounted volume that stores the SQLite database file.
 - `doc/` – architecture specs (e.g. `ALGORITHM_NEWS_DB.md`).
 - `Dockerfile`, `docker-compose.yml` – containerisation & local orchestration.
 
@@ -28,7 +27,7 @@ Key separation of concerns:
 - **Philosophy**
   - Unit-test critical pure functions (`_parse_custom_date`, summariser helpers, DB utils).
   - Mock external HTTP requests and Telegram API to keep tests deterministic.
-  - Integration tests spin up a temporary SQLite DB (or Docker services) when needed.
+- **Integration tests** run against a PostgreSQL service (Docker) when needed.
 - **Coverage target**: ≥ 80 % lines for core modules (`parser`, `summarizer`, `database`).
 - **Fixtures**: use pytest fixtures for HTML snippets and monkey-patching requests.
 - **CI**: run `pytest -q` inside Docker or GitHub Actions on every PR.
@@ -68,7 +67,7 @@ Key separation of concerns:
 | `feedparser` | (Future) RSS/Atom ingestion |
 | `pytest` | Test framework |
 | `tenacity` | Resilient retry decorators |
-| `SQLAlchemy`, `alembic` | Planned ORM & migrations for PostgreSQL transition |
+| `SQLAlchemy`, `alembic` | ORM & migrations for PostgreSQL |
 
 Setup (local):
 ```bash
@@ -116,7 +115,7 @@ docker compose up -d --build
 - Rules: force https, lowercase host, strip fragments and tracking params, sort query, normalise path and ports.
 
 #### 13. Database & Migrations (PostgreSQL runtime)
-- Схема создаётся через SQLAlchemy (`scripts/manage.py db-init-sqlalchemy`). В продакшене используем PostgreSQL; локально/pytest — SQLite.
+- Схема создаётся через SQLAlchemy (`scripts/manage.py db-init-sqlalchemy`). Везде используется PostgreSQL.
 - Предпочитать аддитивные изменения. Для PG использовать `ON CONFLICT` для идемпотентных upsert.
 - Полезные индексы: `(published_at)`, `(backfill_status)`, `(content_hash)`; для PG дополнительно FTS/pg_trgm по необходимости.
 

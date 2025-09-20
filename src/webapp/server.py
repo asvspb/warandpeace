@@ -342,7 +342,7 @@ def _spawn_redis_listener():
 # --- Startup ---
 @app.on_event("startup")
 async def _startup_init_db():
-    # Ensure SQLite schema (including webauthn_credential) exists for web app
+    # Ensure PostgreSQL schema exists via SQLAlchemy metadata
     try:
         init_db()
     except Exception:
