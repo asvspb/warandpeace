@@ -1,39 +1,68 @@
 (function(){
-  const source = new EventSource('/events');
+  let source = null;
+  let retry = 0;
+  const maxDelay = 30000;
   const reloadOn = ['article_published'];
   const softRefreshCalendarOn = ['article_published','backfill_updated'];
   const softRefreshOn = ['metrics_updated'];
-  source.addEventListener('message', function(e){
-    try { console.log('[SSE] message raw:', e.data); } catch(_) {}
-    try {
-      const data = JSON.parse(e.data || '{}');
-      if (!data || !data.type) return;
-      if (reloadOn.includes(data.type)) {
-        // Soft refresh calendar if method present; fallback to full reload
-        if (typeof window.refreshCalendarSection === 'function') {
-          try { console.log('[SSE] article_published → refreshCalendarSection()'); } catch(_) {}
-          window.refreshCalendarSection();
-        } else {
-          try { console.log('[SSE] article_published → reload'); } catch(_) {}
-          location.reload();
+
+  function backoff(){
+    retry = Math.min(retry + 1, 10);
+    const delay = Math.min(1000 * Math.pow(2, retry - 1), maxDelay);
+    try { console.warn('[SSE] reconnect in', delay, 'ms'); } catch(_){ }
+    setTimeout(connect, delay);
+  }
+
+  function connect(){
+    try { if (source) { try { source.close(); } catch(_) {} } } catch(_){}
+    try { console.log('[SSE] connecting…'); } catch(_){ }
+    // Same-origin: withCredentials не обязателен, но не мешает
+    source = new EventSource('/events', { withCredentials: true });
+
+    source.addEventListener('open', function(){
+      try { console.log('[SSE] connected'); } catch(_) {}
+      retry = 0;
+    });
+
+    source.addEventListener('message', function(e){
+      try { console.log('[SSE] message raw:', e.data); } catch(_) {}
+      try {
+        const data = JSON.parse(e.data || '{}');
+        if (!data || !data.type) return;
+        if (reloadOn.includes(data.type)) {
+          if (typeof window.refreshCalendarSection === 'function') {
+            try { console.log('[SSE] article_published → refreshCalendarSection()'); } catch(_) {}
+            window.refreshCalendarSection();
+          } else {
+            try { console.log('[SSE] article_published → reload'); } catch(_) {}
+            location.reload();
+          }
+        } else if (softRefreshOn.includes(data.type)) {
+          try { console.log('[SSE] metrics_updated → refreshStats()'); } catch(_) {}
+          refreshStats();
+        } else if (softRefreshCalendarOn.includes(data.type)) {
+          if (typeof window.refreshCalendarSection === 'function') {
+            try { console.log('[SSE] backfill_updated → refreshCalendarSection()'); } catch(_) {}
+            window.refreshCalendarSection();
+          }
+          if (typeof window.refreshBackfillProgress === 'function') {
+            try { console.log('[SSE] backfill_updated → refreshBackfillProgress()'); } catch(_) {}
+            window.refreshBackfillProgress();
+          }
         }
-      } else if (softRefreshOn.includes(data.type)) {
-        try { console.log('[SSE] metrics_updated → refreshStats()'); } catch(_) {}
-        refreshStats();
-      } else if (softRefreshCalendarOn.includes(data.type)) {
-        if (typeof window.refreshCalendarSection === 'function') {
-          try { console.log('[SSE] backfill_updated → refreshCalendarSection()'); } catch(_) {}
-          window.refreshCalendarSection();
-        }
-        if (typeof window.refreshBackfillProgress === 'function') {
-          try { console.log('[SSE] backfill_updated → refreshBackfillProgress()'); } catch(_) {}
-          window.refreshBackfillProgress();
-        }
-      }
-    } catch(_){ }
-  });
-  source.addEventListener('open', function(){ try { console.log('[SSE] connected'); } catch(_) {} });
-  source.addEventListener('error', function(e){ try { console.warn('[SSE] error', e); } catch(_) {} });
+      } catch(_){ }
+    });
+
+    source.addEventListener('error', function(e){
+      try {
+        console.warn('[SSE] error', e);
+        if (e && e.eventPhase === EventSource.CLOSED) console.warn('[SSE] connection closed');
+      } catch(_) {}
+      backoff();
+    });
+  }
+
+  connect();
 
   const sessionStartEl = document.getElementById('session-start');
   const uptimeEl = document.getElementById('uptime');
