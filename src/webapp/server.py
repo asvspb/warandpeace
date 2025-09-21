@@ -168,7 +168,7 @@ async def auth_middleware(request: Request, call_next):
     """Enforce either API key, WebAuthn session or Basic Auth.
     Allows public access to /healthz, /metrics, /static, /favicon.ico, /webauthn, /login.
     """
-    public_prefixes = ("/healthz", "/metrics", "/static", "/favicon.ico", "/webauthn", "/login", "/register-key", "/basic-login", "/backfill/status-public")
+    public_prefixes = ("/healthz", "/metrics", "/static", "/favicon.ico", "/webauthn", "/login", "/register-key", "/basic-login", "/backfill/status-public", "/events")
     path = request.url.path
 
     # Skip auth for public endpoints

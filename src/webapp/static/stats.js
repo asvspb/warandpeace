@@ -1,5 +1,8 @@
 (function(){
-  try { if (!(window && window.SSE_ENABLED)) return; } catch(_) { return; }
+  try {
+    var b = document.body;
+    if (!b || !b.dataset || b.dataset.sse !== '1') return;
+  } catch(_) { return; }
   let source = null;
   let retry = 0;
   const maxDelay = 30000;

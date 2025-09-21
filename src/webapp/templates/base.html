@@ -6,7 +6,7 @@
     <title>{% block title %}War & Peace DB{% endblock %}</title>
 <link rel="stylesheet" href="/static/styles.css?v={{ static_v }}">
 </head>
-<body>
+<body{% if request.session.get('admin') %} data-sse="1"{% endif %}>
     <nav>
         <a href="/" class="brand"><strong>W&P DB</strong></a>
         <div>
@@ -36,7 +36,6 @@
         <p>&copy; 2025. War & Peace News Bot.</p>
     </footer>
     {% if request.session.get('admin') %}
-<script>window.SSE_ENABLED = true;</script>
 <script src="/static/stats.js?v={{ static_v }}"></script>
     {% endif %}
 </body>
