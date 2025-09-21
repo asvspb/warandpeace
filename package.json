@@ -10,7 +10,8 @@
     "format:check": "prettier -c \"src/webapp/**/*.{js,jsx,html,css}\"",
     "test": "vitest run",
     "test:unit": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "pw:install": "playwright install --with-deps"
   },
   "devDependencies": {
     "@playwright/test": "^1.48.0",
