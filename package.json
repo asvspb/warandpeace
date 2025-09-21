@@ -1,0 +1,24 @@
+{
+  "name": "warandpeace-web",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Dev tooling for the web UI (linting, formatting, testing)",
+  "scripts": {
+    "lint": "eslint \"src/webapp/static/**/*.{js,jsx}\"",
+    "lint:fix": "eslint --fix \"src/webapp/static/**/*.{js,jsx}\"",
+    "format": "prettier -w \"src/webapp/**/*.{js,jsx,html,css}\"",
+    "format:check": "prettier -c \"src/webapp/**/*.{js,jsx,html,css}\"",
+    "test": "vitest run",
+    "test:unit": "vitest",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.29.1",
+    "eslint-plugin-promise": "^6.1.1",
+    "prettier": "^3.3.3",
+    "vitest": "^1.6.0"
+  }
+}
