@@ -3,20 +3,21 @@
 {% block title %}Календарь - {{ super() }}{% endblock %}
 
 {% block content %}
-    <header style="margin-bottom: 24px;">
-        <h1>Календарь — {{ calendar.month_name }} {{ calendar.year }}</h1>
-        <p class="muted">Обзор статей по дням выбранного месяца.</p>
-        <div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
-            <a class="btn" href="/calendar?year={{ calendar.prev.year }}&month={{ calendar.prev.month }}">← Пред</a>
-            <a class="btn" href="/calendar?year={{ calendar.next.year }}&month={{ calendar.next.month }}">След →</a>
-            <a class="btn" href="/calendar">Текущий месяц</a>
-            <a class="btn" href="/">На главную</a>
-        </div>
-        <div style="margin-top:8px;">
-            Масштаб: 
-            <a class="btn" href="/calendar">Месяц</a>
-            <a class="btn" href="/day/{{ (calendar.year|string) ~ '-' ~ ("%02d"|format(calendar.month)) ~ '-01' }}">День</a>
-            <!-- Для недели и года можно сделать отдельные страницы позже -->
+    <header class="page-header">
+        <div class="header-title">
+            <h1>Календарь — {{ calendar.month_name }} {{ calendar.year }}</h1>
+            <p class="muted">Обзор статей по дням выбранного месяца.</p>
+            <div class="action-row mt-8">
+                <a class="btn" href="/calendar?year={{ calendar.prev.year }}&month={{ calendar.prev.month }}">← Пред</a>
+                <a class="btn" href="/calendar?year={{ calendar.next.year }}&month={{ calendar.next.month }}">След →</a>
+                <a class="btn" href="/calendar">Текущий месяц</a>
+                <a class="btn" href="/">На главную</a>
+            </div>
+            <div class="mt-8">
+                Масштаб: 
+                <a class="btn" href="/calendar">Месяц</a>
+                <a class="btn" href="/day/{{ (calendar.year|string) ~ '-' ~ ("%02d"|format(calendar.month)) ~ '-01' }}">День</a>
+            </div>
         </div>
     </header>
 
@@ -30,7 +31,7 @@
                     {% for day in week.days %}
                     <div class="calendar-day {% if not day.in_month %}out-of-month{% endif %}">
                         <a href="/day/{{ day.date }}" class="day-number">{{ day.day }}</a>
-                        <div class="muted" style="font-size: 12px;">{{ day.total }} нов.</div>
+<div class="muted small">{{ day.total }} нов.</div>
                         {% if day.total > 0 %}
                             <div class="badge {{ 'success' if day.summarized == day.total else 'muted' }}">
                                 {{ day.summarized }}/{{ day.total }}

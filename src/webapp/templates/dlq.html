@@ -3,14 +3,14 @@
 {% block title %}Dead Letter Queue (DLQ) - {{ super() }}{% endblock %}
 
 {% block content %}
-    <header style="margin-bottom: 24px;">
+    <header class="page-header">
         <h1>Dead Letter Queue (DLQ)</h1>
         <p class="muted">Записи, которые не удалось обработать.</p>
     </header>
 
     <div class="card">
-        <form method="get" style="margin-bottom: 20px;">
-            <select name="entity_type" onchange="this.form.submit()" style="max-width: 200px;">
+        <form method="get" class="mb-20">
+            <select name="entity_type" onchange="this.form.submit()" class="max-w-200">
                 <option value="" {% if not entity_type %}selected{% endif %}>Все типы</option>
                 <option value="article" {% if entity_type == 'article' %}selected{% endif %}>Article</option>
                 <option value="summary" {% if entity_type == 'summary' %}selected{% endif %}>Summary</option>
@@ -38,7 +38,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="5" style="text-align: center; padding: 40px;" class="muted">В DLQ пусто.</td>
+                    <td colspan="5" class="muted center pad-40">В DLQ пусто.</td>
                 </tr>
                 {% endfor %}
             </tbody>

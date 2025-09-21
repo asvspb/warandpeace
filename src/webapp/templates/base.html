@@ -9,21 +9,21 @@
 <body{% if request.session.get('admin') %} data-sse="1"{% endif %}>
     <nav>
         <a href="/" class="brand"><strong>W&P DB</strong></a>
-        <div>
+        <div class="nav-links">
             <a href="/calendar">Календарь</a>
             <a href="/articles">Статьи</a>
             <a href="/duplicates">Дубликаты</a>
             <a href="/dlq">DLQ</a>
             <a href="/stats">Статистика</a>
             {% if request.session.get('admin') %}
-            <a href="/webauthn/credentials" style="margin-left:16px">Ключи</a>
-            <a href="/logout" style="margin-left:8px">Выход</a>
+            <a href="/webauthn/credentials">Ключи</a>
+            <a href="/logout">Выход</a>
             {% else %}
             {% if auth_mode == 'webauthn' %}
-            <a href="/login" style="margin-left:16px">Войти</a>
-            <a href="/register-key" style="margin-left:8px">Регистрация ключа</a>
+            <a href="/login">Войти</a>
+            <a href="/register-key">Регистрация ключа</a>
             {% else %}
-            <a href="/basic-login" style="margin-left:16px">Вход</a>
+            <a href="/basic-login">Вход</a>
             {% endif %}
             {% endif %}
         </div>
@@ -32,7 +32,7 @@
         {% block content %}
         {% endblock %}
     </main>
-    <footer class="container" style="text-align: center; color: var(--muted); margin-top: 40px;">
+    <footer class="container footer-muted">
         <p>&copy; 2025. War & Peace News Bot.</p>
     </footer>
     {% if request.session.get('admin') %}

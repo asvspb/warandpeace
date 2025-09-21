@@ -64,11 +64,13 @@ nav {
 }
 .header-title h1 { margin: 0; }
 .header-title .muted { margin: 4px 0 0; }
+.page-header h1 { margin: 0; }
 .header-actions {
     display: flex;
     gap: 8px;
     align-items: center;
 }
+.header-actions .muted { margin-left: 8px; }
 
 nav .brand {
     font-size: 1.1em;
@@ -77,6 +79,8 @@ nav .brand {
 nav a {
     margin-left: 16px;
 }
+.nav-links a + a { margin-left: 16px; }
+.footer-muted { text-align: center; color: var(--muted); margin-top: 40px; }
 
 .container {
     max-width: 1200px;
@@ -230,6 +234,25 @@ button:hover, .btn:hover {
 .small { font-size: 12px; }
 .center { text-align:center; }
 .pad-lg { padding: 24px; }
+.pad-8 { padding: 8px; }
+.pad-40 { padding: 40px; }
+.mt-8 { margin-top: 8px; }
+.mt-12 { margin-top: 12px; }
+.mt-16 { margin-top: 16px; }
+.mt-24 { margin-top: 24px; }
+.mb-20 { margin-bottom: 20px; }
+.ml-auto { margin-left: auto; }
+.text-right { text-align: right; }
+.mono { font-family: "SF Mono", "Fira Code", monospace; }
+.max-w-200 { max-width: 200px; }
+.input-narrow { width: 72px; }
+.action-row { display:flex; gap:8px; align-items:center; }
+.filters-grid { display:grid; grid-template-columns: 2fr 1fr 1fr auto auto; gap:12px; }
+.pre-console { background:#0b0c10; color:#c5c6c7; padding:12px; border-radius:8px; overflow:auto; max-height:260px; }
+.divider { border:0; border-top:1px solid var(--border); margin:24px 0; }
+.form-auth { max-width:320px; display:flex; flex-direction:column; gap:12px; }
+.error { color:#c00; margin:8px 0; }
+.empty-hint { text-align:center; padding:24px; }
 
 /* Status indicator and tooltip */
 .indicator {

@@ -3,16 +3,16 @@
 {% block title %}Список статей - {{ super() }}{% endblock %}
 
 {% block content %}
-    <header style="margin-bottom: 24px;">
+    <header class="page-header">
         <h1>Список статей ({{ total_articles }})</h1>
     </header>
 
     <form method="get" class="card">
-        <div class="grid" style="grid-template-columns: 2fr 1fr 1fr auto auto; gap: 12px;">
+        <div class="grid filters-grid">
             <input type="search" id="q" name="q" placeholder="Поиск по заголовку..." value="{{ q or '' }}">
             <input type="date" id="start_date" name="start_date" value="{{ start_date or '' }}" title="Дата начала">
             <input type="date" id="end_date" name="end_date" value="{{ end_date or '' }}" title="Дата окончания">
-            <div style="display: flex; align-items: center; gap: 8px;">
+            <div class="action-row">
                 <input type="checkbox" id="has_content" name="has_content" value="1" {% if has_content %}checked{% endif %}>
                 <label for="has_content">С текстом</label>
             </div>
@@ -40,7 +40,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="4" style="text-align: center; padding: 40px;" class="muted">Статьи не найдены.</td>
+                    <td colspan="4" class="muted center pad-40">Статьи не найдены.</td>
                 </tr>
                 {% endfor %}
             </tbody>

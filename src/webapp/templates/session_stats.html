@@ -3,7 +3,7 @@
 {% block title %}Статистика сессии - {{ super() }}{% endblock %}
 
 {% block content %}
-    <header style="margin-bottom: 24px;">
+    <header class="page-header">
         <h1>Статистика текущей сессии</h1>
         <p class="muted">Метрики работы бота с момента последнего перезапуска.</p>
     </header>
@@ -28,31 +28,31 @@
             </article>
         </div>
 
-        <div class="card" style="margin-top: 16px;">
-            <h3 style="margin-top:0;">Токены по ключам</h3>
-            <table class="table" style="width:100%; border-collapse: collapse;">
+        <div class="card mt-16">
+            <h3 class="mt-0">Токены по ключам</h3>
+            <table class="table">
                 <thead>
                     <tr>
-                        <th style="text-align:left; padding:8px; border-bottom:1px solid var(--border);">Провайдер</th>
-                        <th style="text-align:left; padding:8px; border-bottom:1px solid var(--border);">Ключ</th>
-                        <th style="text-align:left; padding:8px; border-bottom:1px solid var(--border);">Кол-во запросов</th>
-                        <th style="text-align:left; padding:8px; border-bottom:1px solid var(--border);">Prompt</th>
-                        <th style="text-align:left; padding:8px; border-bottom:1px solid var(--border);">Completion</th>
+                        <th>Провайдер</th>
+                        <th>Ключ</th>
+                        <th>Кол-во запросов</th>
+                        <th>Prompt</th>
+                        <th>Completion</th>
                     </tr>
                 </thead>
                 <tbody id="token-keys-body">
                     {% for row in stats.token_keys %}
                     <tr>
-                        <td style="padding:8px;">{{ row.provider }}</td>
-                        <td style="padding:8px;">{{ row.key_id }}</td>
-                        <td style="padding:8px;">{{ row.requests | int }}</td>
-                        <td style="padding:8px;">{{ row.prompt | int }}</td>
-                        <td style="padding:8px;">{{ row.completion | int }}</td>
+                        <td>{{ row.provider }}</td>
+                        <td>{{ row.key_id }}</td>
+                        <td>{{ row.requests | int }}</td>
+                        <td>{{ row.prompt | int }}</td>
+                        <td>{{ row.completion | int }}</td>
                     </tr>
                     {% endfor %}
                     {% if not stats.token_keys %}
                     <tr>
-                        <td colspan="5" class="muted" style="padding:8px;">Ключи не использовались</td>
+                        <td colspan="5" class="muted pad-8">Ключи не использовались</td>
                     </tr>
                     {% endif %}
                 </tbody>
@@ -63,7 +63,7 @@
             <h4>Детали</h4>
             <p>Время начала сессии: <span id="session-start">{{ stats.session_start or '—' }}</span></p>
             <p>Аптайм: <span id="uptime">{{ (stats.uptime_seconds or 0) // 3600 }}ч {{ ((stats.uptime_seconds or 0) % 3600) // 60 }}м</span></p>
-            <p class="muted" style="margin-top:8px;">
+            <p class="muted mt-8">
                 История по дням: <a href="/stats/history">открыть</a>
             </p>
         </article>

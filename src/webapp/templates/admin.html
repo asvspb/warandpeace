@@ -3,23 +3,23 @@
 {% block title %}Администрирование - {{ super() }}{% endblock %}
 
 {% block content %}
-<header style="margin-bottom: 24px;">
+<header class="page-header">
   <h1>Администрирование</h1>
   <p class="muted">Управление автосбором и авто-суммаризацией.</p>
 </header>
 
 <section class="card">
   <h2>Состояние</h2>
-  <pre id="status" style="background:#0b0c10;color:#c5c6c7;padding:12px;border-radius:8px;overflow:auto;max-height:260px;"></pre>
+  <pre id="status" class="pre-console"></pre>
   <button class="btn" id="btn-refresh">Обновить</button>
   <span class="muted" id="status-updated"></span>
  </section>
 
-<section class="grid" style="margin-top:16px;">
+<section class="grid mt-16">
   <div class="card">
     <h3>Сбор новостей</h3>
     <label>До даты (DD.MM.YYYY): <input id="collect-until" type="text" placeholder="01.01.2025"></label>
-    <div style="margin-top:8px;display:flex;gap:8px;">
+    <div class="action-row mt-8">
       <button class="btn" id="btn-collect-start">Старт</button>
       <button class="btn danger" id="btn-collect-stop">Стоп</button>
     </div>
@@ -28,13 +28,13 @@
   <div class="card">
     <h3>Суммаризация</h3>
     <label>До даты (DD.MM.YYYY): <input id="sum-until" type="text" placeholder="01.01.2025"></label>
-    <label style="margin-top:8px;">Модель:
+    <label class="mt-8">Модель:
       <select id="sum-model">
         <option value="gemini">gemini</option>
         <option value="mistral">mistral</option>
       </select>
     </label>
-    <div style="margin-top:8px;display:flex;gap:8px;">
+    <div class="action-row mt-8">
       <button class="btn" id="btn-sum-start">Старт</button>
       <button class="btn danger" id="btn-sum-stop">Стоп</button>
     </div>

@@ -3,45 +3,45 @@
 {% block title %}История статистики - {{ super() }}{% endblock %}
 
 {% block content %}
-<header style="margin-bottom: 16px; display:flex; align-items:center; gap:12px;">
-  <h1 style="margin:0;">История статистики</h1>
-  <form method="get" action="/stats/history" style="margin-left:auto;">
+<header class="page-header">
+  <h1>История статистики</h1>
+  <form method="get" action="/stats/history" class="ml-auto">
     <label class="muted">Дней:
-      <input type="number" name="days" min="1" max="90" value="{{ days or 14 }}" style="width:72px;">
+      <input type="number" name="days" min="1" max="90" value="{{ days or 14 }}" class="input-narrow">
     </label>
     <button type="submit">Показать</button>
   </form>
 </header>
 
 <section>
-  <table class="table" style="width:100%; border-collapse: collapse;">
+<table class="table">
     <thead>
       <tr>
-        <th style="text-align:left; padding:8px; border-bottom:1px solid var(--border);">День (UTC)</th>
-        <th style="text-align:right; padding:8px; border-bottom:1px solid var(--border);">Исходящие HTTP</th>
-        <th style="text-align:right; padding:8px; border-bottom:1px solid var(--border);">Обработано новостей</th>
-        <th style="text-align:right; padding:8px; border-bottom:1px solid var(--border);">Токены prompt</th>
-        <th style="text-align:right; padding:8px; border-bottom:1px solid var(--border);">Токены completion</th>
+        <th>День (UTC)</th>
+        <th class="text-right">Исходящие HTTP</th>
+        <th class="text-right">Обработано новостей</th>
+        <th class="text-right">Токены prompt</th>
+        <th class="text-right">Токены completion</th>
       </tr>
     </thead>
     <tbody>
       {% for r in hist.days %}
       <tr>
-        <td style="padding:8px;">{{ r.day }}</td>
-        <td style="padding:8px; text-align:right;">{{ r.http | int }}</td>
-        <td style="padding:8px; text-align:right;">{{ r.articles | int }}</td>
-        <td style="padding:8px; text-align:right;">{{ r.tokens_in | int }}</td>
-        <td style="padding:8px; text-align:right;">{{ r.tokens_out | int }}</td>
+        <td>{{ r.day }}</td>
+        <td class="text-right">{{ r.http | int }}</td>
+        <td class="text-right">{{ r.articles | int }}</td>
+        <td class="text-right">{{ r.tokens_in | int }}</td>
+        <td class="text-right">{{ r.tokens_out | int }}</td>
       </tr>
       {% endfor %}
       {% if not hist.days %}
       <tr>
-        <td colspan="5" class="muted" style="padding:8px;">Нет данных</td>
+        <td colspan="5" class="muted center pad-8">Нет данных</td>
       </tr>
       {% endif %}
     </tbody>
   </table>
 </section>
 
-<p style="margin-top:12px;"><a href="/stats">← Назад</a></p>
+<p class="mt-12"><a href="/stats">← Назад</a></p>
 {% endblock %}

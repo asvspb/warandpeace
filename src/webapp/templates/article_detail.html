@@ -4,7 +4,7 @@
 
 {% block content %}
     <div class="card">
-        <header style="margin-bottom: 24px;">
+        <header class="page-header">
             <h2>{{ article.title }}</h2>
             <p class="muted">
                 <strong>Дата публикации:</strong> {{ article.published_at }}<br>
@@ -18,13 +18,13 @@
         {% if article.summary_text %}
         <h3>Резюме:</h3>
         <p>{{ article.summary_text }}</p>
-        <hr style="border: 0; border-top: 1px solid var(--border); margin: 24px 0;">
+        <hr class="divider">
         {% endif %}
 
         <h3>Полный текст:</h3>
         <pre>{{ article.content or 'Полный текст отсутствует.' }}</pre>
 
-        <footer style="margin-top: 24px;">
+        <footer class="mt-24">
             <a href="/articles" class="btn">Назад к списку</a>
         </footer>
     </div>

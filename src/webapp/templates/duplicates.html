@@ -3,7 +3,7 @@
 {% block title %}Дубликаты статей - {{ super() }}{% endblock %}
 
 {% block content %}
-    <header style="margin-bottom: 24px;">
+    <header class="page-header">
         <h1>Группы дубликатов</h1>
         <p class="muted">Группы статей с идентичным содержимым, сгруппированные по хэшу контента.</p>
     </header>
@@ -24,7 +24,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="2" style="text-align: center; padding: 40px;" class="muted">Группы дубликатов не найдены.</td>
+                    <td colspan="2" class="muted center pad-40">Группы дубликатов не найдены.</td>
                 </tr>
                 {% endfor %}
             </tbody>

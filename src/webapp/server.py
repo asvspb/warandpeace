@@ -285,7 +285,7 @@ async def add_security_headers(request: Request, call_next):
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         "img-src 'self' data:; "
-        "style-src 'self' 'unsafe-inline'; "
+        "style-src 'self'; "
         "script-src 'self'"
     )
     response.headers["X-Frame-Options"] = "DENY"

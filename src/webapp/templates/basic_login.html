@@ -3,9 +3,9 @@
 {% block content %}
 <h1>Вход администратора</h1>
 {% if error %}
-  <div style="color:#c00; margin:8px 0;">{{ error }}</div>
+  <div class="error">{{ error }}</div>
 {% endif %}
-<form method="post" action="/basic-login" style="max-width:320px; display:flex; flex-direction:column; gap:12px;">
+<form method="post" action="/basic-login" class="form-auth">
   <label>
     Логин
     <input type="text" name="username" required />

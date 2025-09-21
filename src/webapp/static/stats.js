@@ -86,12 +86,21 @@
   const tpEl = document.getElementById('tokens-prompt');
   const tcEl = document.getElementById('tokens-completion');
   const tbody = document.getElementById('token-keys-body');
+  const lastUpdatedEl = document.getElementById('last-updated');
+  let lastUpdatedTs = 0;
 
   function renderUptime(seconds){
     const s = Math.max(0, parseInt(seconds || 0, 10));
     const h = Math.floor(s / 3600);
     const m = Math.floor((s % 3600) / 60);
     return `${h}ч ${m}м`;
+  }
+
+  function updateLastUpdated(){
+    if (!lastUpdatedEl || !lastUpdatedTs) return;
+    const diff = Math.max(0, Math.floor((Date.now() - lastUpdatedTs)/1000));
+    const text = diff < 60 ? `Обновлено ${diff} сек назад` : `Обновлено ${Math.floor(diff/60)} мин назад`;
+    lastUpdatedEl.textContent = text;
   }
 
   function renderTableRows(rows){
@@ -126,6 +135,8 @@
       const resp = await fetch('/stats.json', {cache: 'no-store'});
       if (!resp.ok) return;
       const data = await resp.json();
+      lastUpdatedTs = Date.now();
+      updateLastUpdated();
       if (sessionStartEl && typeof data.session_start === 'string') sessionStartEl.textContent = data.session_start || '—';
       if (uptimeEl && typeof data.uptime_seconds !== 'undefined') uptimeEl.textContent = renderUptime(data.uptime_seconds || 0);
       if (httpEl && typeof data.external_http_requests !== 'undefined') httpEl.textContent = (data.external_http_requests|0);
@@ -140,7 +151,10 @@
         tokens_completion: data.tokens_completion,
         token_keys_count: (data.token_keys||[]).length,
       }); } catch(_) {}
-    } catch(_){ }
+    } catch(e){
+      try { console.warn('[UI] stats refresh failed', e); } catch(_){ }
+      if (lastUpdatedEl) lastUpdatedEl.textContent = 'Ошибка обновления';
+    }
   }
 
   refreshStats();
