@@ -132,8 +132,10 @@
 
   async function refreshStats(){
     try {
-      const resp = await fetch('/stats.json', {cache: 'no-store'});
+      const resp = await fetch('/stats.json', {cache: 'no-store', redirect: 'manual'});
       if (!resp.ok) return;
+      const ct = (resp.headers.get('content-type')||'').toLowerCase();
+      if (ct.indexOf('application/json') === -1) { try { console.warn('[UI] /stats.json returned non-JSON (', ct, ')'); } catch(_){}; return; }
       const data = await resp.json();
       lastUpdatedTs = Date.now();
       updateLastUpdated();

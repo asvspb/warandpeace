@@ -169,10 +169,16 @@ async def admin_panel(request: Request):
 
 @router.get("/stats.json")
 async def session_stats_json(request: Request):
-    """Returns JSON for the current session stats for logged-in admins."""
-    redir = _require_admin_session(request)
-    if redir:
-        return redir
+    """Returns JSON for the current session stats for logged-in admins.
+
+    If not authorized, return 401 JSON instead of HTML redirect to keep fetch() semantics.
+    """
+    try:
+        is_admin = bool(request.session.get("admin"))
+    except Exception:
+        is_admin = False
+    if not is_admin:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
     return JSONResponse(services.get_session_stats())
 
 
