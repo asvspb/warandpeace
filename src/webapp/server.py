@@ -158,6 +158,48 @@ def health_check():
     """Health check endpoint."""
     return {"status": "ok"}
 
+@app.get("/readyz", tags=["Monitoring"])
+def ready_check():
+    """Readiness probe: verifies DB (and Redis if configured)."""
+    db_ok = True
+    db_error = None
+    redis_ok = True
+    redis_error = None
+    try:
+        # Lazy import to avoid circulars
+        from src.database import get_db_connection  # type: ignore
+        with get_db_connection() as conn:
+            try:
+                cur = conn.cursor()  # type: ignore
+                cur.execute("SELECT 1")
+                _ = cur.fetchone()
+            except Exception:
+                # Some adapters may not have cursor (SQLAlchemy path), ignore
+                pass
+    except Exception as e:
+        db_ok = False
+        db_error = str(e)[:200]
+    try:
+        if os.getenv("REDIS_URL") and redis is not None:
+            client = _redis_client or redis.Redis.from_url(os.getenv("REDIS_URL"), decode_responses=True)
+            try:
+                if not client.ping():
+                    redis_ok = False
+                    redis_error = "PING failed"
+            except Exception as e:
+                redis_ok = False
+                redis_error = str(e)[:200]
+    except Exception as e:
+        redis_ok = False
+        redis_error = str(e)[:200]
+    status = {"db": "ok" if db_ok else "fail", "redis": ("ok" if redis_ok else "fail")}
+    if db_error:
+        status["db_error"] = db_error
+    if redis_error:
+        status["redis_error"] = redis_error
+    code = 200 if db_ok and redis_ok else 503
+    return Response(status_code=code, media_type="application/json", content=(__import__('json').dumps(status)))
+
 # Mount metrics app publicly (use the same dedicated registry)
 metrics_app = make_asgi_app(registry=METRICS_REGISTRY)
 app.mount("/metrics", metrics_app)
@@ -279,7 +321,7 @@ async def sse_events(request: Request):  # type: ignore[override]
     """
     async def event_stream():
         from asyncio import Queue
-        import json
+        import asyncio, json
         q = Queue()
         _SSE_SUBSCRIBERS.add(q)
         # Send initial hello to trigger client-side refresh
@@ -291,8 +333,12 @@ async def sse_events(request: Request):  # type: ignore[override]
             while True:
                 if await request.is_disconnected():
                     break
-                data = await q.get()
-                yield f"data: {data}\n\n"
+                try:
+                    data = await asyncio.wait_for(q.get(), timeout=25)
+                    yield f"data: {data}\n\n"
+                except asyncio.TimeoutError:
+                    # Heartbeat ping to keep connection alive
+                    yield "data: {\"type\": \"ping\"}\n\n"
         finally:
             _SSE_SUBSCRIBERS.discard(q)
 

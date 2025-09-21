@@ -35,9 +35,15 @@
         if (!data || !data.type) return;
         if (data.type === 'hello') {
           try { console.log('[SSE] hello'); } catch(_) {}
-          try { if (typeof refreshStats === 'function') refreshStats(); } catch(_) {}
-          try { if (typeof window.refreshBackfillProgress === 'function') window.refreshBackfillProgress(); } catch(_) {}
-          try { if (typeof window.refreshCalendarSection === 'function') window.refreshCalendarSection(); } catch(_) {}
+          try { console.log('[SSE] → refreshStats()'); if (typeof refreshStats === 'function') refreshStats(); } catch(_) {}
+          try { console.log('[SSE] → refreshBackfillProgress()'); if (typeof window.refreshBackfillProgress === 'function') window.refreshBackfillProgress(); } catch(_) {}
+          try { console.log('[SSE] → refreshCalendarSection()'); if (typeof window.refreshCalendarSection === 'function') window.refreshCalendarSection(); } catch(_) {}
+          // Fallback kick after 1.5s
+          setTimeout(function(){
+            try { if (typeof refreshStats === 'function') refreshStats(); } catch(_) {}
+            try { if (typeof window.refreshBackfillProgress === 'function') window.refreshBackfillProgress(); } catch(_) {}
+            try { if (typeof window.refreshCalendarSection === 'function') window.refreshCalendarSection(); } catch(_) {}
+          }, 1500);
         } else if (reloadOn.includes(data.type)) {
           if (typeof window.refreshCalendarSection === 'function') {
             try { console.log('[SSE] article_published → refreshCalendarSection()'); } catch(_) {}
