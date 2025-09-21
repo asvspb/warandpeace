@@ -36,6 +36,7 @@
         <p>&copy; 2025. War & Peace News Bot.</p>
     </footer>
     {% if request.session.get('admin') %}
+<script>window.SSE_ENABLED = true;</script>
 <script src="/static/stats.js?v={{ static_v }}"></script>
     {% endif %}
 </body>

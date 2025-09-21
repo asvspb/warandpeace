@@ -1,4 +1,5 @@
 (function(){
+  try { if (!(window && window.SSE_ENABLED)) return; } catch(_) { return; }
   let source = null;
   let retry = 0;
   const maxDelay = 30000;
