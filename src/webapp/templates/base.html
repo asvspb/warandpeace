@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}War & Peace DB{% endblock %}</title>
-    <link rel="stylesheet" href="/static/styles.css">
+<link rel="stylesheet" href="/static/styles.css?v={{ static_v }}">
 </head>
 <body>
     <nav>
@@ -36,7 +36,7 @@
         <p>&copy; 2025. War & Peace News Bot.</p>
     </footer>
     {% if request.session.get('admin') %}
-    <script src="/static/stats.js"></script>
+<script src="/static/stats.js?v={{ static_v }}"></script>
     {% endif %}
 </body>
 </html>

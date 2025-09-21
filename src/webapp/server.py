@@ -78,6 +78,8 @@ _BASELINE_BASIC_USER = os.environ.get("WEB_BASIC_AUTH_USER")
 _BASELINE_BASIC_PASS = os.environ.get("WEB_BASIC_AUTH_PASSWORD")
 # Expose auth mode to templates
 templates_login.env.globals["auth_mode"] = os.getenv("WEB_AUTH_MODE", "basic").strip().lower()
+# Static version for cache-busting
+templates_login.env.globals["static_v"] = os.getenv("WEB_STATIC_VERSION", "1")
 # --- Login page route (for WebAuthn mode) ---
 @app.get("/login", tags=["Auth"], include_in_schema=False)
 def login_page(request: Request):
