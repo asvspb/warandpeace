@@ -33,7 +33,12 @@
       try {
         const data = JSON.parse(e.data || '{}');
         if (!data || !data.type) return;
-        if (reloadOn.includes(data.type)) {
+        if (data.type === 'hello') {
+          try { console.log('[SSE] hello'); } catch(_) {}
+          try { if (typeof refreshStats === 'function') refreshStats(); } catch(_) {}
+          try { if (typeof window.refreshBackfillProgress === 'function') window.refreshBackfillProgress(); } catch(_) {}
+          try { if (typeof window.refreshCalendarSection === 'function') window.refreshCalendarSection(); } catch(_) {}
+        } else if (reloadOn.includes(data.type)) {
           if (typeof window.refreshCalendarSection === 'function') {
             try { console.log('[SSE] article_published → refreshCalendarSection()'); } catch(_) {}
             window.refreshCalendarSection();

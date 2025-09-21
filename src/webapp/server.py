@@ -275,12 +275,18 @@ if os.getenv("REDIS_URL") and redis is not None:
 async def sse_events(request: Request):  # type: ignore[override]
     """Very lightweight SSE endpoint for admin UI. Broadcast-only.
 
-    Note: auth middleware protects it; we don't send historical events.
+    Public endpoint (CSP-safe). No history, but we send an initial hello message.
     """
     async def event_stream():
         from asyncio import Queue
+        import json
         q = Queue()
         _SSE_SUBSCRIBERS.add(q)
+        # Send initial hello to trigger client-side refresh
+        try:
+            q.put_nowait(json.dumps({"type": "hello"}))
+        except Exception:
+            pass
         try:
             while True:
                 if await request.is_disconnected():
