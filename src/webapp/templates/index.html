@@ -3,9 +3,18 @@
 {% block title %}Dashboard - {{ super() }}{% endblock %}
 
 {% block content %}
-    <header style="margin-bottom: 24px;">
-        <h1>Dashboard</h1>
-        <p class="muted">Обзор состояния базы данных новостей.</p>
+    <header class="page-header">
+        <div class="header-title">
+            <h1>Dashboard</h1>
+            <p class="muted">Обзор состояния базы данных новостей.</p>
+        </div>
+        <div class="header-actions">
+            {% set today = ("now"|date("%Y-%m-%d")) %}
+            {% set yesterday = ("now"|date("%Y-%m-%d", -86400)) %}
+            <a class="btn" href="/day/{{ today }}">Сегодня</a>
+            <a class="btn" href="/day/{{ yesterday }}">Вчера</a>
+            <button class="btn" id="btn-dashboard-refresh">Обновить</button>
+        </div>
     </header>
     <section>
         <div class="grid">
@@ -16,7 +25,7 @@
             <div class="card">
                 <h4>Последняя публикация</h4>
                 {% set lp = stats.last_published_date %}
-{% if lp and lp != 'N/A' %}
+                {% if lp and lp != 'N/A' %}
                   {% set dt = lp|replace('Z','+00:00') %}
                   {% set parts = dt.split('T') %}
                   {% set d = parts[0].split('-') %}
@@ -35,21 +44,21 @@
         </div>
     </section>
 
-    <section class="card" style="margin-top:16px;">
-        <h2 style="margin-top:0;">Прогресс обновления базы</h2>
-        <div id="backfill-bar" class="muted" style="display:flex;align-items:center;gap:12px;">
-          <div id="backfill-bar-track" style="flex:1;height:10px;background:#2b2d33;border-radius:6px;overflow:hidden;">
-            <div id="backfill-bar-fill" style="height:10px;width:0%;background:#2aa198;"></div>
+    <section class="card">
+        <h2>Прогресс обновления базы</h2>
+        <div id="backfill-bar" class="progress muted">
+          <div id="backfill-bar-track" class="progress-track">
+            <div id="backfill-bar-fill" class="progress-fill"></div>
           </div>
-          <div id="backfill-bar-text" style="min-width:160px;">—</div>
+          <div id="backfill-bar-text" class="progress-text">—</div>
         </div>
     </section>
     <script src="/static/progress.js"></script>
 
     <section class="card">
-        <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-            <h2 style="margin: 0;">Календарь — {{ calendar.month_name }} {{ calendar.year }}</h2>
-            <div>
+        <div class="section-header">
+            <h2>Календарь — {{ calendar.month_name }} {{ calendar.year }}</h2>
+            <div class="section-actions">
               <a class="btn" href="/calendar?year={{ calendar.prev.year }}&month={{ calendar.prev.month }}">← Пред</a>
               <a class="btn" href="/calendar?year={{ calendar.next.year }}&month={{ calendar.next.month }}">След →</a>
               <a class="btn" href="/calendar">Открыть в полном размере</a>
@@ -66,7 +75,7 @@
                     {% for day in week.days %}
                     <div class="calendar-day {% if not day.in_month %}out-of-month{% endif %}">
                         <a href="/day/{{ day.date }}" class="day-number">{{ day.day }}</a>
-                        <div class="muted" style="font-size: 12px;">{{ day.total }} нов.</div>
+                        <div class="muted small">{{ day.total }} нов.</div>
                         {% if day.total > 0 %}
                             <div class="badge {{ 'success' if day.summarized == day.total else 'muted' }}">
                                 {{ day.summarized }}/{{ day.total }}
@@ -92,4 +101,5 @@
         </div>
     </section>
     <script src="/static/calendar.js"></script>
+    <script src="/static/dashboard.js"></script>
 {% endblock %}

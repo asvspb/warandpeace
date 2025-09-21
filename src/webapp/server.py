@@ -212,20 +212,14 @@ async def auth_middleware(request: Request, call_next):
     if isinstance(session_data, dict) and session_data.get("admin"):
         return await call_next(request)
 
-    # If basic credentials configured and WebAuthn is NOT enforced, require Basic Auth
+    # If basic credentials configured and WebAuthn is NOT enforced, use session-based login for UI
     if env_user and env_pass and not webauthn_enabled:
-        auth_header = request.headers.get("Authorization")
-        if not auth_header or not auth_header.startswith("Basic "):
-            # If user used UI login but header missing, redirect to UI login
-            return Response(status_code=401, headers={"WWW-Authenticate": "Basic"})
-        try:
-            raw = base64.b64decode(auth_header.split(" ", 1)[1]).decode("utf-8")
-            username, password = raw.split(":", 1)
-        except Exception:
-            return Response(status_code=401, headers={"WWW-Authenticate": "Basic"})
-
-        if not (secrets.compare_digest(username, env_user) and secrets.compare_digest(password, env_pass)):
-            return Response(status_code=401, headers={"WWW-Authenticate": "Basic"})
+        # For API we already handled; for UI prefer redirect to the friendly form when not logged in
+        session_data = request.scope.get("session")
+        is_admin = bool(session_data.get("admin")) if isinstance(session_data, dict) else False
+        if not is_admin:
+            # Let browser show the login form instead of Basic popup
+            return Response(status_code=303, headers={"Location": "/basic-login"})
     if webauthn_enabled:
         # API enforcement handled above; here protect the rest of the app except public
         # Be defensive in case SessionMiddleware is not present yet (e.g., during tests or misconfiguration)

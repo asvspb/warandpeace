@@ -4,12 +4,12 @@
 
 {% block content %}
     <div id="daily-root" data-day="{{ day }}">
-    <header style="margin-bottom: 24px; display:flex; align-items:center; gap:12px; justify-content:space-between;">
-        <div>
-            <h1 style="margin:0;">Лента за {{ day }}</h1>
-            <p class="muted" style="margin:4px 0 0;">Все статьи, опубликованные в этот день.</p>
+    <header class="page-header">
+        <div class="header-title">
+            <h1>Лента за {{ day }}</h1>
+            <p class="muted">Все статьи, опубликованные в этот день.</p>
         </div>
-        <div style="display:flex; gap:8px; align-items:center;">
+        <div class="header-actions">
             <button class="btn" id="btn-ingest">Скачать все за день</button>
             <button class="btn" id="btn-refresh">Обновить</button>
         </div>
@@ -30,7 +30,13 @@
             <tbody>
                 {% for article in articles %}
                 <tr>
-                    <td class="muted">{{ article.published_at.split(' ')[1] if ' ' in article.published_at else article.published_at }}</td>
+                    <td class="muted">
+                        {% if article.published_at is string %}
+                            {{ ' ' in article.published_at and article.published_at.split(' ')[1] or article.published_at }}
+                        {% else %}
+                            {{ article.published_at.strftime('%H:%M') if article.published_at else '' }}
+                        {% endif %}
+                    </td>
                     <td><a href="/articles/{{ article.id }}">{{ article.title }}</a></td>
                     <td><a href="{{ article.canonical_link }}" target="_blank">{{ article.canonical_link | truncate(40) if article.canonical_link }}</a></td>
                     <td><a href="{{ article.url }}" target="_blank">Источник</a></td>
@@ -46,7 +52,7 @@
             </tbody>
         </table>
         {% else %}
-            <div class="muted" style="text-align:center; padding: 24px;">В этот день записей нет.</div>
+            <div class="muted empty-hint">В этот день записей нет.</div>
         {% endif %}
     </section>
     </div>

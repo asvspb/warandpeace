@@ -25,6 +25,8 @@
         border-color: var(--border);
         color: var(--fg);
     }
+    .progress-track { background: #2b2d33; }
+    .progress-fill { background: #2aa198; }
 }
 
 * { 
@@ -50,6 +52,22 @@ nav {
     position: sticky;
     top: 0;
     z-index: 10;
+}
+
+/* Page header */
+.page-header {
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    justify-content: space-between;
+}
+.header-title h1 { margin: 0; }
+.header-title .muted { margin: 4px 0 0; }
+.header-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
 }
 
 nav .brand {
@@ -148,7 +166,7 @@ button:hover, .btn:hover {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
     gap: 20px;
-    align-items: center;
+    align-items: stretch;
 }
 
 .pagination {
@@ -201,6 +219,17 @@ button:hover, .btn:hover {
     justify-content: center;
     color: var(--muted);
 }
+
+/* Progress Bar */
+.progress { display:flex; align-items:center; gap:12px; }
+.progress-track { flex:1; height:10px; background:#e5e7eb; border-radius:6px; overflow:hidden; }
+.progress-fill { height:10px; width:0%; background:#2aa198; }
+.progress-text { min-width: 160px; }
+
+/* Text helpers */
+.small { font-size: 12px; }
+.center { text-align:center; }
+.pad-lg { padding: 24px; }
 
 /* Status indicator and tooltip */
 .indicator {
