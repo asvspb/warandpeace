@@ -79,11 +79,11 @@ _BASELINE_BASIC_PASS = os.environ.get("WEB_BASIC_AUTH_PASSWORD")
 # Expose auth mode to templates
 templates_login.env.globals["auth_mode"] = os.getenv("WEB_AUTH_MODE", "basic").strip().lower()
 # Static version for cache-busting
-templates_login.env.globals["static_v"] = os.getenv("WEB_STATIC_VERSION", "1")
+templates_login.env.globals["static_v"] = os.getenv("WEB_STATIC_VERSION", "2")
 # --- Login page route (for WebAuthn mode) ---
 @app.get("/login", tags=["Auth"], include_in_schema=False)
 def login_page(request: Request):
-    return templates_login.TemplateResponse(request, "login.html")
+    return templates_login.TemplateResponse("login.html", {"request": request})
 
 @app.get("/logout", tags=["Auth"], include_in_schema=False)
 def logout(request: Request):
@@ -92,12 +92,12 @@ def logout(request: Request):
 
 @app.get("/register-key", tags=["Auth"], include_in_schema=False)
 def register_key_page(request: Request):
-    return templates_login.TemplateResponse(request, "register_key.html")
+    return templates_login.TemplateResponse("register_key.html", {"request": request})
 
 # --- Basic Auth UI (optional nicer flow) ---
 @app.get("/basic-login", tags=["Auth"], include_in_schema=False)
 def basic_login_page(request: Request):
-    return templates_login.TemplateResponse(request, "basic_login.html")
+    return templates_login.TemplateResponse("basic_login.html", {"request": request})
 
 @app.post("/basic-login", tags=["Auth"], include_in_schema=False)
 async def basic_login_submit(request: Request, username: str = Form(...), password: str = Form(...)):
@@ -107,7 +107,7 @@ async def basic_login_submit(request: Request, username: str = Form(...), passwo
         request.session["admin"] = True
         return Response(status_code=303, headers={"Location": "/"})
     # invalid credentials -> show form with error
-    return templates_login.TemplateResponse(request, "basic_login.html", {"error": "Неверные логин или пароль"})
+    return templates_login.TemplateResponse("basic_login.html", {"request": request, "error": "Неверные логин или пароль"})
 
 
 # --- Sessions ---
