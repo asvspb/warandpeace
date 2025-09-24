@@ -4,7 +4,7 @@ from fastapi import APIRouter, Request, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from typing import Optional
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import math
 
 from src.webapp import services
@@ -39,8 +39,18 @@ async def read_root(request: Request):
         return redir
     stats = services.get_dashboard_stats()
     today = date.today()
+    yesterday = today - timedelta(days=1)
     calendar_data = services.get_month_calendar_data(today.year, today.month)
-    return templates.TemplateResponse("index.html", {"request": request, "stats": stats, "calendar": calendar_data})
+    return templates.TemplateResponse(
+        "index.html",
+        {
+            "request": request,
+            "stats": stats,
+            "calendar": calendar_data,
+            "today_str": today.isoformat(),
+            "yesterday_str": yesterday.isoformat(),
+        },
+    )
 
 @router.get("/articles", response_class=HTMLResponse)
 async def list_articles(

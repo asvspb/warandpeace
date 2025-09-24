@@ -1,5 +1,8 @@
 'use strict';
 
+function log(msg, ...rest){ try { console.log('[WebAuthn][register]', msg, ...rest); } catch(_){} }
+function warn(msg, ...rest){ try { console.warn('[WebAuthn][register]', msg, ...rest); } catch(_){} }
+
 function b64urlToBuf(s){
   const pad='='.repeat((4-(s.length%4))%4);
   const b=(s+pad).replace(/-/g,'+').replace(/_/g,'/');
@@ -29,6 +32,22 @@ async function registerKey(){
     const {json: opts, text: raw} = await parseJsonSafe(res);
     if(!res.ok){ st.textContent = `Ошибка ${res.status}: ${(opts && opts.detail) || raw || 'Неизвестная ошибка'}`; return; }
     if(!opts || !opts.publicKey){ st.textContent = 'Некорректный ответ сервера'; return; }
+    log('options', opts);
+
+    // Базовые проверки среды
+    if (!window.isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1'){
+      warn('Не безопасный контекст (HTTPS обязателен, кроме localhost)');
+      st.textContent = 'Для WebAuthn требуется HTTPS (кроме localhost)';
+      return;
+    }
+    const rpId = (opts.publicKey.rp && opts.publicKey.rp.id) ? String(opts.publicKey.rp.id) : null;
+    if (rpId && !(location.hostname === rpId || location.hostname.endsWith('.'+rpId))){
+      warn('RP ID != hostname', {rpId, host: location.hostname});
+      st.textContent = `RP ID (${rpId}) не соответствует домену (${location.hostname})`;
+      return;
+    }
+
+    st.textContent = 'Получили параметры, запрашиваем ключ…';
 
     opts.publicKey.user.id = b64urlToBuf(opts.publicKey.user.id);
     opts.publicKey.challenge = b64urlToBuf(opts.publicKey.challenge);
@@ -36,7 +55,14 @@ async function registerKey(){
       opts.publicKey.excludeCredentials = opts.publicKey.excludeCredentials.map(c=>({ ...c, id: b64urlToBuf(c.id) }));
     }
 
-    const cred = await navigator.credentials.create(opts);
+    let cred;
+    try {
+      cred = await navigator.credentials.create(opts);
+    } catch (e) {
+      warn('navigator.credentials.create failed', e);
+      st.textContent = `Ключ отклонил запрос: ${e && e.message ? e.message : e}`;
+      return;
+    }
     const payload = {
       id: cred.id,
       rawId: bufToB64url(cred.rawId),
@@ -57,6 +83,7 @@ async function registerKey(){
     if(v.ok && vres && vres.status==='ok'){
       st.textContent='Ключ привязан';
     } else {
+      warn('register/verify failed', v.status, vres || vraw);
       st.textContent = (vres && vres.detail) || vraw || 'Ошибка регистрации';
     }
   } catch(e){

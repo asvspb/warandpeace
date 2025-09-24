@@ -1,5 +1,8 @@
 'use strict';
 
+function log(msg, ...rest){ try { console.log('[WebAuthn][login]', msg, ...rest); } catch(_){} }
+function warn(msg, ...rest){ try { console.warn('[WebAuthn][login]', msg, ...rest); } catch(_){} }
+
 function b64urlToBuf(s){
   const pad='='.repeat((4-(s.length%4))%4);
   const b=(s+pad).replace(/-/g,'+').replace(/_/g,'/');
@@ -29,13 +32,36 @@ async function login(){
     const {json: opts, text: raw} = await parseJsonSafe(res);
     if(!res.ok){ st.textContent = `Ошибка ${res.status}: ${(opts && opts.detail) || raw || 'Неизвестная ошибка'}`; return; }
     if(!opts || !opts.publicKey){ st.textContent = 'Некорректный ответ сервера'; return; }
+    log('options', opts);
+
+    // Базовые проверки среды
+    if (!window.isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1'){
+      warn('Не безопасный контекст (HTTPS обязателен, кроме localhost)');
+      st.textContent = 'Для WebAuthn требуется HTTPS (кроме localhost)';
+      return;
+    }
+    const rpId = (opts.publicKey.rp && opts.publicKey.rp.id) ? String(opts.publicKey.rp.id) : null;
+    if (rpId && !(location.hostname === rpId || location.hostname.endsWith('.'+rpId))){
+      warn('RP ID != hostname', {rpId, host: location.hostname});
+      st.textContent = `RP ID (${rpId}) не соответствует домену (${location.hostname})`;
+      return;
+    }
+
+    st.textContent = 'Запрашиваем подтверждение ключом…';
 
     opts.publicKey.challenge = b64urlToBuf(opts.publicKey.challenge);
     if(opts.publicKey.allowCredentials){
       opts.publicKey.allowCredentials = opts.publicKey.allowCredentials.map(c=>({ ...c, id: b64urlToBuf(c.id) }));
     }
 
-    const assertion = await navigator.credentials.get(opts);
+    let assertion;
+    try {
+      assertion = await navigator.credentials.get(opts);
+    } catch (e) {
+      warn('navigator.credentials.get failed', e);
+      st.textContent = `Ключ отклонил запрос: ${e && e.message ? e.message : e}`;
+      return;
+    }
     const payload = {
       id: assertion.id,
       rawId: bufToB64url(assertion.rawId),

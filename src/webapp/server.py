@@ -4,7 +4,7 @@ import secrets
 import base64
 from fastapi import FastAPI, Depends, HTTPException, Request, Response, Form
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, RedirectResponse
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
@@ -103,9 +103,20 @@ def basic_login_page(request: Request):
 async def basic_login_submit(request: Request, username: str = Form(...), password: str = Form(...)):
     env_user = os.environ.get("WEB_BASIC_AUTH_USER", "")
     env_pass = os.environ.get("WEB_BASIC_AUTH_PASSWORD", "")
+    try:
+        logging.getLogger(__name__).info(
+            "Basic login attempt: user_len=%d env_user_len=%d pass_len=%d env_pass_len=%d",
+            len(username or ""), len(env_user or ""), len(password or ""), len(env_pass or ""),
+        )
+    except Exception:
+        pass
     if secrets.compare_digest(username, env_user) and secrets.compare_digest(password, env_pass):
         request.session["admin"] = True
-        return Response(status_code=303, headers={"Location": "/"})
+        try:
+            logging.getLogger(__name__).info("Basic login success: set session admin=True")
+        except Exception:
+            pass
+        return RedirectResponse(url="/", status_code=303)
     # invalid credentials -> show form with error
     return templates_login.TemplateResponse("basic_login.html", {"request": request, "error": "Неверные логин или пароль"})
 
@@ -113,13 +124,6 @@ async def basic_login_submit(request: Request, username: str = Form(...), passwo
 # --- Sessions ---
 # Enable session middleware for future WebAuthn-based admin auth
 _session_secret = os.getenv("WEB_SESSION_SECRET", "dev-session-secret-change-me")
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=_session_secret,
-    session_cookie="wp_session",
-    same_site="strict",
-    https_only=False,  # set True behind TLS in production
-)
 
 # --- Security ---
 security = HTTPBasic()
@@ -263,6 +267,16 @@ async def auth_middleware(request: Request, call_next):
         is_admin = bool(session_data.get("admin")) if isinstance(session_data, dict) else False
         if not is_admin:
             # Let browser show the login form instead of Basic popup
+            try:
+                logging.getLogger(__name__).info(
+                    "Auth redirect: missing admin. has_session=%s is_admin=%s cookie_len=%d path=%s",
+                    isinstance(session_data, dict),
+                    is_admin,
+                    len(request.headers.get("cookie") or ""),
+                    path,
+                )
+            except Exception:
+                pass
             return Response(status_code=303, headers={"Location": "/basic-login"})
     if webauthn_enabled:
         # API enforcement handled above; here protect the rest of the app except public
@@ -301,6 +315,17 @@ async def add_process_time_header(request: Request, call_next):
         response = await call_next(request)
         REQUEST_COUNT.labels(request.method, request.url.path, response.status_code).inc()
     return response
+
+# Re-add SessionMiddleware after function-based middlewares so it runs before them at runtime
+# (Starlette applies user middleware in reverse order; last added runs first)
+_session_secret = os.getenv("WEB_SESSION_SECRET", "dev-session-secret-change-me")
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=_session_secret,
+    session_cookie="wp_session",
+    same_site="lax",
+    https_only=False,  # set True behind TLS in production
+)
 
 # --- Server-Sent Events (SSE) for UI live updates ---
 _SSE_SUBSCRIBERS = set()
