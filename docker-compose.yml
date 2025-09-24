@@ -22,7 +22,6 @@ services:
       - PUID=1000
       - PGID=1000
       - TZ=Europe/Moscow
-      - PEERDNS=false
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
@@ -37,6 +36,7 @@ services:
       interval: 30s
       timeout: 3s
       retries: 3
+    # Optional watchdog sidecar (disabled by default). Uncomment 'watchdog' service below.
     # Optional watchdog sidecar (disabled by default). Uncomment 'watchdog' service below.
 
   postgres:
@@ -117,19 +117,31 @@ services:
       - WEB_API_ENABLED=${WEB_API_ENABLED:-true}
       - WEB_API_KEY=${WEB_API_KEY}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
-      - DATABASE_URL=postgresql+psycopg://wp:${POSTGRES_PASSWORD}@postgres:5432/warandpeace
+      - DATABASE_URL=${DATABASE_URL}
+    volumes:
+      - ./database:/app/database
     ports:
       - "${WEB_PORT:-8080}:8080"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
     depends_on:
       - postgres
 
-  # caddy:
+  caddy:
+    image: caddy:2-alpine
+    container_name: wp-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - CADDY_DOMAIN=${CADDY_DOMAIN}
+      - CADDY_EMAIL=${CADDY_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - web
   #   image: caddy:2-alpine
   #   container_name: wp-caddy
   #   restart: unless-stopped
