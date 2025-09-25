@@ -11,6 +11,7 @@
                 <a class="btn" href="/calendar?year={{ calendar.prev.year }}&month={{ calendar.prev.month }}">← Пред</a>
                 <a class="btn" href="/calendar?year={{ calendar.next.year }}&month={{ calendar.next.month }}">След →</a>
                 <a class="btn" href="/calendar">Текущий месяц</a>
+                <a class="btn" href="/day/{{ today_str }}">Сегодня</a>
                 <a class="btn" href="/">На главную</a>
             </div>
             <div class="mt-8">
@@ -29,14 +30,13 @@
             <div class="calendar-grid">
                 {% for week in calendar.weeks %}
                     {% for day in week.days %}
-                    <div class="calendar-day {% if not day.in_month %}out-of-month{% endif %}">
-                        <a href="/day/{{ day.date }}" class="day-number">{{ day.day }}</a>
-<div class="muted small">{{ day.total }} нов.</div>
-                        {% if day.total > 0 %}
-                            <div class="badge {{ 'success' if day.summarized == day.total else 'muted' }}">
-                                {{ day.summarized }}/{{ day.total }}
-                            </div>
-                        {% endif %}
+                    <div class="calendar-day {% if day.in_month %}in-month{% else %}out-of-month{% endif %} {% if day.date == today_str %}today{% endif %}">
+                        <div class="day-number">{{ day.day }}</div>
+                        <a class="day-link" href="/day/{{ day.date }}">
+                          <div class="day-metrics">
+                            <span class="metric summary {{ 'success' if day.summarized == day.total and day.total > 0 else 'pending' }}" title="Резюме">{{ day.summarized }}/{{ day.total }}</span>
+                          </div>
+                        </a>
                     </div>
                     {% endfor %}
                     <div class="week-summary">

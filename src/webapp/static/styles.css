@@ -27,6 +27,7 @@
     }
     .progress-track { background: #2b2d33; }
     .progress-fill { background: #2aa198; }
+.calendar-day.in-month { background: #484848; color: #fff; }
 }
 
 * { 
@@ -204,11 +205,55 @@ button:hover, .btn:hover {
     border-radius: var(--radius-sm);
     padding: 8px;
     min-height: 80px;
+    position: relative;
+}
+.calendar-day.in-month { background: #484848; color: #fff; }
+.calendar-day .day-link{
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    color: inherit;
+    text-decoration: none;
+    gap: 6px;
 }
 .calendar-day .day-number {
+    position: absolute;
+    top: 6px;
+    left: 8px;
     display: inline-block;
+    font-weight: 700;
+    color: #ffffff;
+    font-size: 14px;
+    line-height: 1;
+    pointer-events: none;
+}
+.calendar-day .day-metrics{
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    font-size: 16px;
+    color: var(--muted);
+}
+.calendar-day .metric.summary{
+    padding: 3px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
     font-weight: 600;
-    color: inherit;
+}
+.calendar-day .metric.summary.success{
+    color: #00FF0A;
+    border-color: #00FF0A33;
+    background: #00FF0A14;
+}
+.calendar-day .metric.sep{ color: #9CA3AF; }
+.calendar-day.today {
+    border-color: #0a7a2d;
+    box-shadow: inset 0 0 0 2px #0a7a2d33;
 }
 .calendar-day.out-of-month {
     opacity: 0.5;

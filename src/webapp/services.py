@@ -153,31 +153,67 @@ def get_month_calendar_data(year: int, month: int) -> Dict[str, Any]:
         with get_db_connection() as conn:
             cursor = conn.cursor()
 
-            start_iso, end_iso = _month_bounds(year, month)
-
-            # Aggregate counts per calendar day within the month (PostgreSQL)
-            sql = (
-                """
-                SELECT CAST(published_at AS DATE) AS d,
-                       COUNT(*) AS total,
-                       SUM(CASE WHEN summary_text IS NOT NULL AND TRIM(summary_text) <> '' THEN 1 ELSE 0 END) AS summarized
-                FROM articles
-                WHERE published_at BETWEEN ? AND ?
-                GROUP BY CAST(published_at AS DATE)
-                """
-            )
-            cursor.execute(sql, (start_iso, end_iso))
-            rows = cursor.fetchall()
-            per_day: Dict[str, Dict[str, int]] = {
-                row[0]: {"total": int(row[1] or 0), "summarized": int(row[2] or 0)} for row in rows
-            }
-
-            cal = py_calendar.Calendar(firstweekday=0)  # Monday=0 in Python 3.12+, but here 0 is Monday in calendar? In calendar, 0=Monday.
-            # To be explicit across versions: ensure Monday-first weeks
+            # Determine full visible range (including adjacent-month days shown in grid)
             cal = py_calendar.Calendar(firstweekday=0)
+            weeks_grid = cal.monthdatescalendar(year, month)
+            if not weeks_grid:
+                weeks_grid = [[date(year, month, 1)]]
+            visible_start = weeks_grid[0][0]
+            visible_end = weeks_grid[-1][-1]
+            start_day = visible_start.isoformat()
+            end_day = visible_end.isoformat()
+
+            # Aggregate counts per calendar day within the visible range (robust for PG and mixed types)
+            rows = []
+            try:
+                sql_primary = (
+                    """
+                    SELECT CAST(published_at AS DATE) AS d,
+                           COUNT(*) AS total,
+                           SUM(CASE WHEN summary_text IS NOT NULL AND TRIM(summary_text) <> '' THEN 1 ELSE 0 END) AS summarized
+                    FROM articles
+                    WHERE CAST(published_at AS DATE) BETWEEN ? AND ?
+                    GROUP BY CAST(published_at AS DATE)
+                    """
+                )
+                cursor.execute(sql_primary, (start_day, end_day))
+                rows = cursor.fetchall()
+            except Exception:
+                # Fallback: operate on text representation if types are inconsistent
+                try:
+                    sql_fallback = (
+                        """
+                        SELECT substr(CAST(published_at AS TEXT), 1, 10) AS d,
+                               COUNT(*) AS total,
+                               SUM(CASE WHEN summary_text IS NOT NULL AND TRIM(summary_text) <> '' THEN 1 ELSE 0 END) AS summarized
+                        FROM articles
+                        WHERE substr(CAST(published_at AS TEXT), 1, 10) BETWEEN ? AND ?
+                        GROUP BY d
+                        """
+                    )
+                    cursor.execute(sql_fallback, (start_day, end_day))
+                    rows = cursor.fetchall()
+                except Exception:
+                    rows = []
+
+            def _key_to_str(v: Any) -> str:  # type: ignore
+                try:
+                    if isinstance(v, str):
+                        return v
+                    return v.isoformat()  # date object
+                except Exception:
+                    return str(v)
+
+            per_day: Dict[str, Dict[str, int]] = {}
+            for row in rows:
+                try:
+                    k = _key_to_str(row[0])
+                    per_day[k] = {"total": int(row[1] or 0), "summarized": int(row[2] or 0)}
+                except Exception:
+                    continue
 
             weeks: List[Dict[str, Any]] = []
-            for week in cal.monthdatescalendar(year, month):
+            for week in weeks_grid:
                 week_days: List[Dict[str, Any]] = []
                 week_total = 0
                 week_summarized = 0
@@ -242,6 +278,57 @@ def get_daily_articles(day_iso: str) -> List[Dict[str, Any]]:
         )
         cursor.execute(sql, (day_iso,))
         return [dict(row) for row in cursor.fetchall()]
+
+
+def get_articles_range(days: int = 7) -> List[Dict[str, Any]]:
+    """Returns grouped articles for the last N days (including today).
+
+    Shape: [ {"day": "YYYY-MM-DD", "articles": [..] }, ... ] ordered desc by day then time.
+    """
+    if days is None:
+        days = 7
+    try:
+        days = max(1, min(int(days), 31))
+    except Exception:
+        days = 7
+    today = datetime.now().date()
+    start_day = (today - timedelta(days=days - 1)).isoformat()
+    end_day = today.isoformat()
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        sql = (
+            """
+            SELECT CAST(published_at AS DATE) AS d,
+                   id, title, url, canonical_link, published_at, summary_text
+            FROM articles
+            WHERE published_at::date BETWEEN ? AND ?
+            ORDER BY published_at DESC
+            """
+        )
+        cursor.execute(sql, (start_day, end_day))
+        rows = [dict(r) for r in cursor.fetchall()]
+
+    grouped: Dict[str, List[Dict[str, Any]]] = {}
+    for r in rows:
+        # r["published_at"] might be a string or datetime; derive day safely from SQL alias 'd' when available
+        d = r.get("d") if "d" in r else None
+        if not d:
+            try:
+                if isinstance(r.get("published_at"), str) and len(r["published_at"]) >= 10:
+                    d = r["published_at"][0:10]
+                else:
+                    dt = r.get("published_at")
+                    d = dt.date().isoformat() if dt else today.isoformat()
+            except Exception:
+                d = today.isoformat()
+        grouped.setdefault(d, []).append(r)
+
+    # Order by day desc
+    result: List[Dict[str, Any]] = []
+    for day_key in sorted(grouped.keys(), reverse=True):
+        result.append({"day": day_key, "articles": grouped[day_key]})
+    return result
 
 
 # --- Session Stats (Prometheus-based) ---

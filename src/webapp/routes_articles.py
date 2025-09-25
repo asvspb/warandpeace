@@ -83,7 +83,14 @@ async def calendar_view(request: Request, year: Optional[int] = None, month: Opt
     y = year or today.year
     m = month or today.month
     calendar_data = services.get_month_calendar_data(y, m)
-    return templates.TemplateResponse("calendar.html", {"request": request, "calendar": calendar_data})
+    return templates.TemplateResponse(
+        "calendar.html",
+        {
+            "request": request,
+            "calendar": calendar_data,
+            "today_str": today.isoformat(),
+        },
+    )
 
 
 @router.get("/day/{day_iso}", response_class=HTMLResponse)
@@ -93,7 +100,19 @@ async def daily_feed(request: Request, day_iso: str):
     if redir:
         return redir
     articles = services.get_daily_articles(day_iso)
-    return templates.TemplateResponse("daily_feed.html", {"request": request, "day": day_iso, "articles": articles})
+    # Quick filter helpers
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+    return templates.TemplateResponse(
+        "daily_feed.html",
+        {
+            "request": request,
+            "day": day_iso,
+            "articles": articles,
+            "today_str": today.isoformat(),
+            "yesterday_str": yesterday.isoformat(),
+        },
+    )
 
 
 @router.post("/day/{day_iso}/ingest")
@@ -157,6 +176,15 @@ async def read_article(
         raise HTTPException(status_code=404, detail="Article not found")
     return templates.TemplateResponse("article_detail.html", {"request": request, "article": article})
 
+
+@router.get("/range", response_class=HTMLResponse)
+async def range_feed(request: Request, days: int = Query(7, ge=1, le=31)):
+    """Renders aggregated feed for the last N days (including today)."""
+    redir = _require_admin_session(request)
+    if redir:
+        return redir
+    groups = services.get_articles_range(days)
+    return templates.TemplateResponse("range_feed.html", {"request": request, "days": int(days), "groups": groups})
 
 @router.get("/stats", response_class=HTMLResponse)
 async def session_stats(request: Request):

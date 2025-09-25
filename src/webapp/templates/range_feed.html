@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block title %}Последние {{ days }} дней - {{ super() }}{% endblock %}
+
+{% block content %}
+<header class="page-header">
+  <div class="header-title">
+    <h1>Лента за последние {{ days }} дней</h1>
+    <p class="muted">Сводная лента публикаций, начиная с сегодняшнего дня.</p>
+  </div>
+  <div class="header-actions">
+    <a class="btn" href="/day/{{ (groups and groups[0].day) or '' }}">К сегодняшнему дню</a>
+    <a class="btn" href="/calendar">Календарь</a>
+    <a class="btn" href="/">Дашборд</a>
+  </div>
+</header>
+
+<section class="card">
+  {% if groups and groups|length > 0 %}
+    {% for g in groups %}
+      <h2 class="mt-16">{{ g.day }}</h2>
+      {% if g.articles and g.articles|length > 0 %}
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Время</th>
+              <th>Заголовок</th>
+              <th>Каноническая ссылка</th>
+              <th>Оригинал</th>
+              <th>Резюме</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for article in g.articles %}
+            <tr>
+              <td class="muted">
+                {% if article.published_at is string %}
+                  {{ ' ' in article.published_at and article.published_at.split(' ')[1] or article.published_at }}
+                {% else %}
+                  {{ article.published_at.strftime('%H:%M') if article.published_at else '' }}
+                {% endif %}
+              </td>
+              <td><a href="/articles/{{ article.id }}">{{ article.title }}</a></td>
+              <td><a href="{{ article.canonical_link }}" target="_blank">{{ article.canonical_link | truncate(40) if article.canonical_link }}</a></td>
+              <td><a href="{{ article.url }}" target="_blank">Источник</a></td>
+              <td>
+                {% if article.summary_text %}
+                  <span class="badge success">Есть</span>
+                {% else %}
+                  <span class="badge muted">Нет</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <div class="muted empty-hint">В этот день нет записей.</div>
+      {% endif %}
+      <hr class="divider" />
+    {% endfor %}
+  {% else %}
+    <div class="muted empty-hint">За выбранный период записей не найдено.</div>
+  {% endif %}
+</section>
+{% endblock %}

@@ -10,6 +10,10 @@
             <p class="muted">Все статьи, опубликованные в этот день.</p>
         </div>
         <div class="header-actions">
+            <a class="btn" href="/day/{{ today_str }}">Сегодня</a>
+            <a class="btn" href="/day/{{ yesterday_str }}">Вчера</a>
+            <a class="btn" href="/range?days=7">Неделя</a>
+            <a class="btn" href="/calendar">Календарь</a>
             <button class="btn" id="btn-ingest">Скачать все за день</button>
             <button class="btn" id="btn-refresh">Обновить</button>
         </div>
