@@ -48,7 +48,7 @@
                         {% if article.summary_text %}
                             <span class="badge success">Есть</span>
                         {% else %}
-                            <span class="badge muted">Нет</span>
+                            <button type="button" class="badge muted summarize-btn" data-article-id="{{ article.id }}" title="Сгенерировать резюме">Нет</button>
                         {% endif %}
                     </td>
                 </tr>

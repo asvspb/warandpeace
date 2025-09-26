@@ -162,6 +162,98 @@ async def ingest_day(request: Request, day_iso: str):
     t.start()
     return {"status": "ok", "started": True, "date": day_iso}
 
+
+@router.post("/articles/{article_id}/summarize")
+async def summarize_article(request: Request, article_id: int):
+    """Generate a summary for a single article and persist it.
+
+    Returns JSON {ok: true, summary_text: str} on success.
+    """
+    # Admin session enforcement for JSON endpoint
+    redir = _require_admin_session(request)
+    if redir:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    # Fetch article
+    try:
+        from src.database import get_db_connection, set_article_summary
+    except Exception:
+        from database import get_db_connection, set_article_summary  # type: ignore
+
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT id, url, title, content, published_at FROM articles WHERE id = ?",
+                (int(article_id),),
+            )
+            row = cur.fetchone()
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": f"db_error: {str(e)[:120]}"}, status_code=500)
+
+    if not row:
+        return JSONResponse({"ok": False, "error": "not_found"}, status_code=404)
+
+    url = row["url"]
+    content = row.get("content") if hasattr(row, "get") else row[3]
+    title = row.get("title") if hasattr(row, "get") else row[2]
+    published_at = row.get("published_at") if hasattr(row, "get") else row[4]
+
+    # Ensure we have content
+    text = content or ""
+    if not text:
+        try:
+            from src.parser import get_article_text as _get_text
+        except Exception:
+            from parser import get_article_text as _get_text  # type: ignore
+        try:
+            text = _get_text(url) or ""
+        except Exception:
+            text = ""
+        # Best-effort: persist fetched content
+        if text:
+            try:
+                with get_db_connection() as conn:
+                    cur = conn.cursor()
+                    cur.execute(
+                        "UPDATE articles SET content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                        (text, int(article_id)),
+                    )
+                    conn.commit()
+            except Exception:
+                pass
+
+    if not text:
+        return JSONResponse({"ok": False, "error": "no_content"}, status_code=400)
+
+    # Summarize
+    try:
+        try:
+            from src import summarizer as _summ
+        except Exception:
+            import summarizer as _summ  # type: ignore
+        summary = _summ.summarize_text_local(text)
+    except Exception as e:
+        summary = None
+
+    if not summary:
+        return JSONResponse({"ok": False, "error": "summarization_failed"}, status_code=502)
+
+    # Persist summary
+    try:
+        set_article_summary(int(article_id), summary)
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": f"persist_failed: {str(e)[:120]}"}, status_code=500)
+
+    try:
+        # Notify dashboards/UI via SSE (best-effort)
+        from src.webapp.server import _sse_broadcast  # type: ignore
+        _sse_broadcast({"type": "article_summarized", "article_id": int(article_id)})
+    except Exception:
+        pass
+
+    return JSONResponse({"ok": True, "summary_text": summary})
+
 @router.get("/articles/{article_id}", response_class=HTMLResponse)
 async def read_article(
     request: Request, 
