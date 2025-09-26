@@ -48,7 +48,13 @@
                         {% else %}
                             <div class="tooltip">
                                 <span class="indicator muted" aria-label="Резюмирование неполное"></span>
-                                <span class="tooltiptext">＋ Резюмирование неполное</span>
+                                <span class="tooltiptext">
+                                  {% if week.total > 0 %}
+                                    ＋ Без резюме: {{ (week.total - week.summarized) if (week.total - week.summarized) > 0 else 0 }}
+                                  {% else %}
+                                    Нет статей за неделю
+                                  {% endif %}
+                                </span>
                             </div>
                         {% endif %}
                     </div>

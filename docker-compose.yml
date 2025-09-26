@@ -76,6 +76,15 @@ services:
       # Подключение к Postgres по сервисному имени (Docker DNS 127.0.0.11 в wg-client)
       - DATABASE_URL=postgresql+psycopg://wp:${POSTGRES_PASSWORD}@postgres:5432/warandpeace
       - ./backups:/var/backups/warandpeace
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - |
+          curl -fsS http://localhost:8000/metrics | grep -q '^#'
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     restart: unless-stopped
     depends_on: # Примечание: в Compose v3 это не ждет healthcheck, только запускает контейнеры в нужном порядке.
       - wg-client
@@ -98,6 +107,20 @@ services:
       - WG_DISABLE_MINUTES=${WG_DISABLE_MINUTES:-15}
     restart: unless-stopped
     entrypoint: ["/bin/sh", "-lc", "wg_watchdog.sh"]
+
+  bot-watchdog:
+    image: docker:cli
+    container_name: bot-watchdog
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./scripts/watchdog/bot_watchdog.sh:/usr/local/bin/bot_watchdog.sh:ro
+      - ./logs:/logs
+    environment:
+      - BOT_CONTAINER=${BOT_CONTAINER:-warandpeace-bot}
+      - BOT_WATCHDOG_POLL=${BOT_WATCHDOG_POLL:-30}
+      - BOT_UNHEALTHY_THRESHOLD=${BOT_UNHEALTHY_THRESHOLD:-4}
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-lc", "sh /usr/local/bin/bot_watchdog.sh"]
 
   web:
     build: .
