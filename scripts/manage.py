@@ -38,7 +38,7 @@ from src.database import (  # noqa: E402
 from src.database import list_recent_articles  # noqa: E402
 from src.parser import get_article_text, get_articles_from_page  # noqa: E402
 from src.async_parser import fetch_articles_for_date  # noqa: E402
-from src.summarizer import summarize_with_fallback as summarize  # noqa: E402
+from src.summarizer import summarize_text_local as summarize  # noqa: E402
 from src.url_utils import canonicalize_url  # noqa: E402
 from src.database import (
     get_api_usage_daily_range,

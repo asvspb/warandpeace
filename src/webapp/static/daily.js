@@ -23,29 +23,50 @@
       if (!btn) return;
       const id = btn.getAttribute('data-article-id');
       if (!id) return;
-      const oldText = btn.textContent;
+      
+      // Сохраняем исходный текст кнопки ("Нет")
+      const originalText = btn.textContent;
+      
+      // Меняем состояние кнопки: делаем неактивной и добавляем анимацию к слову "Нет"
       btn.disabled = true;
-      btn.textContent = '…';
-      const resp = await fetch('/articles/' + encodeURIComponent(id) + '/summarize', { method: 'POST' });
-      if (!resp.ok) {
-        throw new Error('HTTP ' + resp.status);
-      }
-      const j = await resp.json();
-      if (j && (j.ok === true || j.summary_text)){
-        // Заменяем кнопку на зелёный бейдж
-        const okSpan = document.createElement('span');
-        okSpan.className = 'badge success';
-        okSpan.textContent = 'Есть';
-        btn.replaceWith(okSpan);
-      } else {
-        throw new Error('Сервис вернул неожиданный ответ');
+      // Не меняем текст, оставляем "Нет", но добавляем класс processing для анимации
+      btn.classList.add('processing');
+      
+      try {
+        const resp = await fetch('/articles/' + encodeURIComponent(id) + '/summarize', { method: 'POST' });
+        if (!resp.ok) {
+          throw new Error('HTTP ' + resp.status);
+        }
+        const j = await resp.json();
+        
+        if (j && (j.ok === true || j.summary_text)){
+          // Заменяем кнопку на зелёный бейдж
+          const okSpan = document.createElement('span');
+          okSpan.className = 'badge success';
+          okSpan.textContent = 'Есть';
+          btn.replaceWith(okSpan);
+        } else {
+          throw new Error('Сервис вернул неожиданный ответ');
+        }
+      } catch(e) {
+        alert('Не удалось сгенерировать резюме: ' + (e && e.message ? e.message : e));
+        // Восстанавливаем кнопку: возвращаем исходный текст и убираем анимацию
+        btn.disabled = false;
+        btn.textContent = originalText; // "Нет"
+        btn.classList.remove('processing');
       }
     } catch(e){
       alert('Не удалось сгенерировать резюме: ' + (e && e.message ? e.message : e));
-      try{ btn.disabled = false; }catch(_){ }
-      try{ btn.textContent = 'Нет'; }catch(_){ }
+      // Пытаемся восстановить кнопку в любом случае
+      try {
+        btn.disabled = false;
+        btn.textContent = 'Нет';
+        btn.classList.remove('processing');
+      } catch(_) {}
     }
   }
+
+
 
   function refresh(){ location.reload(); }
 

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тест анимации фона</title>
+    <style>
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 12px;
+            border: 1px solid #E5E7EB;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .badge.success {
+            color: #0a7a2d;
+            border-color: #0a7a2d33;
+            background: #0a7a2d11;
+        }
+        
+        .badge.muted {
+            animation: pulse 1s infinite alternate;
+        }
+        
+        @keyframes pulse {
+            from { background-color: #007AFF; color: white; }
+            to { background-color: transparent; color: #6B7280; }
+        }
+        
+        .container {
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        
+        .example-buttons {
+            margin: 20px 0;
+        }
+        
+        .example-buttons button {
+            margin: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Тест анимации фона бейджа</h1>
+        
+        <p>Этот тест показывает, как работает анимация изменения фона при клике:</p>
+        
+        <div class="example-buttons">
+            <button type="button" class="badge muted" id="testButton1">Нет</button>
+            <button type="button" class="badge success">Есть</button>
+        </div>
+        
+        <h2>Описание функции:</h2>
+        <ul>
+            <li>При клике на бейдж "Нет" добавляется CSS-класс "muted"</li>
+            <li>Класс "muted" активирует анимацию "pulse"</li>
+            <li>Анимация плавно меняет фон от синего (#007AFF) к прозрачному</li>
+            <li>Цвет текста также изменяется для лучшей видимости</li>
+        </ul>
+        
+        <h2>Текущий CSS-код анимации:</h2>
+        <pre>
+.badge.muted {
+    animation: pulse 1s infinite alternate;
+}
+
+@keyframes pulse {
+    from { background-color: #007AFF; color: white; }
+    to { background-color: transparent; }
+}
+        </pre>
+        
+        <button id="toggleAnimation">Вкл/Выкл анимацию</button>
+        <button id="resetButton">Сброс</button>
+    </div>
+
+    <script>
+        document.getElementById('testButton1').addEventListener('click', function() {
+            // Добавляем класс muted для запуска анимации
+            this.classList.add('muted');
+            this.textContent = 'Обработка...';
+            this.disabled = true;
+            
+            // Эмуляция процесса
+            setTimeout(() => {
+                // После "обработки" может быть один из двух исходов:
+                const success = Math.random() > 0.3; // 70% шанс успеха
+                
+                if (success) {
+                    this.className = 'badge success';
+                    this.textContent = 'Есть';
+                } else {
+                    // В случае ошибки убираем анимацию
+                    this.classList.remove('muted');
+                    this.textContent = 'Нет';
+                    this.disabled = false;
+                }
+            }, 5000); // 5 секунд эмуляция
+        });
+
+        document.getElementById('toggleAnimation').addEventListener('click', function() {
+            const btn = document.getElementById('testButton1');
+            if (btn.classList.contains('muted')) {
+                btn.classList.remove('muted');
+                btn.textContent = 'Нет';
+                btn.disabled = false;
+            } else {
+                btn.classList.add('muted');
+                btn.textContent = 'Обработка...';
+                btn.disabled = true;
+            }
+        });
+
+        document.getElementById('resetButton').addEventListener('click', function() {
+            const btn = document.getElementById('testButton1');
+            btn.className = 'badge muted';
+            btn.textContent = 'Нет';
+            btn.disabled = false;
+        });
+    </script>
+</body>
+</html>
