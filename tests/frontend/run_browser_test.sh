@@ -33,5 +33,5 @@ echo ""
 
 echo "Дополнительно: вы можете запустить автоматический тест с помощью:"
 echo "   pip install selenium"
-echo "   python test_new_features.py"
+echo "   python tests/frontend/test_new_features.py"
 echo ""

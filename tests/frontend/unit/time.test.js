@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatUptime } from '../../src/webapp/static/utils/time.js'
+import { formatUptime } from '../../../src/webapp/static/utils/time.js'
 
 describe('formatUptime', () => {
   it('0 seconds', () => {

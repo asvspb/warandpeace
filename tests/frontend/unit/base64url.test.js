@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { b64urlToBuf, bufToB64url } from '../../src/webapp/static/utils/base64url.js'
+import { b64urlToBuf, bufToB64url } from '../../../src/webapp/static/utils/base64url.js'
 
 function abEqual(a, b){
   const ua = a instanceof Uint8Array ? a : new Uint8Array(a)
