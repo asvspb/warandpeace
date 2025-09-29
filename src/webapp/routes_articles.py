@@ -74,7 +74,7 @@ async def list_articles(
 
 
 @router.get("/calendar", response_class=HTMLResponse)
-async def calendar_view(request: Request, year: Optional[int] = None, month: Optional[int] = None):
+async def calendar_view(request: Request, year: Optional[int] = None, month: Optional[int] = None, fragment: Optional[str] = None):
     """Renders the calendar view for a given month (defaults to current)."""
     redir = _require_admin_session(request)
     if redir:
@@ -83,6 +83,19 @@ async def calendar_view(request: Request, year: Optional[int] = None, month: Opt
     y = year or today.year
     m = month or today.month
     calendar_data = services.get_month_calendar_data(y, m)
+    
+    # Если запрошен фрагмент, возвращаем только HTML-фрагмент календаря
+    if fragment == '1':
+        # Возвращаем только фрагмент календаря без обертки страницы
+        return templates.TemplateResponse(
+            "calendar_fragment.html",
+            {
+                "request": request,
+                "calendar": calendar_data,
+                "today_str": today.isoformat(),
+            },
+        )
+    
     return templates.TemplateResponse(
         "calendar.html",
         {
