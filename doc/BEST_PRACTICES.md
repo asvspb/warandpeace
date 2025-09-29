@@ -12,6 +12,10 @@ This repository hosts a Telegram bot and data-processing pipeline that tracks ne
   - `config.py` – loads `.env` variables and centralises runtime configuration.
   - `healthcheck.py` – planned helper to verify selectors (not present in current repo).
 - `tests/` – pytest suite covering parsing, summarisation and DB helpers.
+  - `frontend/` – frontend-specific tests:
+    - `unit/` – JavaScript unit tests for frontend utilities
+    - `e2e/` – Playwright end-to-end tests
+    - Additional frontend test files including Selenium tests
 - `scripts/` – one-off CLI tools (DB migrations, manual re-ingest, etc.).
 - `doc/` – architecture specs (e.g. `ALGORITHM_NEWS_DB.md`).
 - `Dockerfile`, `docker-compose.yml` – containerisation & local orchestration.
@@ -22,8 +26,13 @@ Key separation of concerns:
 3. **Orchestration** (job queue and scheduling in `bot.py`).
 
 #### 3. Test Strategy
-- **Framework**: Pytest (+ `unittest.mock`).
-- **Layout & naming**: tests live in `tests/`, file names start with `test_`.
+- **Framework**: Pytest (+ `unittest.mock`) for Python tests; Vitest for JavaScript unit tests; Playwright for e2e tests.
+- **Layout & naming**: 
+  - Python tests live in `tests/`, file names start with `test_`.
+  - Frontend tests are organized in `tests/frontend/`:
+    - JavaScript unit tests: `tests/frontend/unit/`
+    - Playwright e2e tests: `tests/frontend/e2e/`
+    - Selenium browser tests: `tests/frontend/test_new_features.py`
 - **Philosophy**
   - Unit-test critical pure functions (`_parse_custom_date`, summariser helpers, DB utils).
   - Mock external HTTP requests and Telegram API to keep tests deterministic.
@@ -31,6 +40,10 @@ Key separation of concerns:
 - **Coverage target**: ≥ 80 % lines for core modules (`parser`, `summarizer`, `database`).
 - **Fixtures**: use pytest fixtures for HTML snippets and monkey-patching requests.
 - **CI**: run `pytest -q` inside Docker or GitHub Actions on every PR.
+- To run frontend tests:
+  - JavaScript unit tests: cd tests/frontend/unit && npx vitest run
+  - Playwright e2e tests: npx playwright test
+  - Selenium browser tests: python tests/frontend/test_new_features.py
 
 #### 4. Code Style
 - **Language**: Python 3.12 + with full type hints for all public functions.

@@ -176,6 +176,9 @@ Thumbs.db
 .env.*
 !.env.example
 
+# Node.js
+node_modules/
+
 # Local databases and backups
 # SQLite files and backups
 database/*.db

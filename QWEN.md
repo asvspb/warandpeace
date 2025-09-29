@@ -29,6 +29,12 @@ This file provides guidance to WARP (warp.dev) when working with code in this re
   - Один тест: pytest -q tests/test_parser.py::test_parse_custom_date
   - По шаблону имени: pytest -q -k "parse_custom_date"
 
+- Фронтенд-тесты:
+  - JavaScript unit-тесты: cd tests/frontend/unit && npx vitest run
+  - Playwright e2e-тесты: npx playwright test
+  - Selenium-тесты: python tests/frontend/test_new_features.py
+  - Ручное тестирование в браузере: bash tests/frontend/run_browser_test.sh
+
 - CLI-утилиты (скрипт управления):
   - Список команд: python3 scripts/manage.py --help
   - Статус БД: python3 scripts/manage.py status
