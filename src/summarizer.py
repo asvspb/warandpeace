@@ -79,6 +79,69 @@ def configure_gemini_model(api_key: str):
         logger.error(f"Ошибка при конфигурации Gemini или создании модели: {e}")
         return None
 
+
+# --- 2. Модифицированный код суммаризации для фоновой обработки ---
+def summarize_text_background(full_text: str, article_id: int = None) -> str | None:
+    """
+    Суммирует текст в фоновом режиме, используя ту же логику, что и summarize_text_local,
+    но с дополнительной оберткой для фоновой обработки.
+    
+    Args:
+        full_text: Текст для суммаризации
+        article_id: ID статьи (опционально, для логирования)
+    
+    Returns:
+        str | None: Результат суммаризации или None в случае ошибки
+    """
+    if article_id:
+        logger.info(f"Начинаю фоновую суммаризацию для статьи {article_id}")
+    
+    cleaned_text = full_text.strip()
+    if not cleaned_text:
+        logger.error(f"Ошибка: Передан пустой текст для суммирования. Article ID: {article_id}")
+        return None
+
+    prompt = create_summarization_prompt(cleaned_text)
+    
+    # 1) Явный приоритет Mistral
+    if LLM_PRIMARY == "mistral" and MISTRAL_ENABLED and MISTRAL_API_KEY:
+        result = summarize_with_mistral(cleaned_text)
+        if result:
+            if article_id:
+                logger.info(f"Суммаризация для статьи {article_id} завершена с помощью Mistral")
+            return result
+        # Если не удалось, пробуем Gemini
+        if GEMINI_ENABLED and GOOGLE_API_KEYS:
+            try:
+                result = _make_gemini_request(prompt)
+                if result:
+                    if article_id:
+                        logger.info(f"Суммаризация для статьи {article_id} завершена с помощью Gemini")
+                    return result
+            except RetryError as e:
+                logger.error(f"Не удалось получить резюме от Gemini для статьи {article_id}: {e}")
+                return None
+        return None
+
+    # 2) По умолчанию — Gemini с фолбэком на Mistral
+    if GEMINI_ENABLED and GOOGLE_API_KEYS:
+        try:
+            result = _make_gemini_request(prompt)
+            if result:
+                if article_id:
+                    logger.info(f"Суммаризация для статьи {article_id} завершена с помощью Gemini")
+                return result
+        except RetryError as e:
+            logger.error(f"Не удалось получить резюме от Gemini для статьи {article_id}: {e}")
+    if MISTRAL_ENABLED and MISTRAL_API_KEY:
+        result = summarize_with_mistral(cleaned_text)
+        if article_id and result:
+            logger.info(f"Суммаризация для статьи {article_id} завершена с помощью Mistral (фолбэк)")
+        return result
+    
+    logger.error(f"Ни один из провайдеров LLM не доступен для суммаризации статьи {article_id}")
+    return None
+
 @retry(stop=stop_after_attempt(len(GOOGLE_API_KEYS) if GOOGLE_API_KEYS else 1),
        wait=wait_exponential(multiplier=1, min=4, max=10),
        retry=retry_if_exception_type((genai.types.BlockedPromptException, Exception)))

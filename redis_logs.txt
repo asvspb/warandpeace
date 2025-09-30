@@ -1,0 +1,11 @@
+time="2025-09-30T13:41:01+03:00" level=warning msg="The \"WEB_RP_ID\" variable is not set. Defaulting to a blank string."
+time="2025-09-30T13:41:01+03:00" level=warning msg="The \"WEB_RP_NAME\" variable is not set. Defaulting to a blank string."
+time="2025-09-30T13:41:01+03:00" level=warning msg="The \"GEMINI_MODEL\" variable is not set. Defaulting to a blank string."
+wp-redis  | 1:C 30 Sep 2025 07:09:36.094 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https://github.com/jemalloc/jemalloc/issues/1328. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.
+wp-redis  | 1:C 30 Sep 2025 07:09:36.094 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+wp-redis  | 1:C 30 Sep 2025 07:09:36.094 * Redis version=7.4.5, bits=64, commit=00000000, modified=0, pid=1, just started
+wp-redis  | 1:C 30 Sep 2025 07:09:36.094 # Warning: no config file specified, using the default config. In order to specify a config file use redis-server /path/to/redis.conf
+wp-redis  | 1:M 30 Sep 2025 07:09:36.094 * monotonic clock: POSIX clock_gettime
+wp-redis  | 1:M 30 Sep 2025 07:09:36.095 * Running mode=standalone, port=6379.
+wp-redis  | 1:M 30 Sep 2025 07:09:36.096 * Server initialized
+wp-redis  | 1:M 30 Sep 2025 07:09:36.096 * Ready to accept connections tcp

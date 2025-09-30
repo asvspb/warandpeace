@@ -175,3 +175,6 @@ API_USAGE_EVENTS_TTL_DAYS = int(os.getenv("API_USAGE_EVENTS_TTL_DAYS", "30").str
 # When enabled, selected runtime counters (HTTP requests, articles processed)
 # are persisted into SQLite per calendar day and available in web UI history.
 SESSION_STATS_ENABLED = os.getenv("SESSION_STATS", "false").strip().lower() in {"1", "true", "yes"}
+
+# --- Redis configuration for task queue ---
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")

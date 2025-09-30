@@ -1,0 +1,10 @@
+web-1  | INFO:     127.0.0.1:43494 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:33194 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:33196 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:44768 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:49046 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:54776 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:45104 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:45114 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:43512 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:43902 - "GET /healthz HTTP/1.1" 200 OK

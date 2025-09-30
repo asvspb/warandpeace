@@ -199,3 +199,26 @@ services:
     volumes:
       - ./backups:/var/backups/warandpeace
     restart: unless-stopped
+
+  summarization-workers:
+    build: .
+    container_name: wp-summarization-workers
+    command: python3 scripts/start_summarization_workers.py --workers 2
+    env_file: .env
+    environment:
+      - TZ=${TZ:-Europe/Moscow}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - DATABASE_URL=postgresql+psycopg://wp:${POSTGRES_PASSWORD}@postgres:5432/warandpeace
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      # LLM Configuration
+      - LLM_PRIMARY=${LLM_PRIMARY:-gemini}
+      - GEMINI_ENABLED=${GEMINI_ENABLED:-true}
+      - MISTRAL_ENABLED=${MISTRAL_ENABLED:-true}
+      - GOOGLE_API_KEYS=${GOOGLE_API_KEYS}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL}
+      - MISTRAL_MODEL_NAME=${MISTRAL_MODEL_NAME}
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - postgres

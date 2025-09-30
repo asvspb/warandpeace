@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-\"\"\"
+"""
 Простой тест для проверки состояния кнопки резюмирования без использования Selenium
-\"\"\"
+"""
 import requests
 from bs4 import BeautifulSoup
 import re
 
 def test_summarize_button():
-    \"\"\"Проверяет, что кнопка резюмирования отображается корректно\"\"\"
+    """Проверяет, что кнопка резюмирования отображается корректно"""
     try:
         # Отправляем запрос к веб-приложению
         response = requests.get('http://localhost:8080/day/2025-01-01', 

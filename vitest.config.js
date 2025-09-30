@@ -2,7 +2,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
     test: {
-        include: ['tests/frontend/unit/calendar.test.js'],
+        include: ['tests/frontend/unit/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
         exclude: [
             'node_modules',
             'dist',

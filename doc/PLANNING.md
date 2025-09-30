@@ -8,6 +8,7 @@
 - Раз в неделю: синхронизировать с ROADMAP.md и STATUS.md.
 
 ## Активные планы
+- Улучшения UI/UX календаря и суммаризации: doc/CALENDAR_AND_SUMMARIZATION_UI_PLAN_RU.md.
 - Персистентная статистика API (остаток): doc/API_USAGE_PERSISTENCE_PLAN_RU.md — этапы: интеграция в summarizer, метрики session_*/daily_*, CLI/UI, тесты.
 - Поиск и анти-дубли на стороне БД: FTS + pg_trgm (создать план: doc/FTS_TRGM_PLAN_RU.md).
 - JSONB для extra_json в api_usage_events (создать план: doc/API_USAGE_JSONB_PLAN_RU.md).
@@ -17,6 +18,7 @@
 - Материализованные представления для отчётов (mv_api_usage_daily) — manage-команда REFRESH (создать план: doc/MV_REPORTS_PLAN_RU.md).
 
 ## Завершено недавно
+- Улучшение UI/UX и надежности: добавлена асинхронная загрузка календаря, запуск суммаризации по требованию с визуальной обратной связью, внедрены E2E/юнит-тесты для фронтенда (Vitest, Playwright) и улучшена инфраструктура (Healthchecks, Watchdog, Caddy HTTPS).
 - v2.0 — Python 3.12 + PostgreSQL (dual-backend), схема через SQLAlchemy, миграция данных — см. doc/RELEASELOG.md#v20.
 
 ## Регулярные действия

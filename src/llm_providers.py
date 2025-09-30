@@ -18,7 +18,9 @@ from config import (
     GOOGLE_API_KEYS, GEMINI_MODEL_NAME, MISTRAL_API_KEY, MISTRAL_MODEL_NAME,
     LLM_TIMEOUT_SEC, LLM_MAX_TOKENS
 )
-from metrics import LLM_REQUESTS_TOTAL, LLM_LATENCY_SECONDS
+from metrics import (
+    LLM_REQUESTS_BY_KEY_TOTAL, EXTERNAL_HTTP_REQUEST_DURATION_SECONDS
+)
 
 logger = logging.getLogger(__name__)
 
@@ -118,18 +120,18 @@ class GeminiProvider(LLMProvider):
                 
                 if response.text:
                     logger.info(f"Ответ от Gemini успешно получен.")
-                    LLM_REQUESTS_TOTAL.labels(provider="gemini", status="success", reason="ok").inc()
+                    LLM_REQUESTS_BY_KEY_TOTAL.labels(provider="gemini", key_id=key_hash[:8]).inc()
                     return response.text.strip()
                 else:
                     error_log_entries.append(f"Ключ #{idx + 1}: Пустой ответ (safety block)")
-                    LLM_REQUESTS_TOTAL.labels(provider="gemini", status="failure", reason="blocked").inc()
+                    # Не увеличиваем счетчик ошибок по ключу, т.к. это не проблема ключа
                     continue
 
             except ResourceExhausted as e:
                 retry_delay_seconds = getattr(e, 'retry_delay', 300)
                 cooldown_until = datetime.now() + timedelta(seconds=retry_delay_seconds)
                 error_log_entries.append(f"Ключ #{idx + 1}: Квота исчерпана (отключен до {cooldown_until.isoformat()})")
-                LLM_REQUESTS_TOTAL.labels(provider="gemini", status="failure", reason="quota_exceeded").inc()
+                LLM_REQUESTS_BY_KEY_TOTAL.labels(provider="gemini", key_id=key_hash[:8]).inc() # Считаем как попытку
                 key_statuses[key_hash] = {"reason": "quota_exceeded", "cooldown_until": cooldown_until.isoformat()}
                 _save_key_status(key_statuses)
                 continue
@@ -137,17 +139,16 @@ class GeminiProvider(LLMProvider):
                 message = str(e).lower()
                 if 'location is not supported' in message:
                     error_log_entries.append(f"Ключ #{idx + 1}: Регион не поддерживается")
-                    LLM_REQUESTS_TOTAL.labels(provider="gemini", status="failure", reason="geo_unsupported").inc()
                     key_statuses[key_hash] = {"reason": "geo_unsupported", "timestamp": datetime.now().isoformat()}
                     _save_key_status(key_statuses)
                 else:
                     error_log_entries.append(f"Ключ #{idx + 1}: Неизвестная ошибка ({e})")
                     logger.error(f"Неизвестная ошибка с ключом Gemini #{idx + 1}: {e}", exc_info=True)
-                    LLM_REQUESTS_TOTAL.labels(provider="gemini", status="failure", reason="unknown").inc()
+                LLM_REQUESTS_BY_KEY_TOTAL.labels(provider="gemini", key_id=key_hash[:8]).inc() # Считаем как попытку
                 continue
             finally:
                 duration = time.time() - start_time
-                LLM_LATENCY_SECONDS.labels(provider="gemini", model=GEMINI_MODEL_NAME).observe(duration)
+                EXTERNAL_HTTP_REQUEST_DURATION_SECONDS.labels(target='llm').observe(duration)
         
         if error_log_entries:
             logger.warning(f"Не удалось получить ответ от Gemini. Ошибки по ключам: {'; '.join(error_log_entries)}")
@@ -184,12 +185,12 @@ class MistralProvider(LLMProvider):
             
             summary = chat_response.choices[0].message.content
             logger.info("Ответ от Mistral успешно получен.")
-            LLM_REQUESTS_TOTAL.labels(provider="mistral", status="success", reason="ok").inc()
+            LLM_REQUESTS_BY_KEY_TOTAL.labels(provider="mistral", key_id="default").inc()
             return summary.strip()
         except Exception as e:
             logger.error(f"Ошибка при запросе к Mistral: {e}")
-            LLM_REQUESTS_TOTAL.labels(provider="mistral", status="failure", reason="unknown").inc()
+            LLM_REQUESTS_BY_KEY_TOTAL.labels(provider="mistral", key_id="default").inc() # Считаем как попытку
             return None
         finally:
             duration = time.time() - start_time
-            LLM_LATENCY_SECONDS.labels(provider="mistral", model=MISTRAL_MODEL_NAME).observe(duration)
+            EXTERNAL_HTTP_REQUEST_DURATION_SECONDS.labels(target='llm').observe(duration)

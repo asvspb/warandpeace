@@ -13,7 +13,9 @@
     {% for week in calendar.weeks %}
     {% for day in week.days %}
     <div
-        class="calendar-day {% if day.in_month %}in-month{% else %}out-of-month{% endif %} {% if day.date == today_str %}today{% endif %}">
+        class="calendar-day {% if day.in_month %}in-month{% else %}out-of-month{% endif %} {% if day.date == today_str %}today{% endif %}"
+        data-date="{{ day.date }}"
+        data-article-ids="{{ day.article_ids | join(',') if day.article_ids else '' }}">
         <div class="day-number">{{ day.day }}</div>
         <a class="day-link" href="/day/{{ day.date }}">
             <div class="day-metrics">

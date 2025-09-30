@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-\"\"\"
+"""
 Простой тест для проверки логики анимации кнопки резюмирования
-\"\"\"
+"""
 import unittest
 import os
 import sys
@@ -9,7 +9,7 @@ import sys
 
 class TestAnimationLogic(unittest.TestCase):
     def test_css_changes(self):
-        \"\"\"Проверка, что CSS изменения корректны\"\"\"
+        """Проверка, что CSS изменения корректны"""
         with open('src/webapp/static/styles.css', 'r', encoding='utf-8') as f:
             css_content = f.read()
             
@@ -28,21 +28,21 @@ class TestAnimationLogic(unittest.TestCase):
         self.assertIn('@keyframes pulse {', css_content)
         
     def test_js_changes(self):
-        \"\"\"Проверка, что JavaScript изменения корректны\"\"\"
+        """Проверка, что JavaScript изменения корректны"""
         with open('src/webapp/static/daily.js', 'r', encoding='utf-8') as f:
             js_content = f.read()
             
         # Проверяем, что код добавляет класс 'processing' вместо 'muted' при запуске
-        self.assertIn(\"btn.classList.add('processing');\", js_content)
+        self.assertIn("btn.classList.add('processing');", js_content)
         
         # Проверяем, что код удаляет класс 'processing' при ошибке
-        self.assertIn(\"btn.classList.remove('processing');\", js_content)
+        self.assertIn("btn.classList.remove('processing');", js_content)
         
         # Проверяем, что мы больше не добавляем класс 'muted' при запуске процесса
-        lines = js_content.split('\\n')
+        lines = js_content.split('\n')
         found_add_muted = False
         for line in lines:
-            if 'classList.add' in line and \"'muted'\" in line:
+            if 'classList.add' in line and "'muted'" in line:
                 # Проверяем, что это не в процессе установки состояния во время обработки
                 if 'processing' not in line and 'Обработка' not in line:
                     found_add_muted = True
@@ -52,7 +52,7 @@ class TestAnimationLogic(unittest.TestCase):
         # Проверим, что мы НЕ добавляем muted при начале процесса, а используем processing
         start_processing_lines = []
         for i, line in enumerate(lines):
-            if \"btn.textContent = 'Обработка...'\":
+            if "btn.textContent = 'Обработка...'":
                 start_processing_lines.append(i)
         
         for line_idx in start_processing_lines:
@@ -65,5 +65,5 @@ class TestAnimationLogic(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    print(\"Тестирование логики анимации кнопки резюмирования...\")
+    print("Тестирование логики анимации кнопки резюмирования...")
     unittest.main(verbosity=2)

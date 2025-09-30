@@ -11,7 +11,7 @@ os.environ['GOOGLE_API_KEYS'] = 'test_key_1,test_key_2'
 os.environ['MISTRAL_API_KEY'] = 'test_mistral_key'
 
 from src.llm_providers import GeminiProvider, MistralProvider
-from src.summarizer import summarize_with_fallback
+from src.summarizer import summarize_text_local
 
 # --- Фикстуры ---
 
@@ -53,14 +53,14 @@ def test_mistral_provider_success(mock_mistral):
     assert summary == "Резюме от Mistral"
     mock_mistral.assert_called_once()
 
-# --- Тесты summarize_with_fallback (оркестратор) ---
+# --- Тесты summarize_text_local (оркестратор) ---
 
 def test_fallback_gemini_to_mistral(mock_gemini, mock_mistral):
     """Тест фолбэка с Gemini на Mistral при ошибке."""
     mock_gemini.return_value.generate_content.side_effect = Exception("Gemini API error")
     
     os.environ['LLM_PRIMARY'] = 'gemini'
-    summary = summarize_with_fallback("Тестовый текст")
+    summary = summarize_text_local("Тестовый текст")
     
     assert summary == "Резюме от Mistral"
     assert mock_gemini.return_value.generate_content.call_count > 0
@@ -69,7 +69,7 @@ def test_fallback_gemini_to_mistral(mock_gemini, mock_mistral):
 def test_fallback_primary_mistral(mock_gemini, mock_mistral):
     """Тест, когда Mistral является первичным провайдером."""
     os.environ['LLM_PRIMARY'] = 'mistral'
-    summary = summarize_with_fallback("Тестовый текст")
+    summary = summarize_text_local("Тестовый текст")
     
     assert summary == "Резюме от Mistral"
     mock_mistral.assert_called_once()
@@ -80,7 +80,7 @@ def test_fallback_both_disabled():
     os.environ['GEMINI_ENABLED'] = 'false'
     os.environ['MISTRAL_ENABLED'] = 'false'
     
-    summary = summarize_with_fallback("Тестовый текст")
+    summary = summarize_text_local("Тестовый текст")
     assert summary is None
     
     # Возвращаем значения для других тестов

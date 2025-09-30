@@ -1,0 +1,1096 @@
+time="2025-09-30T13:39:29+03:00" level=warning msg="The \"WEB_RP_ID\" variable is not set. Defaulting to a blank string."
+time="2025-09-30T13:39:29+03:00" level=warning msg="The \"WEB_RP_NAME\" variable is not set. Defaulting to a blank string."
+time="2025-09-30T13:39:29+03:00" level=warning msg="The \"GEMINI_MODEL\" variable is not set. Defaulting to a blank string."
+web-1  | INFO:     Started server process [1]
+web-1  | INFO:     Waiting for application startup.
+web-1  | 30-09.25 - [10:09] - INFO - PG schema ensured via SQLAlchemy.
+web-1  | INFO:     Application startup complete.
+web-1  | INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)
+web-1  | INFO:     172.18.0.1:40678 - "GET / HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:40692 - "GET /static/calendar.js?v= HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:40678 - "GET /static/styles.css?v= HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:40702 - "GET /static/progress.js?v= HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:40678 - "GET /static/dashboard.js?v= HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:40678 - "GET /calendar HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:40678 - "GET /static/calendar.js HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:40678 - "GET /calendar?year=2025&month=8 HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:60928 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:60940 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:52638 - "GET /day/2025-08-11 HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:52638 - "GET /static/daily.js?v= HTTP/1.1" 200 OK
+web-1  | 30-09.25 - [10:10] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [10:10] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [10:10] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [10:10] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [10:10] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [10:10] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [10:10] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [10:10] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [10:10] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [10:10] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [10:10] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [10:10] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [10:10] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [10:10] - INFO - Резюме успешно получено от Mistral.
+web-1  | INFO:     127.0.0.1:57458 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:59952 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:59960 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:51516 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:33758 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:50438 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:60386 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:60398 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:53114 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:34628 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:33140 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:33244 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:33254 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:51206 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:53124 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:51468 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:32978 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:42976 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:42992 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:50748 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:47098 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:54286 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:48744 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:55526 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:55542 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:41124 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:48108 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:53198 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:55710 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:55716 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:48854 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:45932 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:46410 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:55424 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:58368 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:58370 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:33854 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:57234 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:60340 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:50010 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:50020 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:58418 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:50004 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:47298 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:43690 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:43696 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:52824 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:57100 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:36840 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:41348 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:35382 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:35384 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:33698 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:52470 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:41326 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:51196 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:51200 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:37002 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:46206 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:59790 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:55138 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:55142 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:47188 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:40500 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:45622 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:49986 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:49992 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:49280 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:46102 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:36906 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:41704 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:33008 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:33016 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:50414 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:56780 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:40734 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:57724 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:57736 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:49256 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:42826 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:50296 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:46674 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:46682 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:34758 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:51074 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:33654 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:34170 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:39944 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:39952 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:40994 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:38252 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:40272 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:43756 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:43758 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:55268 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:43094 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:59516 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:43400 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:43404 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:47406 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:42284 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:37082 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:51610 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:60044 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:60046 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:54836 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:33528 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:35620 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:39216 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:39226 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:39204 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:34610 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:58686 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:53452 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:53468 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:55548 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:44180 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:58222 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:53574 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:42370 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:42378 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:33856 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:52370 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:47766 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:55890 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:55896 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:48106 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:45632 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:40032 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:35922 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:35932 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:47632 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:41936 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:46004 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:41662 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:41678 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:42642 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:49268 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:36388 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:43558 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:52448 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:52458 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:59954 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:50506 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:45198 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:42978 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:42984 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:50998 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:43686 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:32812 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:55332 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:55340 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:53808 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:42234 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:60266 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:38308 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:51046 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:51056 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:38070 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:32968 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:51718 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:34876 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:34880 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:34986 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:42120 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:39258 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:33624 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:33640 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:40776 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:51274 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:54200 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:48570 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:34166 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:53114 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:53120 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:60576 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:59190 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:37176 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:38806 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:38810 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:37156 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:46120 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:34442 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:47348 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:47350 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:43222 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:40438 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:55052 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:53486 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:53500 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:42910 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:59324 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:51760 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:38836 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:35334 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:35342 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:40710 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:46540 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:58086 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:50768 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:50780 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:35178 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:34258 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:47528 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:35464 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:35470 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:46812 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:48230 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:47304 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:44112 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:37220 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:37224 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:33516 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:53150 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:57850 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:47820 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:47826 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:44860 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:45168 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:33254 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:36756 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:36768 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:49478 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:55804 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:52982 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:43156 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:54344 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:54358 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:39686 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:33738 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:41222 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:48936 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:48942 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:32876 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:57074 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:60548 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:54772 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:54776 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:39696 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:42120 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:59822 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:35582 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:52344 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:52356 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:46830 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:49086 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:33300 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:57246 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:57250 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:38262 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:46018 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:40416 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:38464 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:38466 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:56348 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:44170 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:35166 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:46228 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:46244 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:54736 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:49308 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:50140 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:49552 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:51582 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:51588 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:53654 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:48924 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:46220 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:37468 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:37474 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:57082 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:41704 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:50100 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:55222 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:55236 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:58084 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:58164 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:52224 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:57250 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:45988 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:45998 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:42638 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:48340 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:45180 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:33220 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:33236 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:36168 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:41066 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:53584 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:48408 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:48410 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:48904 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:47160 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:33032 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:36338 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:53826 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:53836 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:45608 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:53768 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:43166 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:59354 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:59356 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:35842 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:33404 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:36068 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:50778 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:50790 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:58132 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:56032 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:40900 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:58658 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:56400 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:56408 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:59580 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:57288 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:41644 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:57744 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:43192 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:43194 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:42742 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:60572 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:44154 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:59698 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:59700 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:57284 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:59576 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:60184 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:51682 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:51684 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:56754 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:40320 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:54844 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:48708 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:33848 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:33856 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:42326 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:39604 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:37360 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:38316 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:38332 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:51262 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:37838 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:60780 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:32796 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:32804 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:45570 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:41568 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:59474 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:51386 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:40106 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:40122 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:46740 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:56822 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:47018 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:53080 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:53096 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:53600 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:39614 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:43612 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:42468 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:42476 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:55968 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:39564 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:50952 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:33154 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:59768 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:59780 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:51718 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:59616 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:42182 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:55850 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:55856 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:38088 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:36714 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:45732 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:50682 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:50698 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:37710 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:33716 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:47236 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:50340 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:50342 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:38646 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:53928 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:32912 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:33602 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:38306 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:38318 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:53324 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:34134 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:45070 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:40028 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:40030 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:49422 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:37104 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:53492 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:42366 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:42368 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:51382 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:41822 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:45404 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:45108 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:58014 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:58026 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:53172 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:56320 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:53872 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:57198 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:57204 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:49828 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:42426 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:45330 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:46514 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:46460 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:46476 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:40582 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:53962 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:39922 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:36436 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:59968 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:59974 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:50280 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:56908 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:53966 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:46850 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:46858 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:33374 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:47922 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:41180 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:60118 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:60132 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:46550 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:33590 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:42534 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:50256 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:34528 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:34542 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:36606 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:49068 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:43140 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:46250 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:46252 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:59334 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:33850 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:43176 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:51152 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:51158 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:36824 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:33276 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:45084 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:56722 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:56724 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:46872 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:33682 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:54152 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:41768 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:46630 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:46646 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:52594 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:36706 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:49180 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:35264 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:35280 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:48604 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:57562 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:60866 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:51130 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:51136 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:51824 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:46824 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:44218 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:52976 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:49836 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:49850 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:54552 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:60536 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:40626 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:38200 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:33746 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:58852 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:43544 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:60204 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:60276 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:60280 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:35092 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:36786 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:43856 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:44098 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:42034 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:42042 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:43184 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:36220 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:43288 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:57944 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:57960 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:58100 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:55030 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:52356 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:42866 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:42878 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:57588 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:33076 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:42910 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:49398 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:49406 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:51672 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:34040 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:36158 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:53504 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:60090 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:60092 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:55208 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:45478 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:53614 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:57802 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:57818 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:52512 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:44002 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:33536 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:39436 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:39442 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:57718 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:55194 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:60840 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:33176 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:40208 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:40212 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:50194 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:52288 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:40402 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:57252 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:57256 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:41692 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:54616 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:41790 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:43654 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:43660 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:35018 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:58482 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:59028 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:48480 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:35968 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:35984 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:43382 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:37302 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:60968 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:45166 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:45178 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:41208 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:42268 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:47808 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:44948 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:44960 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:42914 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:44950 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:33502 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:37966 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:36926 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:33172 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:33184 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:49788 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:54388 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:39706 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:36034 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:36038 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:50272 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:42530 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:50050 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:35562 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:35568 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:38802 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:59188 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:41068 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:47874 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:47886 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:52356 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:45118 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:45732 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:33094 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:53740 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:53754 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:59088 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:46694 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:50382 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:37610 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:37626 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:33874 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:40732 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:56572 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:56888 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:56892 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:40340 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:58600 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:35620 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:52416 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:40932 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:40944 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:47708 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:59760 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:52152 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:55680 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:55692 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:36754 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:55392 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:53104 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:34320 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:34324 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:54512 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:58206 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:46880 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:45918 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:58110 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:58124 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:37484 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:56262 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:50514 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:35530 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:35532 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:49478 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:41822 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:35528 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:42728 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:42738 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:37198 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:56310 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:52788 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:45702 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:45712 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:40678 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:57024 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:39304 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:56834 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:56428 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:56438 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:55596 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:34342 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:38880 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:57638 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:57640 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:58096 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:53240 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:47268 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:55990 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:55992 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:49614 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:50672 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:55722 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:35074 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:52428 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:52430 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:39744 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:47466 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:39114 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:52256 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:52268 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:34696 - "GET /day/2025-08-11 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:52558 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:33486 - "GET /day/2025-08-11 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:46606 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:41354 - "GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1" 404 Not Found
+web-1  | 30-09.25 - [13:18] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:18] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:18] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:18] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:18] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:18] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:18] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:18] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:18] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:18] - INFO - Резюме успешно получено от Mistral.
+web-1  | INFO:     172.18.0.1:43836 - "POST /articles/1112/summarize HTTP/1.1" 200 OK
+web-1  | 30-09.25 - [13:18] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:18] - INFO - Резюме успешно получено от Mistral.
+web-1  | INFO:     172.18.0.1:43848 - "POST /articles/1113/summarize HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:43850 - "POST /articles/1114/summarize HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:43852 - "POST /articles/1115/summarize HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:40620 - "POST /articles/1116/summarize HTTP/1.1" 200 OK
+web-1  | 30-09.25 - [13:18] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:18] - INFO - Резюме успешно получено от Mistral.
+web-1  | INFO:     172.18.0.1:40622 - "POST /articles/1117/summarize HTTP/1.1" 200 OK
+web-1  | 30-09.25 - [13:18] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:18] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:19] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:19] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:19] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:19] - INFO - Резюме успешно получено от Mistral.
+web-1  | INFO:     127.0.0.1:43524 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | 30-09.25 - [13:19] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:19] - INFO - Резюме успешно получено от Mistral.
+web-1  | INFO:     172.18.0.1:43836 - "POST /articles/1118/summarize HTTP/1.1" 200 OK
+web-1  | 30-09.25 - [13:19] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:19] - INFO - Резюме успешно получено от Mistral.
+web-1  | INFO:     172.18.0.1:43848 - "POST /articles/1119/summarize HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:43850 - "POST /articles/1120/summarize HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:43852 - "POST /articles/1121/summarize HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:40620 - "POST /articles/1122/summarize HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:40622 - "POST /articles/1123/summarize HTTP/1.1" 200 OK
+web-1  | 30-09.25 - [13:19] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:19] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:19] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:19] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:19] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:19] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:19] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:19] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:20] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:20] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:20] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:20] - INFO - Резюме успешно получено от Mistral.
+web-1  | INFO:     172.18.0.1:52358 - "GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.1:55622 - "GET /calendar?year=2025&month=8 HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:55622 - "GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.1:55622 - "GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.1:55622 - "GET /static/calendar.js HTTP/1.1" 304 Not Modified
+web-1  | INFO:     172.18.0.1:55622 - "GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.1:55622 - "GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.1:55622 - "GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.1:55622 - "GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.1:55622 - "GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.1:55622 - "GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.1:55622 - "GET /calendar?year=2025&month=8 HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:55622 - "GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.1:55622 - "GET /day/2025-08-04 HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:55622 - "GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.1:55622 - "GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.1:55622 - "GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.1:55622 - "GET /day/2025-08-05 HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:55622 - "GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.1:55622 - "GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.1:55622 - "GET /day/2025-08-11 HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:55622 - "GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:51926 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:51938 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | 30-09.25 - [13:20] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:20] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:20] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:20] - INFO - Резюме успешно получено от Mistral.
+web-1  | INFO:     172.18.0.1:36274 - "POST /articles/1130/summarize HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:36290 - "POST /articles/1131/summarize HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:38238 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:36290 - "GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.1:36290 - "GET /calendar?year=2025&month=8 HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:36290 - "GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1" 404 Not Found
+web-1  | INFO:     127.0.0.1:50226 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:44120 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:47416 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:47430 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:35672 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:49584 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:54954 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:49600 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:49614 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:40736 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:52410 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:60536 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:52102 - "GET / HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:52102 - "GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.1:52114 - "GET /static/calendar.js?v= HTTP/1.1" 304 Not Modified
+web-1  | INFO:     172.18.0.5:58172 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:58184 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:43696 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:58430 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:56572 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:37230 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:37234 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:38240 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:45744 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:41740 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:36624 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:36632 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:51936 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:58610 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:50534 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:46682 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:46688 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:40170 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:42232 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:40618 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.1:46762 - "GET /day/2025-01-01 HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:46778 - "GET /static/daily.js?v= HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:46762 - "GET /static/styles.css?v= HTTP/1.1" 304 Not Modified
+web-1  | INFO:     172.18.0.1:46762 - "GET /calendar HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:46762 - "GET /static/calendar.js HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:36158 - "GET /calendar?year=2025&month=8 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:41614 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:36158 - "GET /day/2025-08-12 HTTP/1.1" 200 OK
+web-1  | 30-09.25 - [13:31] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:31] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:31] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:31] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:31] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:31] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:31] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:31] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:31] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:31] - INFO - Резюме успешно получено от Mistral.
+web-1  | INFO:     172.18.0.1:36158 - "POST /articles/1080/summarize HTTP/1.1" 200 OK
+web-1  | 30-09.25 - [13:31] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:31] - INFO - Резюме успешно получено от Mistral.
+web-1  | INFO:     172.18.0.1:36160 - "POST /articles/1097/summarize HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:36168 - "POST /articles/1104/summarize HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:36184 - "POST /articles/1088/summarize HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:42914 - "POST /articles/1077/summarize HTTP/1.1" 200 OK
+web-1  | 30-09.25 - [13:31] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:31] - INFO - Резюме успешно получено от Mistral.
+web-1  | INFO:     172.18.0.1:42922 - "POST /articles/1078/summarize HTTP/1.1" 200 OK
+web-1  | 30-09.25 - [13:32] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:32] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:32] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:32] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:32] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:32] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:32] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:32] - INFO - Резюме успешно получено от Mistral.
+web-1  | INFO:     172.18.0.1:36158 - "POST /articles/1079/summarize HTTP/1.1" 200 OK
+web-1  | 30-09.25 - [13:32] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:32] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:32] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:32] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:32] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:32] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:32] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:32] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:32] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:32] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:32] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:32] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:33] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:33] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:33] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:33] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:33] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:33] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:33] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:33] - INFO - Резюме успешно получено от Mistral.
+web-1  | INFO:     127.0.0.1:43816 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:33826 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:41980 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:41982 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:47500 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:52938 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:41870 - "GET /day/2025-08-12 HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:41882 - "GET /day/2025-08-12 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:33198 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:57448 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:57454 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:41912 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:43022 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:36494 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:57212 - "GET /day/2025-08-05 HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:34698 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:34702 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:55972 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:37836 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:35512 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:43700 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:43710 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:49742 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:35594 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:57320 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:36116 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:36124 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:44644 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:37700 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:59844 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:51172 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:51180 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:51176 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:36448 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:39380 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:39782 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:39798 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:43016 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:46472 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:34842 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:40244 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:33212 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:33224 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:52798 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:39600 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:33118 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:46048 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:46062 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:35816 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:51702 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:43494 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:33194 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:33196 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:44768 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:49046 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:54776 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:45104 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:45114 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:43512 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:43902 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:52450 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:49124 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:49138 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:56244 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:32920 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:55324 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:56804 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:56818 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:60550 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:38088 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:43798 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | 30-09.25 - [13:54] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:54] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:54] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:54] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:54] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:54] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:54] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:54] - INFO - Резюме успешно получено от Mistral.
+web-1  | INFO:     172.18.0.1:57018 - "POST /articles/1264/summarize HTTP/1.1" 200 OK
+web-1  | 30-09.25 - [13:54] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:54] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:54] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:54] - INFO - Резюме успешно получено от Mistral.
+web-1  | INFO:     172.18.0.1:57028 - "POST /articles/1267/summarize HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:57044 - "POST /articles/1272/summarize HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:57054 - "POST /articles/1278/summarize HTTP/1.1" 200 OK
+web-1  | 30-09.25 - [13:54] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:54] - INFO - Резюме успешно получено от Mistral.
+web-1  | INFO:     172.18.0.1:57062 - "POST /articles/1258/summarize HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:57070 - "POST /articles/1259/summarize HTTP/1.1" 200 OK
+web-1  | 30-09.25 - [13:54] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:54] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:55] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:55] - INFO - Резюме успешно получено от Mistral.
+web-1  | INFO:     172.18.0.1:57018 - "POST /articles/1260/summarize HTTP/1.1" 200 OK
+web-1  | 30-09.25 - [13:55] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:55] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:55] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:55] - INFO - Резюме успешно получено от Mistral.
+web-1  | INFO:     172.18.0.1:57028 - "POST /articles/1261/summarize HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:57044 - "POST /articles/1262/summarize HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:57054 - "GET /calendar?year=2025&month=8 HTTP/1.1" 200 OK
+web-1  | 30-09.25 - [13:55] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:55] - INFO - Резюме успешно получено от Mistral.
+web-1  | INFO:     172.18.0.1:57062 - "POST /articles/1265/summarize HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:57070 - "POST /articles/1263/summarize HTTP/1.1" 200 OK
+web-1  | 30-09.25 - [13:55] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:55] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:55] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:55] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:55] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:55] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:55] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:55] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:55] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:55] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:55] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:55] - INFO - Резюме успешно получено от Mistral.
+web-1  | 30-09.25 - [13:55] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [13:55] - INFO - Резюме успешно получено от Mistral.
+web-1  | INFO:     172.18.0.1:60880 - "GET /day/2025-08-05 HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:48314 - "GET /calendar?year=2025&month=8 HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:48314 - "GET /calendar?year=2025&month=8 HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:39234 - "GET /calendar?year=2025&month=8 HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:39234 - "GET /day/2025-08-05 HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:39234 - "GET /day/2025-08-05 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:46256 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:51556 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:50466 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:50470 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:45998 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:33126 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:56788 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:45300 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:45316 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:41228 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:51658 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:39162 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:34676 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:34684 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:57602 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:45354 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:39372 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:39740 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:48704 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:48714 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:56124 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:49848 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:44454 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:45298 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:45306 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:54188 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:40072 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:34884 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:44278 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:44290 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:50140 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:38204 - "GET /calendar?year=2025&month=8 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:58894 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:47998 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:34006 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:34018 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:59648 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:37408 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:33554 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:45882 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:33768 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:33774 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:50788 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:56052 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:41108 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:58680 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:58684 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:56576 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:42822 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:57988 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:60036 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:60044 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:42780 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:49512 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:55318 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:39608 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:52108 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:52114 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:40138 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:33250 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:54940 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:49096 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:49108 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:47876 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:53844 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:35724 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:41630 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:41644 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:52174 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:35152 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:53606 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:55362 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:34496 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:34508 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:46828 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:33246 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:40402 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | 30-09.25 - [14:18] - INFO - HTTP Request: POST https://api.mistral.ai/v1/chat/completions "HTTP/1.1 200 OK"
+web-1  | 30-09.25 - [14:18] - INFO - Резюме успешно получено от Mistral.
+web-1  | INFO:     172.18.0.1:42486 - "POST /articles/1274/summarize HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:47772 - "GET /admin/backfill/status HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:49618 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:34318 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:38472 - "GET /calendar?year=2025&month=8 HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:42412 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:35002 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:35008 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:40456 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:57210 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:57570 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.1:33638 - "GET /calendar?year=2025&month=8&fragment=1 HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:34678 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:34682 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:38784 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:56590 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:55894 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     172.18.0.5:42018 - "GET /api/backfill/status HTTP/1.1" 404 Not Found
+web-1  | INFO:     172.18.0.5:42030 - "GET /backfill/status-public HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:51972 - "GET /healthz HTTP/1.1" 200 OK
+web-1  | INFO:     127.0.0.1:56394 - "GET /healthz HTTP/1.1" 200 OK

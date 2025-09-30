@@ -14,6 +14,7 @@ import logging
 
 from src.webapp import routes_articles, routes_duplicates, routes_dlq, routes_api, routes_webauthn
 from src.webapp import routes_admin  # admin JSON control endpoints
+from src.webapp import routes_summarization
 from src import config
 from src import backfill
 try:
@@ -151,9 +152,10 @@ app.include_router(routes_duplicates.router, tags=["Frontend"])
 app.include_router(routes_dlq.router, tags=["Frontend"])
 if os.getenv("WEB_API_ENABLED", "false").lower() == "true":
     app.include_router(routes_api.router, tags=["API"])
-app.include_router(routes_webauthn.router, tags=["Auth"]) 
-app.include_router(routes_admin.router, tags=["Admin"]) 
-app.include_router(routes_admin.public_router, tags=["Public"]) 
+app.include_router(routes_webauthn.router, tags=["Auth"])
+app.include_router(routes_admin.router, tags=["Admin"])
+app.include_router(routes_admin.public_router, tags=["Public"])
+app.include_router(routes_summarization.router, tags=["Summarization"])
 
 
 # --- Public Endpoints ---
