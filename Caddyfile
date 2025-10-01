@@ -1,17 +1,16 @@
+# Global options block (must be first if present)
 {
-	email {$CADDY_EMAIL}
+	acme_ca {$CADDY_ACME_CA:-https://acme-v02.api.letsencrypt.org/directory}
 }
 
-{$CADDY_DOMAIN} {
+# HTTP-only proxy for local development
+:80 {
 	encode gzip
 	log
-	# Force HTTPS, automatic TLS by Caddy
 	reverse_proxy web:8080 {
 		header_up Host {host}
 		header_up X-Forwarded-Proto {scheme}
 		header_up X-Forwarded-For {remote}
 	}
 	@metrics path /metrics
-	# Optionally protect metrics by IP, example:
-	# remote_ip 10.0.0.0/8 192.168.0.0/16
 }

@@ -19,6 +19,9 @@ ENV METRICS_ENABLED=true \
     METRICS_PORT=8000
 EXPOSE 8000
 
-# 7. Команда, которая будет выполняться при запуске контейнера
+# 7. Установка PYTHONPATH чтобы импорты из src работали
+ENV PYTHONPATH="/app:${PYTHONPATH}"
+
+# 8. Команда, которая будет выполняться при запуске контейнера
 CMD ["python", "src/bot.py"]
 LABEL last_build="2025-09-19 00:00:00"

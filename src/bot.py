@@ -12,7 +12,7 @@ from telegram.error import NetworkError, TimedOut, RetryAfter, BadRequest, Teleg
 from telegram.ext import Application, CommandHandler, ContextTypes, filters, JobQueue
 from telegram.request import HTTPXRequest
 
-from config import (
+from src.config import (
     TELEGRAM_BOT_TOKEN,
     TELEGRAM_CHANNEL_ID,
     TELEGRAM_ADMIN_ID,
@@ -22,12 +22,12 @@ from config import (
     SERVICE_TG_ENABLED,
     SERVICE_TG_CHANNEL_ID,
 )
-from config import (
+from src.config import (
     API_USAGE_PERSISTENCE_ENABLED,
     API_USAGE_FLUSH_INTERVAL_SEC,
     API_USAGE_EVENTS_TTL_DAYS,
 )
-from config import SESSION_STATS_ENABLED
+from src.config import SESSION_STATS_ENABLED
 from time_utils import now_msk, to_utc, utc_to_local
 from metrics import (
     start_metrics_server,
