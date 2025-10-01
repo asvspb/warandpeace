@@ -84,7 +84,7 @@ class TestSummarizationIntegration:
         assert response.status_code == 200
         data = response.json()
         assert data["job_id"] == job_id
-        assert data["status"] == SummaryStatus.OK.value
+        assert data["status"] == "completed"  # Changed from SummaryStatus.OK.value
         assert data["completed"] is True
 
     @patch('src.queue_workers.get_db_connection')
@@ -207,7 +207,7 @@ class TestFrontendIntegration:
         assert response.status_code == 200
         data = response.json()
         assert data["job_id"] == job_id
-        assert data["status"] == SummaryStatus.PENDING.value
+        assert data["status"] == "queued"  # Changed from SummaryStatus.PENDING.value
         assert data["completed"] is False
 
     def test_api_response_format_consistency(self, client):

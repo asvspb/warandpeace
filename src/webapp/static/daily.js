@@ -39,7 +39,29 @@
         }
         const j = await resp.json();
         
-        if (j && (j.ok === true || j.summary_text)){
+        if (j && j.ok === true && j.job_id) {
+          // Asynchronous processing - track the job
+          // Добавляем задачу в трекинг (если calendar.js загружен)
+          if (typeof window !== 'undefined' && window.summarizationJobs) {
+            window.summarizationJobs.set(j.job_id, {
+              articleId: id,
+              status: 'queued',
+              updatedAt: new Date()
+            });
+            // Сохраняем в localStorage
+            if (typeof saveJobsToStorage === 'function') {
+              saveJobsToStorage();
+            }
+          }
+          
+          // Показываем индикатор ожидания
+          btn.textContent = 'Ожидание';
+          btn.classList.add('processing');
+          
+          // Можно также показать уведомление о начале обработки
+          // alert('Суммаризация поставлена в очередь. Статус будет обновляться автоматически.');
+        } else if (j && j.summary_text) {
+          // Synchronous response (backward compatibility)
           // Заменяем кнопку на зелёный бейдж
           const okSpan = document.createElement('span');
           okSpan.className = 'badge success';

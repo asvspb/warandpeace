@@ -149,6 +149,17 @@ def get_month_calendar_data(year: int, month: int) -> Dict[str, Any]:
         'total': int, 'summarized': int, 'all_summarized': bool
       }]
     """
+    # Validate month parameter
+    if not 1 <= month <= 12:
+        # Default to current month if invalid
+        today = date.today()
+        year, month = today.year, today.month
+        
+    # Validate year parameter (reasonable bounds)
+    if not 1900 <= year <= 2100:
+        today = date.today()
+        year = today.year
+    
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
@@ -255,7 +266,18 @@ def get_month_calendar_data(year: int, month: int) -> Dict[str, Any]:
         for week in cal.monthdatescalendar(year, month):
             week_days = [{"date": _to_iso_date(d), "day": d.day, "in_month": d.month == month, "total": 0, "summarized": 0} for d in week]
             weeks.append({"days": week_days, "total": 0, "summarized": 0, "all_summarized": False})
-        return {"year": year, "month": month, "weeks": weeks}
+        
+        # Calculate prev/next months for fallback too
+        (py, pm), (ny, nm) = _prev_next_month(year, month)
+        
+        return {
+            "year": year, 
+            "month": month, 
+            "month_name": _RU_MONTHS.get(month, str(month)),
+            "weeks": weeks,
+            "prev": {"year": py, "month": pm},
+            "next": {"year": ny, "month": nm},
+        }
 
 
 def get_daily_articles(day_iso: str) -> List[Dict[str, Any]]:

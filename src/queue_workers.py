@@ -12,8 +12,14 @@ from sqlalchemy import create_engine
 
 from src.summarizer import summarize_text_background
 from src.models import Summary, SummaryStatus, Article
-from src.database import get_db_connection, init_db
+from src.database import get_db_connection, init_db, set_article_summary
 from src import config
+
+# Import for SSE broadcasting
+try:
+    from src.webapp.server import _sse_broadcast
+except Exception:
+    _sse_broadcast = None
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -83,12 +89,36 @@ def process_summary_job(job_data: Dict[str, Any]) -> bool:
         if summary_text is None:
             logger.error(f"Не удалось получить суммаризацию для статьи {article_id}")
             update_summary_status(article_id, SummaryStatus.FAILED)
+            
+            # Broadcast notification about job failure
+            try:
+                if _sse_broadcast:
+                    _sse_broadcast({
+                        "type": "summarization_failed", 
+                        "article_id": int(article_id),
+                        "status": "failed"
+                    })
+            except Exception:
+                pass
+                
             return False
         
         # Сохраняем результат суммаризации в базе данных
         save_summary_result(article_id, summary_text)
         
         logger.info(f"Суммаризация для статьи {article_id} успешно завершена")
+        
+        # Broadcast notification about job completion
+        try:
+            if _sse_broadcast:
+                _sse_broadcast({
+                    "type": "article_summarized", 
+                    "article_id": int(article_id),
+                    "status": "completed"
+                })
+        except Exception:
+            pass
+            
         return True
         
     except Exception as e:
@@ -97,6 +127,17 @@ def process_summary_job(job_data: Dict[str, Any]) -> bool:
             article_id = job_data.get("article_id")
             if article_id:
                 update_summary_status(article_id, SummaryStatus.FAILED)
+                
+                # Broadcast notification about job failure
+                try:
+                    if _sse_broadcast:
+                        _sse_broadcast({
+                            "type": "summarization_failed", 
+                            "article_id": int(article_id),
+                            "status": "failed"
+                        })
+                except Exception:
+                    pass
         except Exception:
             pass
         return False
@@ -188,10 +229,20 @@ def get_job_status(job_id: str) -> Dict[str, Any]:
                 
                 if row:
                     status = row[0]
+                    # Map backend statuses to frontend-friendly values
+                    frontend_status = "unknown"
+                    if status == SummaryStatus.OK.value:
+                        frontend_status = "completed"
+                    elif status == SummaryStatus.FAILED.value:
+                        frontend_status = "failed"
+                    elif status == SummaryStatus.PENDING.value:
+                        frontend_status = "queued"
+                    
                     return {
                         "job_id": job_id,
                         "article_id": article_id,
-                        "status": status,
+                        "status": frontend_status,
+                        "backend_status": status,  # Keep original for debugging
                         "completed": status == SummaryStatus.OK.value
                     }
                 
@@ -199,15 +250,18 @@ def get_job_status(job_id: str) -> Dict[str, Any]:
                 return {
                     "job_id": job_id,
                     "article_id": article_id,
-                    "status": SummaryStatus.PENDING.value,
+                    "status": "queued",
+                    "backend_status": SummaryStatus.PENDING.value,
                     "completed": False
                 }
     except Exception as e:
         logger.error(f"Ошибка при получении статуса задачи {job_id}: {e}")
         return {
             "job_id": job_id,
-            "status": "unknown",
-            "completed": False
+            "status": "error",
+            "backend_status": "unknown",
+            "completed": False,
+            "error": str(e)
         }
 
 def worker_loop():

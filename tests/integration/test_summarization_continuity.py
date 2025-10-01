@@ -120,7 +120,7 @@ class TestSummarizationContinuity:
             
             # Проверяем, что все запросы были успешными и состояние сохраняется
             assert response1.json()["status"] == "queued"
-            assert response2.json()["status"] == SummaryStatus.PENDING.value
+            assert response2.json()["status"] == "queued"
             # Проверяем, что возвращается количество задач
             assert isinstance(response3.json()["pending_jobs_count"], int)
 

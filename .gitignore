@@ -211,3 +211,5 @@ wp-pulse/
 config/
 scripts/os
 scripts/sys
+web_logs.txt
+web_monitor.txt

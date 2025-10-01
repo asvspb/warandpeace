@@ -170,7 +170,7 @@ class TestSummarizationQueue:
         # Проверки
         assert status_info["job_id"] == job_id
         assert status_info["article_id"] == 123
-        assert status_info["status"] == SummaryStatus.OK.value
+        assert status_info["status"] == "completed"
         assert status_info["completed"] is True
     
     @patch('src.queue_workers.get_db_connection')
@@ -192,7 +192,7 @@ class TestSummarizationQueue:
         # Проверки
         assert status_info["job_id"] == job_id
         assert status_info["article_id"] == 456
-        assert status_info["status"] == SummaryStatus.PENDING.value
+        assert status_info["status"] == "queued"
         assert status_info["completed"] is False
 
 

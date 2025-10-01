@@ -222,3 +222,5 @@ services:
     depends_on:
       - redis
       - postgres
+
+  # --- Summarization Workers service ---

@@ -8,43 +8,44 @@
         <div>Сб</div>
         <div>Вс</div>
     </div>
-</div>
-<div class="calendar-grid">
-    {% for week in calendar.weeks %}
-    {% for day in week.days %}
-    <div
-        class="calendar-day {% if day.in_month %}in-month{% else %}out-of-month{% endif %} {% if day.date == today_str %}today{% endif %}"
-        data-date="{{ day.date }}"
-        data-article-ids="{{ day.article_ids | join(',') if day.article_ids else '' }}">
-        <div class="day-number">{{ day.day }}</div>
-        <a class="day-link" href="/day/{{ day.date }}">
-            <div class="day-metrics">
-                <span
-                    class="metric summary {{ 'success' if day.summarized == day.total and day.total > 0 else 'pending' }}"
-                    title="Резюме">{{ day.summarized }}/{{ day.total }}</span>
+    <div class="calendar-grid">
+        {% for week in calendar.weeks %}
+        <div class="calendar-week">
+            {% for day in week.days %}
+            <div
+                class="calendar-day {% if day.in_month %}in-month{% else %}out-of-month{% endif %} {% if day.date == today_str %}today{% endif %}"
+                data-date="{{ day.date }}"
+                data-article-ids="{{ day.article_ids | join(',') if day.article_ids else '' }}">
+                <div class="day-number">{{ day.day }}</div>
+                <a class="day-link" href="/day/{{ day.date }}">
+                    <div class="day-metrics">
+                        <span
+                            class="metric summary {{ 'success' if day.summarized == day.total and day.total > 0 else 'pending' }}"
+                            title="Резюме">{{ day.summarized }}/{{ day.total }}</span>
+                    </div>
+                </a>
             </div>
-        </a>
-    </div>
-    {% endfor %}
-    <div class="week-summary">
-        {% if week.all_summarized %}
-        <div class="tooltip">
-            <span class="indicator success" aria-label="Все резюме готовы"></span>
-            <span class="tooltiptext">✔ Все резюме готовы</span>
-        </div>
-        {% else %}
-        <div class="tooltip">
-            <span class="indicator muted" aria-label="Резюмирование неполное"></span>
-            <span class="tooltiptext">
-                {% if week.total > 0 %}
-                ＋ Без резюме: {{ (week.total - week.summarized) if (week.total - week.summarized) > 0 else 0 }}
+            {% endfor %}
+            <div class="week-summary">
+                {% if week.all_summarized %}
+                <div class="tooltip">
+                    <span class="indicator success" aria-label="Все резюме готовы"></span>
+                    <span class="tooltiptext">✔ Все резюме готовы</span>
+                </div>
                 {% else %}
-                Нет статей за неделю
+                <div class="tooltip">
+                    <span class="indicator muted" aria-label="Резюмирование неполное"></span>
+                    <span class="tooltiptext">
+                        {% if week.total > 0 %}
+                        ＋ Без резюме: {{ (week.total - week.summarized) if (week.total - week.summarized) > 0 else 0 }}
+                        {% else %}
+                        Нет статей за неделю
+                        {% endif %}
+                    </span>
+                </div>
                 {% endif %}
-            </span>
+            </div>
         </div>
-        {% endif %}
+        {% endfor %}
     </div>
-    {% endfor %}
-</div>
 </div>

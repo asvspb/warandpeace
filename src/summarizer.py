@@ -8,7 +8,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # Импорт ключей из обновленного конфига
-from config import (
+from src.config import (
     GOOGLE_API_KEYS,
     GEMINI_MODEL_NAME,
     MISTRAL_API_KEY,

@@ -82,7 +82,22 @@ async def calendar_view(request: Request, year: Optional[int] = None, month: Opt
     today = date.today()
     y = year or today.year
     m = month or today.month
-    calendar_data = services.get_month_calendar_data(y, m)
+    
+    # Validate month parameter
+    if not 1 <= m <= 12:
+        # Return error response or default to current month
+        m = today.month
+        
+    # Validate year parameter (reasonable bounds)
+    if not 1900 <= y <= 2100:
+        y = today.year
+    
+    try:
+        calendar_data = services.get_month_calendar_data(y, m)
+    except Exception as e:
+        # Fallback to current month if there's an error
+        y, m = today.year, today.month
+        calendar_data = services.get_month_calendar_data(y, m)
     
     # Если запрошен фрагмент, возвращаем только HTML-фрагмент календаря
     if fragment == '1':
@@ -178,9 +193,9 @@ async def ingest_day(request: Request, day_iso: str):
 
 @router.post("/articles/{article_id}/summarize")
 async def summarize_article(request: Request, article_id: int):
-    """Generate a summary for a single article and persist it.
+    """Queue article for asynchronous summarization via Redis.
 
-    Returns JSON {ok: true, summary_text: str} on success.
+    Returns JSON {ok: true, job_id: str, status: str} on success.
     """
     # Admin session enforcement for JSON endpoint
     redir = _require_admin_session(request)
@@ -189,9 +204,11 @@ async def summarize_article(request: Request, article_id: int):
 
     # Fetch article
     try:
-        from src.database import get_db_connection, set_article_summary
+        from src.database import get_db_connection
+        from src.queue_workers import create_summary_job
     except Exception:
-        from database import get_db_connection, set_article_summary  # type: ignore
+        from database import get_db_connection  # type: ignore
+        from queue_workers import create_summary_job  # type: ignore
 
     try:
         with get_db_connection() as conn:
@@ -239,33 +256,26 @@ async def summarize_article(request: Request, article_id: int):
     if not text:
         return JSONResponse({"ok": False, "error": "no_content"}, status_code=400)
 
-    # Summarize
+    # Queue summarization job via Redis
     try:
-        try:
-            from src import summarizer as _summ
-        except Exception:
-            import summarizer as _summ  # type: ignore
-        summary = _summ.summarize_text_local(text)
+        # Create job in Redis queue
+        job_id = create_summary_job(
+            article_id=int(article_id),
+            article_title=title or "",
+            article_content=text
+        )
+        
+        # Return job information immediately
+        return JSONResponse({
+            "ok": True, 
+            "job_id": job_id, 
+            "status": "queued",
+            "message": f"Summarization job for article {article_id} has been queued"
+        })
     except Exception as e:
-        summary = None
-
-    if not summary:
-        return JSONResponse({"ok": False, "error": "summarization_failed"}, status_code=502)
-
-    # Persist summary
-    try:
-        set_article_summary(int(article_id), summary)
-    except Exception as e:
-        return JSONResponse({"ok": False, "error": f"persist_failed: {str(e)[:120]}"}, status_code=500)
-
-    try:
-        # Notify dashboards/UI via SSE (best-effort)
-        from src.webapp.server import _sse_broadcast  # type: ignore
-        _sse_broadcast({"type": "article_summarized", "article_id": int(article_id)})
-    except Exception:
-        pass
-
-    return JSONResponse({"ok": True, "summary_text": summary})
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error queuing summarization job for article {article_id}: {e}", exc_info=True)
+        return JSONResponse({"ok": False, "error": f"queue_failed: {str(e)[:120]}"}, status_code=500)
 
 @router.get("/articles/{article_id}", response_class=HTMLResponse)
 async def read_article(
